@@ -12,7 +12,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
     aux_nregs = 0
 
     def __init__(self, backend, systemcls, rallocs, mesh,
-                 initsoln, cfg, stepper_coeffs, dt):
+                 initsoln, cfg, physical_stepper_nregs, stage_nregs, dt):
         self.backend = backend
         self.rallocs = rallocs
         self.isrestart = initsoln is not None
@@ -36,15 +36,15 @@ class BaseDualPseudoIntegrator(BaseCommon):
             raise TypeError('Incompatible pseudo-stepper/pseudo-controller '
                             'combination')
 
+        # Amount of stage storage required by DIRK stepper
+        self._stage_nregs = stage_nregs
+
         # Amount of temp storage required by physical stepper
-        self._stepper_nregs = len(stepper_coeffs) - 1
+        self._stepper_nregs = physical_stepper_nregs - self._stage_nregs
 
         # Determine the amount of temp storage required in total
         self.nregs = (self._pseudo_stepper_nregs + self._stepper_nregs +
-                      self.aux_nregs)
-
-        # Physical stepper coefficients
-        self._stepper_coeffs = stepper_coeffs
+                      self._stage_nregs + self.aux_nregs)
 
         # Construct the relevant system
         self.system = systemcls(backend, rallocs, mesh, initsoln,
@@ -86,6 +86,17 @@ class BaseDualPseudoIntegrator(BaseCommon):
     def _stepper_regidx(self):
         psnregs = self._pseudo_stepper_nregs
         return self._regidx[psnregs:psnregs + self._stepper_nregs]
+
+    @property
+    def _stepper_all_regidx(self):
+        psnregs = self._pseudo_stepper_nregs
+        return self._regidx[psnregs:psnregs + self._stepper_nregs
+                            + self._stage_nregs]
+
+    @property
+    def _stage_regidx(self):
+        bsnregs = self._pseudo_stepper_nregs + self._stepper_nregs
+        return self._regidx[bsnregs:bsnregs + self._stage_nregs]
 
     def finalise_pseudo_advance(self, currsoln):
         psnregs = self._pseudo_stepper_nregs

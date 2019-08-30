@@ -73,10 +73,13 @@ class DualNonePseudoController(BaseDualPseudoController):
             self.pseudostepinfo.append((self.npseudosteps, i + 1, None))
             return False
 
-    def pseudo_advance(self, tcurr):
+    def pseudo_advance(self, tcurr, stepper_coeffs, final_stage):
         self.tcurr = tcurr
 
+        self._stepper_coeffs = stepper_coeffs
+
         for i in range(self.maxniters):
+            print('   pseudo advance =', i)
             # Take the step
             self._idxcurr, self._idxprev = self.step(self.tcurr)
 
@@ -84,8 +87,9 @@ class DualNonePseudoController(BaseDualPseudoController):
             if self.convmon(i, self.minniters):
                 break
 
-        # Update
-        self.finalise_pseudo_advance(self._idxcurr)
+        if final_stage:
+            # Update
+            self.finalise_pseudo_advance(self._idxcurr)
 
 
 class DualPIPseudoController(BaseDualPseudoController):
@@ -171,10 +175,13 @@ class DualPIPseudoController(BaseDualPseudoController):
             self.pseudostepinfo.append((self.npseudosteps, i + 1, None))
             return False
 
-    def pseudo_advance(self, tcurr):
+    def pseudo_advance(self, tcurr, stepper_coeffs, final_stage):
         self.tcurr = tcurr
 
+        self._stepper_coeffs = stepper_coeffs
+
         for i in range(self.maxniters):
+            print('   pseudo advance =', i)
             # Take the step
             self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
             self.localerrest(self._idxerr)
@@ -182,5 +189,6 @@ class DualPIPseudoController(BaseDualPseudoController):
             if self.convmon(i, self.minniters):
                 break
 
-        # Update
-        self.finalise_pseudo_advance(self._idxcurr)
+        if final_stage:
+            # Update
+            self.finalise_pseudo_advance(self._idxcurr)

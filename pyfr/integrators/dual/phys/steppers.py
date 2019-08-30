@@ -7,7 +7,25 @@ class BaseDualStepper(BaseDualIntegrator):
     pass
 
 
-class DualBDF2Stepper(BaseDualStepper):
+class BaseBDFStepper(BaseDualStepper):
+    @property
+    def _nstages(self):
+        return 1
+
+    @property
+    def _stage_nregs(self):
+        return 0
+
+    @property
+    def _physical_stepper_nregs(self):
+        return len(self._stepper_static_coeffs) - 1
+
+    @property
+    def _stepper_coeffs(self):
+         return [1] + [sc/self._dt for sc in self._stepper_static_coeffs]
+
+
+class DualBDF2Stepper(BaseBDFStepper):
     stepper_name = 'bdf2'
 
     @property
@@ -15,11 +33,11 @@ class DualBDF2Stepper(BaseDualStepper):
         return 2
 
     @property
-    def _stepper_coeffs(self):
+    def _stepper_static_coeffs(self):
         return [-1.5, 2.0, -0.5]
 
 
-class DualBDF3Stepper(BaseDualStepper):
+class DualBDF3Stepper(BaseBDFStepper):
     stepper_name = 'bdf3'
 
     @property
@@ -27,11 +45,11 @@ class DualBDF3Stepper(BaseDualStepper):
         return 3
 
     @property
-    def _stepper_coeffs(self):
+    def _stepper_static_coeffs(self):
         return [-11.0/6.0, 3.0, -1.5, 1.0/3.0]
 
 
-class DualBackwardEulerStepper(BaseDualStepper):
+class DualBackwardEulerStepper(BaseBDFStepper):
     stepper_name = 'backward-euler'
 
     @property
@@ -39,5 +57,59 @@ class DualBackwardEulerStepper(BaseDualStepper):
         return 1
 
     @property
-    def _stepper_coeffs(self):
+    def _stepper_static_coeffs(self):
         return [-1.0, 1.0]
+
+
+class BaseDIRKStepper(BaseDualStepper):
+
+    @property
+    def _physical_stepper_nregs(self):
+        return 1 + self._nstages
+
+    @property
+    def _stage_nregs(self):
+        return self._nstages
+
+    def _initialize_dirk(self):
+        self._current_stage = 0
+
+    def _advance_dirk_stage(self):
+        self._current_stage += 1
+
+    @property
+    def _get_current_stage_n(self):
+        return self._current_stage
+
+    @property
+    def _stepper_coeffs(self):
+        csn = self._get_current_stage_n
+        return [self.a[csn][csn]] \
+            + [c/self._dt for c in [-1.0, 1.0]] \
+            + self.a[csn][:csn]
+
+
+class ESDIRK3Stepper(BaseDIRKStepper):
+    stepper_name = 'esdirk3'
+
+    a = [[], [], [], []]
+    a[0] = [0]
+    a[1] = [1767732205903/4055673282236, 1767732205903/4055673282236]
+    a[2] = [2746238789719/10658868560708, -640167445237/6845629431997,
+            1767732205903/4055673282236]
+    a[3] = [1471266399579/7840856788654, -4482444167858/7529755066697,
+            11266239266428/11593286722821, 1767732205903/4055673282236]
+
+    b = a[3]
+
+    @property
+    def _nstages(self):
+        return 4
+
+
+class ESDIRK4Stepper(BaseDIRKStepper):
+    stepper_name = 'esdirk4'
+
+    @property
+    def _nstages(self):
+        return 6
