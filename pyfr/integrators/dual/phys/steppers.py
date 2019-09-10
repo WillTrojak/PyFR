@@ -1,10 +1,17 @@
 # -*- coding: utf-8 -*-
 
+from itertools import chain
+
 from pyfr.integrators.dual.phys.base import BaseDualIntegrator
 
 
 class BaseDualStepper(BaseDualIntegrator):
-    pass
+
+    def _set_stage_n(self, s):
+        pass
+
+    def _finalize_stage(self, tcurr, s):
+        pass
 
 
 class BaseBDFStepper(BaseDualStepper):
@@ -22,7 +29,7 @@ class BaseBDFStepper(BaseDualStepper):
 
     @property
     def _stepper_coeffs(self):
-         return [1] + [sc/self._dt for sc in self._stepper_static_coeffs]
+        return [1] + [sc/self._dt for sc in self._stepper_static_coeffs]
 
 
 class DualBDF2Stepper(BaseBDFStepper):
@@ -71,11 +78,26 @@ class BaseDIRKStepper(BaseDualStepper):
     def _stage_nregs(self):
         return self._nstages
 
-    def _initialize_dirk(self):
-        self._current_stage = 0
+    def _set_stage_n(self, s):
+        self._current_stage = s
 
-    def _advance_dirk_stage(self):
-        self._current_stage += 1
+    def _finalize_stage(self, tcurr, s):
+        # call system.rhs with idxcurr and store it somewhere
+        # store the time derivative of current stage for later
+        self.pseudointegrator.system.rhs(
+            tcurr, self.pseudointegrator._idxcurr,
+            self.pseudointegrator._stage_regidx[s]
+        )
+        # finalize dirk
+        if s == self._nstages - 1:
+            self.pseudointegrator._add(
+                0, self.pseudointegrator._idxcurr,
+                1, self.pseudointegrator._stepper_regidx[-1],
+                *chain(*zip(self.b,
+                            self.pseudointegrator._stage_regidx))
+            )
+            # if b[:] == a[_nstage][:]
+            # last idxcurr is the new solution
 
     @property
     def _get_current_stage_n(self):
@@ -113,3 +135,16 @@ class ESDIRK4Stepper(BaseDIRKStepper):
     @property
     def _nstages(self):
         return 6
+
+
+class DIRKTestStepper(BaseDIRKStepper):
+    stepper_name = 'dirktest'
+
+    a = [[]]
+    a[0] = [1]
+
+    b = a[0]
+
+    @property
+    def _nstages(self):
+        return 1
