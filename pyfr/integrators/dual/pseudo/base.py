@@ -42,6 +42,9 @@ class BaseDualPseudoIntegrator(BaseCommon):
         # Amount of temp storage required by physical stepper
         self._stepper_nregs = physical_stepper_nregs - self._stage_nregs
 
+        print('stage_nreg =', self._stage_nregs)
+        print('stepper_nregs =', self._stepper_nregs)
+
         # Determine the amount of temp storage required in total
         self.nregs = (self._pseudo_stepper_nregs + self._stepper_nregs +
                       self._stage_nregs + self.aux_nregs)
@@ -77,6 +80,10 @@ class BaseDualPseudoIntegrator(BaseCommon):
 
         # Pointwise kernels for the pseudo-integrator
         self.pintgkernels = defaultdict(proxylist)
+
+        print('stepper_regidx =', self._stepper_regidx)
+        print('stage_regidx =', self._stage_regidx)
+        print('all_regidx =', self._stepper_all_regidx)
 
     @property
     def _pseudo_stepper_regidx(self):

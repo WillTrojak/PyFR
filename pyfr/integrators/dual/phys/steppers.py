@@ -27,6 +27,19 @@ class BaseBDFStepper(BaseDualStepper):
     def _physical_stepper_nregs(self):
         return len(self._stepper_static_coeffs) - 1
 
+    def _finalize_stage(self, tcurr, s):
+        psnregs = self.pseudointegrator._pseudo_stepper_nregs
+
+        # Rotate the source registers to the right by one
+        self.pseudointegrator._regidx[
+            psnregs:psnregs + self.pseudointegrator._stepper_nregs
+        ] = (self.pseudointegrator._stepper_regidx[-1:]
+             + self.pseudointegrator._stepper_regidx[:-1])
+
+        # Copy the current soln into the first source register
+        self.pseudointegrator._add(0, self.pseudointegrator._regidx[psnregs], 1,
+                                   self.pseudointegrator._idxcurr)
+
     @property
     def _stepper_coeffs(self):
         return [1] + [sc/self._dt for sc in self._stepper_static_coeffs]
@@ -90,14 +103,24 @@ class BaseDIRKStepper(BaseDualStepper):
         )
         # finalize dirk
         if s == self._nstages - 1:
-            self.pseudointegrator._add(
-                0, self.pseudointegrator._idxcurr,
-                1, self.pseudointegrator._stepper_regidx[-1],
-                *chain(*zip(self.b,
-                            self.pseudointegrator._stage_regidx))
-            )
+            #self.pseudointegrator._add(
+            #    0, self.pseudointegrator._idxcurr,
+            #    1, self.pseudointegrator._stepper_regidx[0],
+            #    *chain(*zip([bred*self._dt for bred in self.b],
+            #                self.pseudointegrator._stage_regidx))
+            #)
             # if b[:] == a[_nstage][:]
             # last idxcurr is the new solution
+
+            psnregs = self.pseudointegrator._pseudo_stepper_nregs
+
+            # no need to;
+            # Rotate the source registers to the right by one
+            # as it is just backward-euler
+
+            # Copy the current soln into the first source register
+            self.pseudointegrator._add(0, self.pseudointegrator._regidx[psnregs], 1,
+                                       self.pseudointegrator._idxcurr)
 
     @property
     def _get_current_stage_n(self):
@@ -140,8 +163,7 @@ class ESDIRK4Stepper(BaseDIRKStepper):
 class DIRKTestStepper(BaseDIRKStepper):
     stepper_name = 'dirktest'
 
-    a = [[]]
-    a[0] = [1]
+    a = [[1]]
 
     b = a[0]
 

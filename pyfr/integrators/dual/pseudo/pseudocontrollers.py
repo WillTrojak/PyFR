@@ -87,9 +87,9 @@ class DualNonePseudoController(BaseDualPseudoController):
             if self.convmon(i, self.minniters):
                 break
 
-        if final_stage:
+        #if final_stage:
             # Update
-            self.finalise_pseudo_advance(self._idxcurr)
+            #self.finalise_pseudo_advance(self._idxcurr)
 
 
 class DualPIPseudoController(BaseDualPseudoController):
@@ -189,6 +189,6 @@ class DualPIPseudoController(BaseDualPseudoController):
             if self.convmon(i, self.minniters):
                 break
 
-        if final_stage:
+        #if final_stage:
             # Update
-            self.finalise_pseudo_advance(self._idxcurr)
+            #self.finalise_pseudo_advance(self._idxcurr)

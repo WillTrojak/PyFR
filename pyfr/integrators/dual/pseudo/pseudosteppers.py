@@ -38,13 +38,12 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
 
-        # Coefficients for the physical stepper
-        #svals = [sc/self._dt for sc in self._stepper_coeffs]
+        lensp = len(self._stepper_coeffs)
 
         # Physical stepper source addition -∇·f - dQ/dt
-        axnpby = self._get_axnpby_kerns(len(self._stepper_coeffs),
-                                        subdims=self._subdims)
-        self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_all_regidx)
+        axnpby = self._get_axnpby_kerns(lensp, subdims=self._subdims)
+        self._prepare_reg_banks(fout, self._idxcurr,
+                                *self._stepper_all_regidx[:(lensp-2)])
         self._queue % axnpby(*self._stepper_coeffs)
 
 
