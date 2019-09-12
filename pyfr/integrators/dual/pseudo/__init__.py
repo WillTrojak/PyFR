@@ -47,14 +47,14 @@ def get_pseudo_stepper_cls(name, porder):
 
 
 def get_pseudo_integrator(backend, systemcls, rallocs, mesh,
-                          initsoln, cfg, pstepnregs, stagenregs, dt):
+                          initsoln, cfg, stepnregs, stagenregs, dt):
     register_tabulated_pseudo_steppers()
 
     # A new type of integrator allowing multip convergence acceleration
     if 'solver-dual-time-integrator-multip' in cfg.sections():
         #return DualMultiPIntegrator(backend, systemcls, rallocs, mesh,
         #                            initsoln, cfg, tcoeffs, dt)
-        print('multip support temporarily suspended')
+        print('multip support is temporarily suspended')
     else:
         cn = cfg.get('solver-time-integrator', 'pseudo-controller')
         pn = cfg.get('solver-time-integrator', 'pseudo-scheme')
@@ -71,4 +71,4 @@ def get_pseudo_integrator(backend, systemcls, rallocs, mesh,
 
         # Construct and return an instance of this new integrator class
         return pseudointegrator(backend, systemcls, rallocs, mesh,
-                                initsoln, cfg, pstepnregs, stagenregs, dt)
+                                initsoln, cfg, stepnregs, stagenregs, dt)

@@ -12,7 +12,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
     aux_nregs = 0
 
     def __init__(self, backend, systemcls, rallocs, mesh,
-                 initsoln, cfg, physical_stepper_nregs, stage_nregs, dt):
+                 initsoln, cfg, stepper_nregs, stage_nregs, dt):
         self.backend = backend
         self.rallocs = rallocs
         self.isrestart = initsoln is not None
@@ -40,7 +40,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
         self._stage_nregs = stage_nregs
 
         # Amount of temp storage required by physical stepper
-        self._stepper_nregs = physical_stepper_nregs - self._stage_nregs
+        self._stepper_nregs = stepper_nregs
 
         print('stage_nreg =', self._stage_nregs)
         print('stepper_nregs =', self._stepper_nregs)
@@ -104,14 +104,3 @@ class BaseDualPseudoIntegrator(BaseCommon):
     def _stage_regidx(self):
         bsnregs = self._pseudo_stepper_nregs + self._stepper_nregs
         return self._regidx[bsnregs:bsnregs + self._stage_nregs]
-
-    def finalise_pseudo_advance(self, currsoln):
-        psnregs = self._pseudo_stepper_nregs
-
-        # Rotate the source registers to the right by one
-        self._regidx[psnregs:psnregs + self._stepper_nregs] = (
-            self._stepper_regidx[-1:] + self._stepper_regidx[:-1]
-        )
-
-        # Copy the current soln into the first source register
-        self._add(0, self._regidx[psnregs], 1, currsoln)

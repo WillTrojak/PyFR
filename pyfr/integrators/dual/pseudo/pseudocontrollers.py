@@ -73,7 +73,7 @@ class DualNonePseudoController(BaseDualPseudoController):
             self.pseudostepinfo.append((self.npseudosteps, i + 1, None))
             return False
 
-    def pseudo_advance(self, tcurr, stepper_coeffs, final_stage):
+    def pseudo_advance(self, tcurr, stepper_coeffs):
         self.tcurr = tcurr
 
         self._stepper_coeffs = stepper_coeffs
@@ -86,10 +86,6 @@ class DualNonePseudoController(BaseDualPseudoController):
             # Convergence monitoring
             if self.convmon(i, self.minniters):
                 break
-
-        #if final_stage:
-            # Update
-            #self.finalise_pseudo_advance(self._idxcurr)
 
 
 class DualPIPseudoController(BaseDualPseudoController):
@@ -175,7 +171,7 @@ class DualPIPseudoController(BaseDualPseudoController):
             self.pseudostepinfo.append((self.npseudosteps, i + 1, None))
             return False
 
-    def pseudo_advance(self, tcurr, stepper_coeffs, final_stage):
+    def pseudo_advance(self, tcurr, stepper_coeffs):
         self.tcurr = tcurr
 
         self._stepper_coeffs = stepper_coeffs
@@ -188,7 +184,3 @@ class DualPIPseudoController(BaseDualPseudoController):
 
             if self.convmon(i, self.minniters):
                 break
-
-        #if final_stage:
-            # Update
-            #self.finalise_pseudo_advance(self._idxcurr)

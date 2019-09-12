@@ -24,7 +24,7 @@ class BaseBDFStepper(BaseDualStepper):
         return 0
 
     @property
-    def _physical_stepper_nregs(self):
+    def _stepper_nregs(self):
         return len(self._stepper_static_coeffs) - 1
 
     def _finalize_stage(self, tcurr, s):
@@ -37,8 +37,10 @@ class BaseBDFStepper(BaseDualStepper):
              + self.pseudointegrator._stepper_regidx[:-1])
 
         # Copy the current soln into the first source register
-        self.pseudointegrator._add(0, self.pseudointegrator._regidx[psnregs], 1,
-                                   self.pseudointegrator._idxcurr)
+        self.pseudointegrator._add(
+            0, self.pseudointegrator._stepper_regidx[0],
+            1, self.pseudointegrator._idxcurr
+        )
 
     @property
     def _stepper_coeffs(self):
@@ -84,8 +86,8 @@ class DualBackwardEulerStepper(BaseBDFStepper):
 class BaseDIRKStepper(BaseDualStepper):
 
     @property
-    def _physical_stepper_nregs(self):
-        return 1 + self._nstages
+    def _stepper_nregs(self):
+        return 1
 
     @property
     def _stage_nregs(self):
@@ -112,15 +114,11 @@ class BaseDIRKStepper(BaseDualStepper):
             # if b[:] == a[_nstage][:]
             # last idxcurr is the new solution
 
-            psnregs = self.pseudointegrator._pseudo_stepper_nregs
-
-            # no need to;
-            # Rotate the source registers to the right by one
-            # as it is just backward-euler
-
             # Copy the current soln into the first source register
-            self.pseudointegrator._add(0, self.pseudointegrator._regidx[psnregs], 1,
-                                       self.pseudointegrator._idxcurr)
+            self.pseudointegrator._add(
+                0, self.pseudointegrator._stepper_regidx[0],
+                1, self.pseudointegrator._idxcurr
+            )
 
     @property
     def _get_current_stage_n(self):
