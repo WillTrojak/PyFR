@@ -29,12 +29,13 @@ class BaseBDFStepper(BaseDualStepper):
 
     def _finalize_stage(self, tcurr, s):
         psnregs = self.pseudointegrator._pseudo_stepper_nregs
+        snregs = self.pseudointegrator._stepper_nregs
 
         # Rotate the source registers to the right by one
-        self.pseudointegrator._regidx[
-            psnregs:psnregs + self.pseudointegrator._stepper_nregs
-        ] = (self.pseudointegrator._stepper_regidx[-1:]
-             + self.pseudointegrator._stepper_regidx[:-1])
+        self.pseudointegrator._regidx[psnregs:psnregs + snregs] = (
+            self.pseudointegrator._stepper_regidx[-1:]
+            + self.pseudointegrator._stepper_regidx[:-1]
+        )
 
         # Copy the current soln into the first source register
         self.pseudointegrator._add(

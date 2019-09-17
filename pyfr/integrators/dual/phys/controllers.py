@@ -38,9 +38,7 @@ class DualNoneController(BaseDualController):
 
         while self.tcurr < t:
             for s in range(self._nstages):
-                print('stage n =', s, 't = ', self.tcurr)
                 self._set_stage_n(s)
-                print('coeffs =', self._stepper_coeffs)
                 self.pseudointegrator.pseudo_advance(
                     self.tcurr, self._stepper_coeffs
                 )

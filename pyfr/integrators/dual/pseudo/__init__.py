@@ -52,9 +52,8 @@ def get_pseudo_integrator(backend, systemcls, rallocs, mesh,
 
     # A new type of integrator allowing multip convergence acceleration
     if 'solver-dual-time-integrator-multip' in cfg.sections():
-        #return DualMultiPIntegrator(backend, systemcls, rallocs, mesh,
-        #                            initsoln, cfg, tcoeffs, dt)
-        print('multip support is temporarily suspended')
+        return DualMultiPIntegrator(backend, systemcls, rallocs, mesh,
+                                    initsoln, cfg, stepnregs, stagenregs, dt)
     else:
         cn = cfg.get('solver-time-integrator', 'pseudo-controller')
         pn = cfg.get('solver-time-integrator', 'pseudo-scheme')

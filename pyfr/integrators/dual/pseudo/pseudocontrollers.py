@@ -79,7 +79,6 @@ class DualNonePseudoController(BaseDualPseudoController):
         self._stepper_coeffs = stepper_coeffs
 
         for i in range(self.maxniters):
-            print('   pseudo advance =', i)
             # Take the step
             self._idxcurr, self._idxprev = self.step(self.tcurr)
 
@@ -177,7 +176,6 @@ class DualPIPseudoController(BaseDualPseudoController):
         self._stepper_coeffs = stepper_coeffs
 
         for i in range(self.maxniters):
-            print('   pseudo advance =', i)
             # Take the step
             self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
             self.localerrest(self._idxerr)
