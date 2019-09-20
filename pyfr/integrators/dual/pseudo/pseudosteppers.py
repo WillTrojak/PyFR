@@ -38,13 +38,27 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
 
-        lensp = len(self._stepper_coeffs)
+        stpn = self._stepper_nregs
+        nstg = len(self._stepper_coeffs) - 2 - stpn
 
         # Physical stepper source addition -∇·f - dQ/dt
-        axnpby = self._get_axnpby_kerns(lensp, subdims=self._subdims)
-        self._prepare_reg_banks(fout, self._idxcurr,
-                                *self._stepper_all_regidx[:(lensp-2)])
-        self._queue % axnpby(*self._stepper_coeffs)
+        #axnpby = self._get_axnpby_kerns(2 + stpn + nstg, subdims=self._subdims)
+        #self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_regidx,
+        #                        *self._stage_regidx[:nstg])
+        #self._queue % axnpby(*self._stepper_coeffs)
+
+        axnpby = self._get_axnpby_kerns(2)
+        self._prepare_reg_banks(fout, self._idxcurr)
+        self._queue % axnpby(self._stepper_coeffs[0], 0)
+
+        axnpby = self._get_axnpby_kerns(2 + stpn, subdims=self._subdims)
+        self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_regidx)
+        self._queue % axnpby(1, *self._stepper_coeffs[1:2 + stpn])
+
+        if nstg > 0:
+            axnpby = self._get_axnpby_kerns(1 + nstg)
+            self._prepare_reg_banks(fout, *self._stage_regidx[:nstg])
+            self._queue % axnpby(1, *self._stepper_coeffs[-nstg:])
 
 
 class DualEulerPseudoStepper(BaseDualPseudoStepper):

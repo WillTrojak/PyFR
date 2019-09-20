@@ -98,22 +98,20 @@ class BaseDIRKStepper(BaseDualStepper):
         self._current_stage = s
 
     def _finalize_stage(self, tcurr, s):
-        # call system.rhs with idxcurr and store it somewhere
-        # store the time derivative of current stage for later
+        # Store the time derivative of the current stage
         self.pseudointegrator.system.rhs(
             tcurr, self.pseudointegrator._idxcurr,
             self.pseudointegrator._stage_regidx[s]
         )
-        # finalize dirk
+
+        # Finalize DIRK
         if s == self._nstages - 1:
-            #self.pseudointegrator._add(
-            #    0, self.pseudointegrator._idxcurr,
-            #    1, self.pseudointegrator._stepper_regidx[0],
-            #    *chain(*zip([bred*self._dt for bred in self.b],
-            #                self.pseudointegrator._stage_regidx))
-            #)
-            # if b[:] == a[_nstage][:]
-            # last idxcurr is the new solution
+            self.pseudointegrator._add(
+                0, self.pseudointegrator._idxcurr,
+                1, self.pseudointegrator._stepper_regidx[0],
+                *chain(*zip([bred*self._dt for bred in self.b],
+                            self.pseudointegrator._stage_regidx))
+            )
 
             # Copy the current soln into the first source register
             self.pseudointegrator._add(

@@ -88,12 +88,6 @@ class BaseDualPseudoIntegrator(BaseCommon):
         return self._regidx[psnregs:psnregs + self._stepper_nregs]
 
     @property
-    def _stepper_all_regidx(self):
-        psnregs = self._pseudo_stepper_nregs
-        return self._regidx[psnregs:psnregs + self._stepper_nregs
-                            + self._stage_nregs]
-
-    @property
     def _stage_regidx(self):
         bsnregs = self._pseudo_stepper_nregs + self._stepper_nregs
         return self._regidx[bsnregs:bsnregs + self._stage_nregs]
