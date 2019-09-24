@@ -110,13 +110,15 @@ class BaseDIRKStepper(BaseDualStepper):
             self.pseudointegrator._add(
                 1, self.pseudointegrator._stepper_regidx[0],
                 *chain(*zip([bred*self._dt for bred in self.b],
-                            self.pseudointegrator._stage_regidx))
+                            self.pseudointegrator._stage_regidx)),
+                subdims=self.pseudointegrator._subdims
             )
 
             # Copy the new solution into idxcurr
             self.pseudointegrator._add(
                0, self.pseudointegrator._idxcurr,
-               1, self.pseudointegrator._stepper_regidx[0]
+               1, self.pseudointegrator._stepper_regidx[0],
+               subdims=self.pseudointegrator._subdims
             )
 
     @property

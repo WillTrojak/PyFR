@@ -95,31 +95,31 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                     nstg = len(iself._stepper_coeffs) - 2 - stpn
 
                     # Physical stepper source addition -∇·f - dQ/dt
-                    #axnpby = iself._get_axnpby_kerns(2 + stpn + nstg,
-                    #                                 subdims=iself._subdims)
-                    #iself._prepare_reg_banks(
-                    #    fout, iself._idxcurr, *iself._stepper_regidx,
-                    #    *iself._stage_regidx[:nstg]
-                    #)
-                    #iself._queue % axnpby(*iself._stepper_coeffs)
-
-                    axnpby = iself._get_axnpby_kerns(2)
-                    iself._prepare_reg_banks(fout, iself._idxcurr)
-                    iself._queue % axnpby(iself._stepper_coeffs[0], 0)
-
-                    axnpby = iself._get_axnpby_kerns(2 + stpn,
+                    axnpby = iself._get_axnpby_kerns(2 + stpn + nstg,
                                                      subdims=iself._subdims)
-                    iself._prepare_reg_banks(fout, iself._idxcurr,
-                                             *iself._stepper_regidx)
-                    iself._queue % axnpby(1,
-                                          *iself._stepper_coeffs[1:2 + stpn])
+                    iself._prepare_reg_banks(
+                        fout, iself._idxcurr, *iself._stepper_regidx,
+                        *iself._stage_regidx[:nstg]
+                    )
+                    iself._queue % axnpby(*iself._stepper_coeffs)
 
-                    if nstg > 0:
-                        axnpby = iself._get_axnpby_kerns(1 + nstg)
-                        iself._prepare_reg_banks(fout,
-                                                 *iself._stage_regidx[:nstg])
-                        iself._queue % axnpby(1,
-                                              *iself._stepper_coeffs[-nstg:])
+                    #axnpby = iself._get_axnpby_kerns(2)
+                    #iself._prepare_reg_banks(fout, iself._idxcurr)
+                    #iself._queue % axnpby(iself._stepper_coeffs[0], 0)
+
+                    #axnpby = iself._get_axnpby_kerns(2 + stpn,
+                    #                                 subdims=iself._subdims)
+                    #iself._prepare_reg_banks(fout, iself._idxcurr,
+                    #                         *iself._stepper_regidx)
+                    #iself._queue % axnpby(1,
+                    #                      *iself._stepper_coeffs[1:2 + stpn])
+
+                    #if nstg > 0:
+                    #    axnpby = iself._get_axnpby_kerns(1 + nstg)
+                    #    iself._prepare_reg_banks(fout,
+                    #                             *iself._stage_regidx[:nstg])
+                    #    iself._queue % axnpby(1,
+                    #                          *iself._stepper_coeffs[-nstg:])
 
                     # Multigrid r addition
                     if iself._aux_regidx:
@@ -188,6 +188,10 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     @property
     def _pseudo_stepper_nregs(self):
         return self.pintg._pseudo_stepper_nregs
+
+    @property
+    def _subdims(self):
+        return self.pintg._subdims
 
     @property
     def pintg(self):
