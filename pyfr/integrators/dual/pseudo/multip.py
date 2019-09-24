@@ -103,24 +103,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                     )
                     iself._queue % axnpby(*iself._stepper_coeffs)
 
-                    #axnpby = iself._get_axnpby_kerns(2)
-                    #iself._prepare_reg_banks(fout, iself._idxcurr)
-                    #iself._queue % axnpby(iself._stepper_coeffs[0], 0)
-
-                    #axnpby = iself._get_axnpby_kerns(2 + stpn,
-                    #                                 subdims=iself._subdims)
-                    #iself._prepare_reg_banks(fout, iself._idxcurr,
-                    #                         *iself._stepper_regidx)
-                    #iself._queue % axnpby(1,
-                    #                      *iself._stepper_coeffs[1:2 + stpn])
-
-                    #if nstg > 0:
-                    #    axnpby = iself._get_axnpby_kerns(1 + nstg)
-                    #    iself._prepare_reg_banks(fout,
-                    #                             *iself._stage_regidx[:nstg])
-                    #    iself._queue % axnpby(1,
-                    #                          *iself._stepper_coeffs[-nstg:])
-
                     # Multigrid r addition
                     if iself._aux_regidx:
                         axnpby = iself._get_axnpby_kerns(2)
