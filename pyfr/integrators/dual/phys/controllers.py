@@ -45,6 +45,6 @@ class DualNoneController(BaseDualController):
                     self.pseudointegrator.pseudo_advance(
                         self.tcurr, self._stepper_coeffs
                     )
-                self._finalize_stage(self.tcurr, s)
+                self._finalize_stage(self.tcurr)
 
             self._accept_step(self.pseudointegrator._idxcurr)
