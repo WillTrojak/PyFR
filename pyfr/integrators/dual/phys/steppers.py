@@ -120,15 +120,15 @@ class BaseDIRKStepper(BaseDualStepper):
                 0, self.pseudointegrator._stepper_regidx[0],
                 1, self.pseudointegrator._idxcurr
             )
-        else:
-            nxtstg = self._current_stage + 1
-            self.pseudointegrator._add(
-                0, self.pseudointegrator._idxcurr,
-                1, self.pseudointegrator._stepper_regidx[0],
-                *chain(*zip([bred*self._dt for bred in self.a[nxtstg][:-1]],
-                            self.pseudointegrator._stage_regidx[:nxtstg])),
-                subdims=self.pseudointegrator._subdims
-            )
+        #else:
+        #    nxtstg = self._current_stage + 1
+        #    self.pseudointegrator._add(
+        #        0, self.pseudointegrator._idxcurr,
+        #        1, self.pseudointegrator._stepper_regidx[0],
+        #        *chain(*zip([bred*self._dt for bred in self.a[nxtstg][:-1]],
+        #                    self.pseudointegrator._stage_regidx[:nxtstg])),
+        #        subdims=self.pseudointegrator._subdims
+        #    )
 
     @property
     def _stepper_coeffs(self):
