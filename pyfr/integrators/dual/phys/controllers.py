@@ -41,7 +41,7 @@ class DualNoneController(BaseDualController):
                 self._set_stage_n(s)
 
                 # Handle the first explicit step in ESDIRK
-                if not self._stepper_coeffs[0] == 0:
+                if True: #not self._stepper_coeffs[0] == 0:
                     self.pseudointegrator.pseudo_advance(
                         self.tcurr, self._stepper_coeffs
                     )

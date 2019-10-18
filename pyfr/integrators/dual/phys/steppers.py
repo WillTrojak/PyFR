@@ -104,16 +104,25 @@ class BaseDIRKStepper(BaseDualStepper):
             self.pseudointegrator._stage_regidx[self._current_stage]
         )
 
+        # get stage solution
+        #self.pseudointegrator._add(
+        #    0, self.pseudointegrator._idxcurr,
+        #    1, self.pseudointegrator._stepper_regidx[0],
+        #    *chain(*zip([dta*self._dt for dta in self.a[self._current_stage]],
+        #                self.pseudointegrator._stage_regidx[:self._current_stage+1])),
+        #    subdims=self.pseudointegrator._subdims
+        #)
+
         # Finalize DIRK
         if self._current_stage == self._nstages - 1:
             # Get the new soln on source register
-            self.pseudointegrator._add(
-                0, self.pseudointegrator._idxcurr,
-                1, self.pseudointegrator._stepper_regidx[0],
-                *chain(*zip([bred*self._dt for bred in self.b],
-                            self.pseudointegrator._stage_regidx)),
-                subdims=self.pseudointegrator._subdims
-            )
+            #self.pseudointegrator._add(
+            #    0, self.pseudointegrator._idxcurr,
+            #    1, self.pseudointegrator._stepper_regidx[0],
+            #    *chain(*zip([bred*self._dt for bred in self.b],
+            #                self.pseudointegrator._stage_regidx)),
+            #    subdims=self.pseudointegrator._subdims
+            #)
 
             # Copy the new solution into idxcurr
             self.pseudointegrator._add(
@@ -129,6 +138,11 @@ class BaseDIRKStepper(BaseDualStepper):
         #                    self.pseudointegrator._stage_regidx[:nxtstg])),
         #        subdims=self.pseudointegrator._subdims
         #    )
+
+        self.pseudointegrator._add(
+            0, self.pseudointegrator._idxcurr,
+            1, self.pseudointegrator._stepper_regidx[0]
+        )
 
     @property
     def _stepper_coeffs(self):
@@ -157,11 +171,14 @@ class ESDIRK3Stepper(BaseDIRKStepper):
 
 
 class ESDIRK4Stepper(BaseDIRKStepper):
-    stepper_name = 'esdirk4'
+    stepper_name = 'dirktest3'
+
+    a = [[0], [0, 0], [0, 0, 0], [0, 0, 0, 1]]
+    b = [0, 0, 0, 1]
 
     @property
     def _nstages(self):
-        return 6
+        return 4
 
 
 class DIRKTestStepper(BaseDIRKStepper):
