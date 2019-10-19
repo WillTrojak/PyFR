@@ -91,3 +91,28 @@ class BaseDualPseudoIntegrator(BaseCommon):
     def _stage_regidx(self):
         bsnregs = self._pseudo_stepper_nregs + self._stepper_nregs
         return self._regidx[bsnregs:bsnregs + self._stage_nregs]
+
+    def finalize_pseudo_advance(self, currstg):
+        # Store the time derivative of the current stage
+        if self._stage_nregs > 1:
+            self.system.rhs(self.tcurr, self._idxcurr, self._stage_regidx[currstg])
+
+        #else:
+        #    nxtstg = self._currstg + 1
+        #    self.pseudointegrator._add(
+        #        0, self.pseudointegrator._idxcurr,
+        #        1, self.pseudointegrator._stepper_regidx[0],
+        #        *chain(*zip([bred*self._dt for bred in self.a[nxtstg][:-1]],
+        #                    self.pseudointegrator._stage_regidx[:nxtstg])),
+        #        subdims=self.pseudointegrator._subdims
+        #    )
+
+        # get stage solution
+        #self.pseudointegrator._add(
+        #    0, self.pseudointegrator._idxcurr,
+        #    1, self.pseudointegrator._stepper_regidx[0],
+        #    *chain(*zip([dta*self._dt for dta in self.a[self._currstg]],
+        #                self.pseudointegrator._stage_regidx[:self._currstg+1])),
+        #    subdims=self.pseudointegrator._subdims
+        #)
+

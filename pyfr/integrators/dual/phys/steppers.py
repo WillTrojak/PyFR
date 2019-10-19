@@ -7,8 +7,8 @@ from pyfr.integrators.dual.phys.base import BaseDualIntegrator
 
 class BaseDualStepper(BaseDualIntegrator):
 
-    def _set_stage_n(self, s):
-        pass
+    def _set_currstg(self, s):
+        self._currstg = s
 
     def _finalize_stage(self, tcurr):
         pass
@@ -94,59 +94,26 @@ class BaseDIRKStepper(BaseDualStepper):
     def _stage_nregs(self):
         return self._nstages
 
-    def _set_stage_n(self, s):
-        self._current_stage = s
-
     def _finalize_stage(self, tcurr):
-        # Store the time derivative of the current stage
-        self.system.rhs(
-            tcurr, self.pseudointegrator._idxcurr,
-            self.pseudointegrator._stage_regidx[self._current_stage]
-        )
-
-        # get stage solution
+        # Finalize DIRK
+        # Get the new soln on source register
         #self.pseudointegrator._add(
         #    0, self.pseudointegrator._idxcurr,
         #    1, self.pseudointegrator._stepper_regidx[0],
-        #    *chain(*zip([dta*self._dt for dta in self.a[self._current_stage]],
-        #                self.pseudointegrator._stage_regidx[:self._current_stage+1])),
+        #    *chain(*zip([bred*self._dt for bred in self.b],
+        #                self.pseudointegrator._stage_regidx)),
         #    subdims=self.pseudointegrator._subdims
         #)
 
-        # Finalize DIRK
-        if self._current_stage == self._nstages - 1:
-            # Get the new soln on source register
-            #self.pseudointegrator._add(
-            #    0, self.pseudointegrator._idxcurr,
-            #    1, self.pseudointegrator._stepper_regidx[0],
-            #    *chain(*zip([bred*self._dt for bred in self.b],
-            #                self.pseudointegrator._stage_regidx)),
-            #    subdims=self.pseudointegrator._subdims
-            #)
-
-            # Copy the new solution into idxcurr
-            self.pseudointegrator._add(
-                0, self.pseudointegrator._stepper_regidx[0],
-                1, self.pseudointegrator._idxcurr
-            )
-        #else:
-        #    nxtstg = self._current_stage + 1
-        #    self.pseudointegrator._add(
-        #        0, self.pseudointegrator._idxcurr,
-        #        1, self.pseudointegrator._stepper_regidx[0],
-        #        *chain(*zip([bred*self._dt for bred in self.a[nxtstg][:-1]],
-        #                    self.pseudointegrator._stage_regidx[:nxtstg])),
-        #        subdims=self.pseudointegrator._subdims
-        #    )
-
+        # Copy the new solution into idxcurr
         self.pseudointegrator._add(
-            0, self.pseudointegrator._idxcurr,
-            1, self.pseudointegrator._stepper_regidx[0]
+            0, self.pseudointegrator._stepper_regidx[0],
+            1, self.pseudointegrator._idxcurr
         )
 
     @property
     def _stepper_coeffs(self):
-        csn = self._current_stage
+        csn = self._currstg
         return [self.a[csn][csn]] \
             + [c/self._dt for c in [-1.0, 1.0]] \
             + self.a[csn][:csn]

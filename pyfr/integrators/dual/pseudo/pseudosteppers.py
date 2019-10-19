@@ -38,6 +38,9 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
 
+        if self._stage_nregs > 1:
+            self._add(0, self._stage_regidx(self._currstg), 1, fout)
+
         stpn = self._stepper_nregs
         nstg = len(self._stepper_coeffs) - 2 - stpn
 

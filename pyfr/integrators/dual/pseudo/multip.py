@@ -262,6 +262,16 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             )
             self.pintg._queue % self.mgproject(l1, l2)()
 
+        # Restrict the internal stage terms
+        for i in range(self.pintg._stage_nregs):
+            l1sys.eles_scal_upts_inb.active = (
+                self.pintgs[l1]._stage_regidx[i]
+            )
+            l2sys.eles_scal_upts_inb.active = (
+                self.pintgs[l2]._stage_regidx[i]
+            )
+            self.pintg._queue % self.mgproject(l1, l2)()
+
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order]._pseudo_controller_needs_lerrest:
             self.pintg._queue % self.dtauproject(l1, l2)()
@@ -297,7 +307,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         return self.pintg._aux_regidx[-2:]
 
-    def pseudo_advance(self, tcurr, stepper_coeffs):
+    def pseudo_advance(self, tcurr, stepper_coeffs, currstg):
         # Multigrid levels and step counts
         cycle, csteps = self.cycle, self.csteps
 
@@ -312,7 +322,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 # Set the number of smoothing steps at each level
                 self.pintg.maxniters = self.pintg.minniters = n
 
-                self.pintg.pseudo_advance(tcurr, self._stepper_coeffs)
+                self.pintg.pseudo_advance(tcurr, self._stepper_coeffs, currstg)
 
                 if m is not None and l > m:
                     self.restrict(l, m)
