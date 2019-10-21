@@ -217,41 +217,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         l1sys, l2sys = self.pintgs[l1].system, self.pintgs[l2].system
 
-        # Prevsoln is used as temporal storage at l1
-        rtemp = 0 if l1idxcurr == 1 else 1
-
-        # rtemp = R = -∇·f - dQ/dt
-        self.pintg.system.rhs(self.tcurr, l1idxcurr, rtemp)
-
-        # rtemp = -d = R - r at lower levels
-        if l1 != self._order:
-            self.pintg._add(1, rtemp, -1, self._mg_regidx[0])
-
-        # Activate l2 system and get l2 regidx
-        self.level = l2
-        mg0, mg1 = self._mg_regidx
-
-        # Restrict Q
-        l1sys.eles_scal_upts_inb.active = l1idxcurr
-        l2sys.eles_scal_upts_inb.active = l2idxcurr
-        self.pintg._queue % self.mgproject(l1, l2)()
-
-        # Restrict d and store to mg1
-        l1sys.eles_scal_upts_inb.active = rtemp
-        l2sys.eles_scal_upts_inb.active = mg1
-        self.pintg._queue % self.mgproject(l1, l2)()
-
-        # mg0 = R = -∇·f - dQ/dt
-        self.pintg.system.rhs(self.tcurr, l2idxcurr, self._mg_regidx[0])
-
-        # Compute the target residual r
-        # mg0 = r = R + d
-        self.pintg._add(1, self._mg_regidx[0], -1, self._mg_regidx[1])
-
-        # Need to store the non-smoothed solution Q^ns for the correction
-        # mg1 = Q^ns
-        self.pintg._add(0, mg1, 1, l2idxcurr)
-
         # Restrict the physical stepper terms
         for i in range(self.pintg._stepper_nregs):
             l1sys.eles_scal_upts_inb.active = (
@@ -275,6 +240,41 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order]._pseudo_controller_needs_lerrest:
             self.pintg._queue % self.dtauproject(l1, l2)()
+
+        # Prevsoln is used as temporal storage at l1
+        rtemp = 0 if l1idxcurr == 1 else 1
+
+        # rtemp = R = -∇·f - dQ/dt
+        self.pintg._rhs_with_dts(self.tcurr, l1idxcurr, rtemp)
+
+        # rtemp = -d = R - r at lower levels
+        if l1 != self._order:
+            self.pintg._add(1, rtemp, -1, self._mg_regidx[0])
+
+        # Activate l2 system and get l2 regidx
+        self.level = l2
+        mg0, mg1 = self._mg_regidx
+
+        # Restrict Q
+        l1sys.eles_scal_upts_inb.active = l1idxcurr
+        l2sys.eles_scal_upts_inb.active = l2idxcurr
+        self.pintg._queue % self.mgproject(l1, l2)()
+
+        # Restrict d and store to mg1
+        l1sys.eles_scal_upts_inb.active = rtemp
+        l2sys.eles_scal_upts_inb.active = mg1
+        self.pintg._queue % self.mgproject(l1, l2)()
+
+        # mg0 = R = -∇·f - dQ/dt
+        self.pintg._rhs_with_dts(self.tcurr, l2idxcurr, self._mg_regidx[0])
+
+        # Compute the target residual r
+        # mg0 = r = R + d
+        self.pintg._add(1, self._mg_regidx[0], -1, self._mg_regidx[1])
+
+        # Need to store the non-smoothed solution Q^ns for the correction
+        # mg1 = Q^ns
+        self.pintg._add(0, mg1, 1, l2idxcurr)
 
     def prolongate(self, l1, l2):
         l1idxcurr = self.pintgs[l1]._idxcurr
@@ -325,6 +325,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 self.pintg.pseudo_advance(tcurr, self._stepper_coeffs, currstg)
 
                 if m is not None and l > m:
+                    self.pintgs[m]._stepper_coeffs = stepper_coeffs
                     self.restrict(l, m)
                 elif m is not None and l < m:
                     self.prolongate(l, m)
