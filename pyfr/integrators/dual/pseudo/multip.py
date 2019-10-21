@@ -91,6 +91,10 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                     # Compute -∇·f
                     iself.system.rhs(t, uin, fout)
 
+                    if self._stage_nregs > 1:
+                        self._add(0, self._stage_regidx[iself._currstg],
+                                  1, fout)
+
                     stpn = iself._stepper_nregs
                     nstg = len(iself._stepper_coeffs) - 2 - stpn
 
@@ -245,7 +249,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         rtemp = 0 if l1idxcurr == 1 else 1
 
         # rtemp = R = -∇·f - dQ/dt
-        self.pintg._rhs_with_dts(self.tcurr, l1idxcurr, rtemp)
+        self.pintg._arhs_with_dts(self.tcurr, l1idxcurr, rtemp)
 
         # rtemp = -d = R - r at lower levels
         if l1 != self._order:
@@ -266,7 +270,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.pintg._queue % self.mgproject(l1, l2)()
 
         # mg0 = R = -∇·f - dQ/dt
-        self.pintg._rhs_with_dts(self.tcurr, l2idxcurr, self._mg_regidx[0])
+        self.pintg._arhs_with_dts(self.tcurr, l2idxcurr, self._mg_regidx[0])
 
         # Compute the target residual r
         # mg0 = r = R + d
@@ -326,6 +330,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
                 if m is not None and l > m:
                     self.pintgs[m]._stepper_coeffs = stepper_coeffs
+                    self.pintgs[m]._currstg = currstg
                     self.restrict(l, m)
                 elif m is not None and l < m:
                     self.prolongate(l, m)

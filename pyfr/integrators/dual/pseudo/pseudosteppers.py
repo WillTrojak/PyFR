@@ -34,7 +34,7 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         # Total number of pseudo-steps
         stats.set('solver-time-integrator', 'npseudosteps', self.npseudosteps)
 
-    def _rhs_with_dts(self, t, uin, fout):
+    def _arhs_with_dts(self, t, uin, fout):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
 
