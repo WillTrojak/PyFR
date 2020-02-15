@@ -46,15 +46,17 @@ class BasePartitioner(object):
         # Get the per-partition element counts
         pinf = mesh.partition_info('spt')
 
-        # Shape points and element number offsets
+        # Shape points, element number offsets, and remapping table
         spts = defaultdict(list)
         offs = defaultdict(dict)
+        rnum = defaultdict(dict)
 
         for en, pn in pinf.items():
             for i, n in enumerate(pn):
                 if n > 0:
-                    offs[en][i] = sum(s.shape[1] for s in spts[en])
+                    offs[en][i] = off = sum(s.shape[1] for s in spts[en])
                     spts[en].append(mesh['spt_{0}_p{1}'.format(en, i)])
+                    rnum[en].update(((i, j), (0, off + j)) for j in range(n))
 
         def offset_con(con, pr):
             con = con.copy().astype('U4,i4,i1,i1')
@@ -100,7 +102,7 @@ class BasePartitioner(object):
         for k, v in bccon.items():
             newmesh['bcon_{0}_p0'.format(k)] = np.hstack(v).astype(dtype)
 
-        return newmesh
+        return newmesh, rnum
 
     def _combine_soln_parts(self, soln):
         newsoln = defaultdict(list)
@@ -146,7 +148,29 @@ class BasePartitioner(object):
     def _partition_graph(self, graph, partwts):
         pass
 
-    def _partition_spts(self, mesh, vparts, vetimap):
+    def _renumber_verts(self, mesh, vetimap, vparts):
+        vpartmap = dict(zip(vetimap, vparts))
+        bndeti = set()
+
+        # Identify vertices whose edges cross partition boundaries
+        for l, r in zip(*mesh['con_p0'][['f0', 'f1']].astype('U4,i4')):
+            l, r = tuple(l), tuple(r)
+
+            if vpartmap[l] != vpartmap[r]:
+                bndeti |= {l, r}
+
+        # Move boundary vertices to the front of the list
+        nvetimap, nvparts = list(bndeti), [vpartmap[eti] for eti in bndeti]
+
+        # Followed by the internal vertices
+        for eti, part in zip(vetimap, vparts):
+            if eti not in bndeti:
+                nvetimap.append(eti)
+                nvparts.append(part)
+
+        return nvetimap, nvparts
+
+    def _partition_spts(self, mesh, vetimap, vparts):
         # Get the shape point arrays from the mesh
         spt_p0 = {}
         for f in mesh:
@@ -162,7 +186,7 @@ class BasePartitioner(object):
         return {'spt_{0}_p{1}'.format(*k): np.array(v).swapaxes(0, 1)
                 for k, v in spt_px.items()}
 
-    def _partition_soln(self, soln, vparts, vetimap):
+    def _partition_soln(self, soln, vetimap, vparts):
         # Get the solution arrays from the file
         soln_p0 = {}
         for f in soln:
@@ -178,17 +202,17 @@ class BasePartitioner(object):
         return {'soln_{0}_p{1}'.format(*k): np.dstack(v)
                 for k, v in soln_px.items()}
 
-    def _partition_con(self, mesh, vparts, vetimap):
+    def _partition_con(self, mesh, vetimap, vparts):
         con_px = defaultdict(list)
         con_pxpy = defaultdict(list)
         bcon_px = defaultdict(list)
 
         # Global-to-local element index map
-        eleglmap = defaultdict(list)
+        eleglmap = {}
         pcounter = Counter()
 
         for (etype, eidxg), part in zip(vetimap, vparts):
-            eleglmap[etype].append((part, pcounter[etype, part]))
+            eleglmap[etype, eidxg] = (part, pcounter[etype, part])
             pcounter[etype, part] += 1
 
         # Generate the face connectivity
@@ -196,8 +220,8 @@ class BasePartitioner(object):
             letype, leidxg, lfidx, lflags = l
             retype, reidxg, rfidx, rflags = r
 
-            lpart, leidxl = eleglmap[letype][leidxg]
-            rpart, reidxl = eleglmap[retype][reidxg]
+            lpart, leidxl = eleglmap[letype, leidxg]
+            rpart, reidxl = eleglmap[retype, reidxg]
 
             conl = (letype, leidxl, lfidx, lflags)
             conr = (retype, reidxl, rfidx, rflags)
@@ -215,7 +239,7 @@ class BasePartitioner(object):
                 lhs = mesh[f].astype('U4,i4,i1,i1')
 
                 for lpetype, leidxg, lfidx, lflags in lhs:
-                    lpart, leidxl = eleglmap[lpetype][leidxg]
+                    lpart, leidxl = eleglmap[lpetype, leidxg]
                     conl = (lpetype, leidxl, lfidx, lflags)
 
                     bcon_px[m.group(1), lpart].append(conl)
@@ -224,25 +248,25 @@ class BasePartitioner(object):
         dtype = 'S4,i4,i1,i1'
 
         # Output
-        ret = {}
+        con = {}
 
         for k, v in con_px.items():
-            ret['con_p{0}'.format(k)] = np.array(v, dtype=dtype).T
+            con['con_p{0}'.format(k)] = np.array(v, dtype=dtype).T
 
         for k, v in con_pxpy.items():
-            ret['con_p{0}p{1}'.format(*k)] = np.array(v, dtype=dtype)
+            con['con_p{0}p{1}'.format(*k)] = np.array(v, dtype=dtype)
 
         for k, v in bcon_px.items():
-            ret['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype=dtype)
+            con['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype=dtype)
 
-        return ret
+        return con, eleglmap
 
     def partition(self, mesh):
         # Extract the current UUID from the mesh
         curruuid = mesh['mesh_uuid']
 
         # Combine any pre-existing parititons
-        mesh = self._combine_mesh_parts(mesh)
+        mesh, rnum = self._combine_mesh_parts(mesh)
 
         # Perform the partitioning
         if self.nparts > 1:
@@ -252,11 +276,20 @@ class BasePartitioner(object):
             # Partition the graph
             vparts = self._partition_graph(graph, self.partwts)
 
+            # Renumber vertices
+            vetimap, vparts = self._renumber_verts(mesh, vetimap, vparts)
+
             # Partition the connectivity portion of the mesh
-            newmesh = self._partition_con(mesh, vparts, vetimap)
+            newmesh, eleglmap = self._partition_con(mesh, vetimap, vparts)
 
             # Handle the shape points
-            newmesh.update(self._partition_spts(mesh, vparts, vetimap))
+            newmesh.update(self._partition_spts(mesh, vetimap, vparts))
+
+            # Update the rnum
+            for etype, emap in rnum.items():
+                for k, (pidx, eidx) in emap.items():
+                    emap[k] = eleglmap[etype, eidx]
+
         # Short circuit
         else:
             newmesh = mesh
@@ -275,7 +308,7 @@ class BasePartitioner(object):
 
             # Partition
             if self.nparts > 1:
-                newsoln = self._partition_soln(soln, vparts, vetimap)
+                newsoln = self._partition_soln(soln, vetimap, vparts)
             else:
                 newsoln = soln
 
@@ -286,4 +319,4 @@ class BasePartitioner(object):
 
             return newsoln
 
-        return newmesh, partition_soln
+        return newmesh, rnum, partition_soln
