@@ -18,6 +18,7 @@ else:
 modules = [
     'pyfr.backends',
     'pyfr.backends.base',
+    'pyfr.backends.base.makocommon',
     'pyfr.backends.cuda',
     'pyfr.backends.cuda.kernels',
     'pyfr.backends.hip',
@@ -67,6 +68,7 @@ tests = [
 
 # Data
 package_data = {
+    'pyfr.backends.base.makocommon': ['*.mako'],
     'pyfr.backends.cuda.kernels': ['*.mako'],
     'pyfr.backends.hip.kernels': ['*.mako'],
     'pyfr.backends.opencl.kernels': ['*.mako'],
