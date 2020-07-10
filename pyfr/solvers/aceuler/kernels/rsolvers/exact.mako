@@ -16,32 +16,32 @@
 </%pyfr:macro>
 
 // Calculate components for Newton iterations
-<%pyfr:macro name='newton_parts' params='ql,al,qr,ar,us,psl,psr,dpsl,dpsr'>
+<%pyfr:macro name='newton_parts' params='ul,al,ur,ar,us,fl,fr,fd'>
     fpdtype_t as = sqrt(us*us + ${zeta});
+    fpdtype_t fdl, fdr;
 
-    if (ql[1]-al <= us-as) { // Left Rarefaction
-        psl  = ql[0] + 0.5*(ql[1]*(al+ql[1]) - us*(as+us) +
-	                    ${zeta}*log((al+ql[1])/(as+us)));
-        dpsl = -0.5*(as + us);
+    if(ul+al <= us+as){ // Left Raefaction
+        fl  = 0.5*(${zeta}*log((ul+al)/(us+as)) + (ul*al - us*as) + (ul*ul - us*us));
+        fdl = -(us + as);
     }
-    else {                   // Left Shock
-        fpdtype_t e = ql[1] + us;
-        fpdtype_t q = sqrt(e*e + ${4.*zeta});
-        psl  = ql[0] + 0.5*(ql[1]-us)*(e + q);
-        dpsl = 0.5*((ql[1]-us)*e/q - q) - us;
+    else{ // Left Shock
+        fpdtype_t e = us + ul;
+	fpdtype_t q = sqrt(e*e + ${4.*zeta});
+	fl  = -0.5*(us - ul)*(e + q);
+	fdl = -0.5*(e + q + (ul - us)*(1. + e/q));
     }
-
-    if (us+as <= qr[1]+ar) { // Right Rarefaction
-         psr  = qr[0] + 0.5*(us*(as-us) - qr[1]*(ar-qr[1]) +
-	                     ${zeta}*log((as+us)/(ar+qr[1])));
-         dpsr = 0.5*(as - us);
+    
+    if(ur+ar <= us+as){ // Right Raefaction
+        fr  = 0.5*(${zeta}*log((us+as)/(ur+ar)) + (us*as - ur*ar) + (ur*ur - us*us));
+        fdr = as - us;
     }
-    else {                   // Right Shock
-         fpdtype_t e = qr[1] + us;
-         fpdtype_t q = sqrt(e*e + ${4.*zeta});
-         psr  = qr[0] - 0.5*(us - qr[1])*(e - q);
-         dpsr = 0.5*((us-qr[1])*e/q + q) - us;
+    else{ // Right Shock
+        fpdtype_t e = us + ur;
+	fpdtype_t q = sqrt(e*e + ${4.*zeta});
+	fr  = -0.5*(us - ur)*(e - q);
+	fdr = -0.5*(e + q + (us - ur)*(1. + e/q));
     }
+    fd = fdr + fdl;
 
 </%pyfr:macro>
 
