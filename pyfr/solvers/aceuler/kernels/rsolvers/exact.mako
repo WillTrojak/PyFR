@@ -16,32 +16,30 @@
 </%pyfr:macro>
 
 // Calculate components for Newton iterations
-<%pyfr:macro name='newton_parts' params='ul,al,ur,ar,us,fl,fr,fd'>
+<%pyfr:macro name='newton_parts' params='pl,ul,al,pr,ur,ar,us,psl,psr,dpsl,dpsr'>
     fpdtype_t as = sqrt(us*us + ${zeta});
-    fpdtype_t fdl, fdr;
 
-    if(ul+al <= us+as){ // Left Raefaction
-        fl  = 0.5*(${zeta}*log((ul+al)/(us+as)) + (ul*al - us*as) + (ul*ul - us*us));
-        fdl = -(us + as);
+    if (ul-al <= us-as) { // Left Rarefaction
+        psl  = pl + 0.5*(ul*(al+ul) - us*(as+us) + ${zeta}*log((al+ul)/(as+us)));
+        dpsl = -0.5*(as + us);
     }
-    else{ // Left Shock
-        fpdtype_t e = us + ul;
-	fpdtype_t q = sqrt(e*e + ${4.*zeta});
-	fl  = -0.5*(us - ul)*(e + q);
-	fdl = -0.5*(e + q + (ul - us)*(1. + e/q));
+    else {                // Left Shock
+        fpdtype_t e = ul + us;
+        fpdtype_t q = sqrt(e*e + ${4.*zeta});
+        psl  = pl + 0.5*(ul-us)*(e + q);
+        dpsl = 0.5*((ul-us)*e/q - q) - us;
     }
-    
-    if(ur+ar <= us+as){ // Right Raefaction
-        fr  = 0.5*(${zeta}*log((us+as)/(ur+ar)) + (us*as - ur*ar) + (ur*ur - us*us));
-        fdr = as - us;
+
+    if (us+as <= ur+ar) { // Right Rarefaction
+         psr  = pr + 0.5*(us*(as-us) - ur*(ar-ur) + ${zeta}*log((as+us)/(ar+ur)));
+         dpsr = 0.5*(as - us);
     }
-    else{ // Right Shock
-        fpdtype_t e = us + ur;
-	fpdtype_t q = sqrt(e*e + ${4.*zeta});
-	fr  = -0.5*(us - ur)*(e - q);
-	fdr = -0.5*(e + q + (us - ur)*(1. + e/q));
+    else {                // Right Shock
+         fpdtype_t e = ur + us;
+         fpdtype_t q = sqrt(e*e + ${4.*zeta});
+         psr  = pr - 0.5*(us - ur)*(e - q);
+         dpsr = 0.5*((us-ur)*e/q + q) - us;
     }
-    fd = fdr + fdl;
 
 </%pyfr:macro>
 
@@ -119,6 +117,11 @@
     fpdtype_t psl, dpsl;
     fpdtype_t psr, dpsr;
 
+    fpdtype_t pl = ql[0];
+    fpdtype_t ul = ql[1];
+    fpdtype_t pr = qr[0];
+    fpdtype_t ur = qr[1];
+
     // ACM speed of sound
     fpdtype_t al = sqrt(ql[1]*ql[1] + ${zeta});
     fpdtype_t ar = sqrt(qr[1]*qr[1] + ${zeta});
@@ -126,7 +129,7 @@
     ${pyfr.expand('init_ustar','ql','al','qr','ar','us')};
     
 % for k in range(kmax):
-    ${pyfr.expand('newton_parts','ql','al','qr','ar','us','psl','psr','dpsl','dpsr')};
+    ${pyfr.expand('newton_parts','pl','ul','al','pr','ur','ar','us','psl','psr','dpsl','dpsr')};
     us = us - (psl - psr)/(dpsl - dpsr);
 % endfor
 
