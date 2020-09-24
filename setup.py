@@ -7,8 +7,8 @@ import sys
 
 
 # Python version
-if sys.version_info[:2] < (3, 5):
-    print('PyFR requires Python 3.5 or newer')
+if sys.version_info[:2] < (3, 6):
+    print('PyFR requires Python 3.6 or newer')
     sys.exit(-1)
 
 # PyFR version
@@ -24,6 +24,7 @@ else:
 modules = [
     'pyfr.backends',
     'pyfr.backends.base',
+    'pyfr.backends.base.makocommon',
     'pyfr.backends.cuda',
     'pyfr.backends.cuda.kernels',
     'pyfr.backends.opencl',
@@ -70,6 +71,7 @@ tests = [
 
 # Data
 package_data = {
+    'pyfr.backends.base.makocommon': ['*.mako'],
     'pyfr.backends.cuda.kernels': ['*.mako'],
     'pyfr.backends.opencl.kernels': ['*.mako'],
     'pyfr.backends.openmp.kernels': ['*.mako'],
@@ -130,7 +132,6 @@ console_scripts = [
 classifiers = [
     'License :: OSI Approved :: BSD License',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 3.5',
     'Programming Language :: Python :: 3.6',
     'Programming Language :: Python :: 3.7',
     'Topic :: Scientific/Engineering'
