@@ -78,7 +78,8 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # Render the template to yield the source code
         tpl = self.backend.lookup.get_template(mod)
         src = tpl.render(**tplargs)
-
+        #print(src)
+        
         # Check the kernel exists in the template
         if name not in argspecs:
             raise ValueError('Kernel "{0}" not defined in template'

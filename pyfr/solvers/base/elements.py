@@ -150,9 +150,10 @@ class BaseElements(object):
         subs.update({v: 'u[{0}]'.format(i) for i, v in enumerate(convars)})
         subs.update(abs='fabs', pi=str(math.pi))
 
-        return [self.cfg.getexpr('solver-source-terms', v, '0', subs=subs)
-                for v in convars]
-
+        return [self.cfg.getexpr('solver-source-terms', v, '0', subs=subs) for v in convars]
+        #print(thing)
+        #return thing
+                
     @lazyprop
     def _ploc_in_src_exprs(self):
         return any(re.search(r'\bploc\b', ex) for ex in self._src_exprs)

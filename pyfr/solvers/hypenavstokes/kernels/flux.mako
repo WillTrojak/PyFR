@@ -26,15 +26,20 @@
     f[${i}][0] = ${c['ac-zeta']}*v[${i}];
 % endfor
 
-    // Momentum fluxes
 % for i, j in pyfr.ndrange(ndims, ndims):
     // Momentum fluxes
-    f[${i}][${j + 1}] = -${c['nu']}q[${i}][${j}] + v[${i}]*v[${j}]${' + p' if i == j else ''};
+    f[${i}][${j + 1}] = -${c['nu']}*q[${i}][${j}] + v[${i}]*v[${j}]${' + p' if i == j else ''};
     
     // Gradient fluxes
-    f[${i}][${i + 1 + ndims + j*ndims}] = ${rtr}*v[${j}];
+% for k in range(ndims):
+% if k == i:
+    f[${i}][${1 + ndims + k + j*ndims}] = -${rtr}*v[${j}];
+% else: 
+    f[${i}][${1 + ndims + k + j*ndims}] = 0.;
+% endif
 % endfor
 
-   // Gradient fluxes
+% endfor
+
 
 </%pyfr:macro>
