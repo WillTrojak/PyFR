@@ -19,20 +19,20 @@
     fpdtype_t nv = 0.5*${pyfr.dot('n[{i}]', 'vl[{i}] + vr[{i}]', i=ndims)};
 
     // Estimate the wave speed
-    //fpdtype_t a = fabs(nv) + sqrt(nv*nv + ${c['ac-zeta'] + nurtr});
-    fpdtype_d c = fabs(nv) + sqrt(nv*nv + ${c['ac-zeta']});
-% for i in range(nvars):
-% if i < ndims + 1:
-    a[${i}] = c;
-% else:
-    a[${i}] = -${rtr};
-% endif
-% endfor
+    fpdtype_t c = fabs(nv) + sqrt(nv*nv + ${c['ac-zeta'] + nurtr});
+    //fpdtype_d c = fabs(nv) + sqrt(nv*nv + ${c['ac-zeta']});
+//% for i in range(nvars):
+//% if i < ndims + 1:
+//    a[${i}] = c;
+//% else:
+//    a[${i}] = c;
+//% endif
+//% endfor
 
     // Output
 % for i in range(nvars):
     nf[${i}] = 0.5*(${' + '.join('n[{j}]*(fl[{j}][{i}] + fr[{j}][{i}])'
                                  .format(i=i, j=j) for j in range(ndims))})
-             + 0.5*a[${i}]*(ul[${i}] - ur[${i}]);
+             + 0.5*c*(ul[${i}] - ur[${i}]);
 % endfor
 </%pyfr:macro>
