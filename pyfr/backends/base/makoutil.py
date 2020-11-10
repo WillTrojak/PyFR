@@ -6,7 +6,6 @@ import re
 
 from mako.runtime import supports_caller, capture
 
-import copy
 import pyfr.nputil as nputil
 import pyfr.util as util
 
@@ -76,6 +75,7 @@ def _locals(body):
     # Prune invalid names
     return [lv for lv in lvars if lv not in protected]
 
+
 @supports_caller
 def macro(context, name, params, externs=''):
     # Check we have not already been defined
@@ -88,10 +88,10 @@ def macro(context, name, params, externs=''):
 
     # Capture the function body
     body = capture(context, context['caller'].body)
-    
+
     # Identify any local variable declarations
     lvars = _locals(body)
-    
+
     # Suffix these variables by a '_'
     if lvars:
         body = re.sub(r'\b({0})\b'.format('|'.join(lvars)), r'\1_', body)
@@ -100,6 +100,7 @@ def macro(context, name, params, externs=''):
     context['_macros'][name] = (params, externs, body)
 
     return ''
+
 
 def expand(context, name, *params):
     # Get the macro parameter list and the body
@@ -121,6 +122,7 @@ def expand(context, name, *params):
         body = re.sub(rf'\b{name}\b', subst, body)
 
     return f'{{\n{body}\n}}'
+
 
 @supports_caller
 def kernel(context, name, ndim, **kwargs):
