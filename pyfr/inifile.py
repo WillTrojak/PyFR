@@ -88,7 +88,7 @@ class Inifile(object):
         # Convert integers not inside [] to floats
         expr = re.sub(r'\b((\d+\.?\d*)|(\.\d+))([eE][+-]?\d+)?(?![^[]*\])',
                       _ensure_float, expr)
-        
+
         # Encase in parenthesis
         return '({0})'.format(expr)
 

@@ -40,8 +40,8 @@ class BaseAdvectionElements(BaseElements):
         source_sys = self.cfg.get('solver-source', 'source-sys','baseadvec')
 
         srctplargs = dict(ndims=self.ndims, nvars=self.nvars, 
-            srcex=self._src_exprs, source=source, source_sys=source_sys
-        )
+            srcex=self._src_exprs, source=source, source_sys=source_sys, 
+            c=self._tpl_c)
 
         # Interpolation from elemental points
         for s, neles in self._ext_int_sides:
