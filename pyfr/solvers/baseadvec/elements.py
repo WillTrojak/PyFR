@@ -36,11 +36,12 @@ class BaseAdvectionElements(BaseElements):
         solnsrc = self._soln_in_src_exprs
 
         # Source term kernel arguments
-        srctplargs = {
-            'ndims': self.ndims,
-            'nvars': self.nvars,
-            'srcex': self._src_exprs
-        }
+        source = self.cfg.get('solver-source', 'source','null_source')
+        source_sys = self.cfg.get('solver-source', 'source-sys','baseadvec')
+
+        srctplargs = dict(ndims=self.ndims, nvars=self.nvars, 
+            srcex=self._src_exprs, source=source, source_sys=source_sys
+        )
 
         # Interpolation from elemental points
         for s, neles in self._ext_int_sides:
