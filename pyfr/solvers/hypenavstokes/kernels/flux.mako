@@ -31,3 +31,29 @@
 
 % endfor
 </%pyfr:macro>
+
+<%pyfr:macro name='inviscid_1dflux' params='s, f'>
+
+fpdtype_t v[] = ${pyfr.array('s[{i}]', i=(1, ndims + 1))};
+
+    // Mass flux
+    f[0] = ${c['ac-zeta']}*v[0];
+
+    // Momentum fluxes
+    f[1] = v[0]*v[0] + s[0] - ${c['nu']}*s[${1 + ndims}];
+% for j in range(2,ndims):
+    f[${j + 2}] = v[0]*v[${j}] - ${c['nu']}*s[${1 + ndims + j*ndims}];
+% endfor
+
+    // Gradient fluxes
+% for i,j in pyfr.drange(ndims,ndims):
+% if i == 0:
+    f[${1 + ndims + i + j*ndims}] = -${rtr}*v[${j}];
+% else: 
+    f[${1 + ndims + i + j*ndims}] = 0;
+% endif
+% endfor
+
+
+</%pyfr:macro>
+
