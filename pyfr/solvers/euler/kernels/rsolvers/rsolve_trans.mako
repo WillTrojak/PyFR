@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%include file='pyfr.backends.base.makocommon.transto'/>
-<%include file='pyfr.backends.base.makocommon.transfrom'/>
+<%include file='pyfr.backends.base.makocommon.transform'/>
 
 <%pyfr:macro name='rsolve' params='ul, ur, n, nf'>
     fpdtype_t utl[${nvars}], utr[${nvars}], ntf[${nvars}];
@@ -17,5 +16,4 @@
 
     nf[0] = ntf[0]; nf[${nvars-1}] = ntf[${nvars-1}];
     ${pyfr.expand('transform_from','n','ntf','nf','1')};
-
 </%pyfr:macro>

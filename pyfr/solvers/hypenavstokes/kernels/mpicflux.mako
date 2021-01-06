@@ -2,7 +2,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%include file='pyfr.solvers.aceuler.kernels.rsolvers.${rsolver}'/>
+<%include file='pyfr.solvers.hypenavstokes.kernels.rsolvers.${rsolver}'/>
 
 <%pyfr:kernel name='mpicflux' ndim='1'
               ul='inout view fpdtype_t[${str(nvars)}]'

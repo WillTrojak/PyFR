@@ -2,6 +2,8 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
+<%include file='pyfr.solvers.${source_sys}.kernels.${source}'/>
+
 <%pyfr:kernel name='negdivconf' ndim='2'
               t='scalar fpdtype_t'
               tdivtconf='inout fpdtype_t[${str(nvars)}]'
@@ -11,4 +13,7 @@
 % for i, ex in enumerate(srcex):
     tdivtconf[${i}] = -rcpdjac*tdivtconf[${i}] + ${ex};
 % endfor
+
+	${pyfr.expand('sources', 'tdivtconf', 'u', 'ploc')};
+
 </%pyfr:kernel>
