@@ -46,7 +46,7 @@ fpdtype_t v[] = ${pyfr.array('s[{i}]', i=(1, ndims + 1))};
 % endfor
 
     // Gradient fluxes
-% for i,j in pyfr.drange(ndims,ndims):
+% for i,j in pyfr.ndrange(ndims,ndims):
 % if i == 0:
     f[${1 + ndims + i + j*ndims}] = -${rtr}*v[${j}];
 % else: 
