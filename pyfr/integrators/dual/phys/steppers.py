@@ -125,6 +125,7 @@ class ESDIRK34Stepper(BaseDIRKStepper):
     def _nstages(self):
         return 4
 
+
 class SDIRK34Stepper(BaseDIRKStepper):
     stepper_name = 'sdirk34'
 
@@ -139,3 +140,39 @@ class SDIRK34Stepper(BaseDIRKStepper):
     @property
     def _nstages(self):
         return 4
+
+
+class SDIRK33Stepper(BaseDIRKStepper):
+    stepper_name = 'sdirk33'
+
+    a_lam = 0.4358665215084590
+
+    a = [[], [], []]
+    a[0] = [a_lam]
+    a[1] = [0.5*(1 - a_lam),  a_lam]
+    a[2] = [(4 - 1.5*a_lam)*a_lam - 0.25, (1.5*a_lam - 5)*a_lam + 1.25, a_lam]
+
+    b = a[2]
+
+    @property
+    def _nstages(self):
+        return 3
+
+
+class SDIRK43Stepper(BaseDIRKStepper):
+    stepper_name = 'sdirk43'
+
+    # a_lam = (3 + 2*sqrt(3)*cos(pi/18))/6
+    a_ lam = 1.0685790213016289
+
+    a =	[[], [], []]
+    a[0] = [a_lam]
+    a[1] = [0.5* - a_lam,  a_lam]
+    a[2] = [2*a_lam, 1 - 4*a_lam, a_lam]
+
+    b_rlam = 1/(6*(1 - 2*a_lam)*(1 - 2*a_lam))
+    b =	[b_rlam, 1 - 2*b_rlam, b_rlam]
+
+    @property
+    def _nstages(self):
+       	return 3
