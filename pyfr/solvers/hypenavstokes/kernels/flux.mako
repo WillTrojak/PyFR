@@ -10,6 +10,7 @@
 </%pyfr:macro>
 
 <% rtr = 1./c['tr'] %>
+<% az = c['ac-zeta']*c['ac-alpha'] %>
 
 <%pyfr:macro name='inviscid_flux' params='s, f'>
     // Velocity in the indices 1 to ndims+1 of the conservative variable array
@@ -28,8 +29,12 @@
 
 % for i, j in pyfr.ndrange(ndims, ndims):
     // Momentum fluxes
-    f[${i}][${j + 1}] = -${c['nu']}*q[${i}][${j}] + v[${i}]*v[${j}]${' + p' if i == j else ''};
-    
+% if i == j:
+    f[${i}][${j + 1}] = -${c['nu']}*q[${i}][${j}] + ${0.5*(2 - az)}*v[${i}]*v[${j}] + p;
+% else:
+    f[${i}][${j + 1}] = -${c['nu']}*q[${i}][${j}] + ${1 - az}*v[${i}]*v[${j}];
+% endif
+
     // Gradient fluxes
 % for k in range(ndims):
 % if k == i:
