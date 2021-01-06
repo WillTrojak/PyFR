@@ -1,20 +1,8 @@
 # -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<<<<<<< HEAD
-<%pyfr:macro name='grad_array',params='s,q'>
-
-% for i,j in pyfr.ndrange(ndims, ndims):
-    q[${i}][${j}] = s[${ndims + 1 + i + (j*ndims)}];
-% endfor
-
-</%pyfr:macro>
-
 <% rtr = 1./c['tr'] %>
 <% az = c['ac-zeta']*c['ac-alpha'] %>
-=======
-<% rtr = 1/c['tr'] %>
->>>>>>> beb5762025b806aea65bfd731e9be3067d6444dd
 
 <%pyfr:macro name='inviscid_flux' params='s, f'>
     // Velocity in the indices 1 to ndims+1 of the conservative variable array
@@ -29,19 +17,16 @@
 % endfor
 
 % for i, j in pyfr.ndrange(ndims, ndims):
+
     // Momentum fluxes
-<<<<<<< HEAD
 % if i == j:
-    f[${i}][${j + 1}] = -${c['nu']}*q[${i}][${j}] + ${0.5*(2 - az)}*v[${i}]*v[${j}] + p;
+    f[${i}][${j + 1}] = -${c['nu']}*s[${1 + ndims + i + j*ndims}] 
+                        + ${0.5*(2 - az)}*v[${i}]*v[${j}] + p;
 % else:
-    f[${i}][${j + 1}] = -${c['nu']}*q[${i}][${j}] + ${1 - az}*v[${i}]*v[${j}];
+    f[${i}][${j + 1}] = -${c['nu']}*s[${1 + ndims + i + j*ndims}] 
+                        + ${1 - az}*v[${i}]*v[${j}];
 % endif
 
-=======
-    f[${i}][${j + 1}] = -${c['nu']}*s[${1 + ndims + i + j*ndims}] 
-                      + v[${i}]*v[${j}]${' + p' if i == j else ''};
-    
->>>>>>> beb5762025b806aea65bfd731e9be3067d6444dd
     // Gradient fluxes
 % for k in range(ndims):
 % if k == i:
@@ -55,8 +40,7 @@
 </%pyfr:macro>
 
 <%pyfr:macro name='inviscid_1dflux' params='s, f'>
-
-fpdtype_t v[] = ${pyfr.array('s[{i}]', i=(1, ndims + 1))};
+    fpdtype_t v[] = ${pyfr.array('s[{i}]', i=(1, ndims + 1))};
 
     // Mass flux
     f[0] = ${c['ac-zeta']}*v[0];
