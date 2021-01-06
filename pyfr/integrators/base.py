@@ -171,9 +171,9 @@ class BaseCommon(object):
     def _get_axnpby_kerns(self, n, subdims=None):
         return self._get_kernels('axnpby', nargs=n, subdims=subdims)
 
-    def _add(self, *args):
+    def _add(self, *args, subdims=None):
         # Get a suitable set of axnpby kernels
-        axnpby = self._get_axnpby_kerns(len(args) // 2)
+        axnpby = self._get_axnpby_kerns(len(args) // 2, subdims=subdims)
 
         # Bank indices are in odd-numbered arguments
         self._prepare_reg_banks(*args[1::2])

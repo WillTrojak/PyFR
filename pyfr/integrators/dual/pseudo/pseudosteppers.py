@@ -25,6 +25,7 @@ def _get_coefficients_from_txt(scheme):
 
 
 class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
+
     @property
     def ntotiters(self):
         return self.npseudosteps
@@ -40,13 +41,17 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
 
-        # Coefficients for the physical stepper
-        svals = [sc/self._dt for sc in self._stepper_coeffs]
+        if self._stage_nregs > 1:
+            self._add(0, self._stage_regidx[self._currstg], 1, fout)
 
+        stpn = self._stepper_nregs
+        nstg = len(self._stepper_coeffs) - 2 - stpn
+        
         # Physical stepper source addition -∇·f - dQ/dt
-        axnpby = self._get_axnpby_kerns(len(svals) + 1, subdims=self._subdims)
-        self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_regidx)
-        self._queue % axnpby(1, *svals)
+        axnpby = self._get_axnpby_kerns(2 + stpn + nstg, subdims=self._subdims)
+        self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_regidx,
+                                *self._stage_regidx[:nstg])
+        self._queue % axnpby(*self._stepper_coeffs)
 
 
 class DualEulerPseudoStepper(BaseDualPseudoStepper):
