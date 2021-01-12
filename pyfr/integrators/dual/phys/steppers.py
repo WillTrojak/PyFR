@@ -108,7 +108,7 @@ class BaseDIRKStepper(BaseDualStepper):
             + self.a[csn][:csn]
 
 
-class ESDIRK34Stepper(BaseDIRKStepper):
+class DualESDIRK34Stepper(BaseDIRKStepper):
     stepper_name = 'esdirk34'
 
     a = [[], [], [], []]
@@ -126,7 +126,7 @@ class ESDIRK34Stepper(BaseDIRKStepper):
         return 4
 
 
-class SDIRK34Stepper(BaseDIRKStepper):
+class DualSDIRK34Stepper(BaseDIRKStepper):
     stepper_name = 'sdirk34'
 
     a = [[], [], [], []]
@@ -142,7 +142,7 @@ class SDIRK34Stepper(BaseDIRKStepper):
         return 4
 
 
-class SDIRK33Stepper(BaseDIRKStepper):
+class DualSDIRK33Stepper(BaseDIRKStepper):
     stepper_name = 'sdirk33'
 
     a_lam = 0.4358665215084590
@@ -159,7 +159,7 @@ class SDIRK33Stepper(BaseDIRKStepper):
         return 3
 
 
-class SDIRK43Stepper(BaseDIRKStepper):
+class DualSDIRK43Stepper(BaseDIRKStepper):
     stepper_name = 'sdirk43'
 
     # a_lam = (3 + 2*sqrt(3)*cos(pi/18))/6
