@@ -12,7 +12,7 @@ from pyfr.util import memoize, proxylist, subclass_where
 
 class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg,
-                 tcoeffs, dt):
+                 stepper_nregs, stage_nregs, dt):
         self.backend = backend
 
         sect = 'solver-time-integrator'
@@ -95,31 +95,35 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 def convmon(iself, *args, **kwargs):
                     pass
 
-                def finalise_pseudo_advance(iself, *args, **kwargs):
-                    pass
-
-                def _rhs_with_dts(iself, t, uin, fout):
+                def _rhs_with_dts(iself, t, uin, fout, rstr=True):
                     # Compute -∇·f
                     iself.system.rhs(t, uin, fout)
 
-                    # Coefficients for the physical stepper
-                    svals = [sc/iself._dt for sc in iself._stepper_coeffs]
+                    if self._stage_nregs > 1:
+                        self._add(0, self._stage_regidx[iself._currstg],
+                                  1, fout)
+
+                    stpn = iself._stepper_nregs
+                    nstg = len(iself._stepper_coeffs) - 2 - stpn
 
                     # Physical stepper source addition -∇·f - dQ/dt
-                    axnpby = iself._get_axnpby_kerns(len(svals) + 1,
+                    axnpby = iself._get_axnpby_kerns(2 + stpn + nstg,
                                                      subdims=iself._subdims)
-                    iself._prepare_reg_banks(fout, iself._idxcurr,
-                                             *iself._stepper_regidx)
-                    iself._queue % axnpby(1, *svals)
+                    iself._prepare_reg_banks(
+                        fout, iself._idxcurr, *iself._stepper_regidx,
+                        *iself._stage_regidx[:nstg]
+                    )
+                    iself._queue % axnpby(*iself._stepper_coeffs)
 
                     # Multigrid r addition
-                    if iself._aux_regidx:
+                    if iself._aux_regidx and rstr:
                         axnpby = iself._get_axnpby_kerns(2)
                         iself._prepare_reg_banks(fout, iself._aux_regidx[0])
                         iself._queue % axnpby(1, -1)
 
-            self.pintgs[l] = lpsint(backend, systemcls, rallocs, mesh,
-                                    initsoln, mcfg, tcoeffs, dt)
+            self.pintgs[l] = lpsint(
+                backend, systemcls, rallocs, mesh, initsoln, mcfg,
+                stepper_nregs, stage_nregs, dt)
 
         # Get the highest p system from plugins
         self.system = self.pintgs[self._order].system
@@ -133,19 +137,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Delete remaining elements maps from multigrid systems
         for l in self.levels[1:]:
             del self.pintgs[l].system.ele_map
-
-    def finalise_mg_advance(self, currsoln):
-        psnregs = self.pintg._pseudo_stepper_nregs
-        snregs = self.pintg._stepper_nregs
-
-        # Rotate the stepper registers to the right by one
-        self.pintg._regidx[psnregs:psnregs + snregs] = (
-            self.pintg._stepper_regidx[-1:] +
-            self.pintg._stepper_regidx[:-1]
-        )
-
-        # Copy the current soln into the first source register
-        self.pintg._add(0, self.pintg._regidx[psnregs], 1, currsoln)
 
     @property
     def _idxcurr(self):
@@ -162,6 +153,38 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     @pseudostepinfo.setter
     def pseudostepinfo(self, y):
         self.pintg.pseudostepinfo = y
+
+    @property
+    def _queue(self):
+        return self.pintg._queue
+
+    @property
+    def _regs(self):
+        return self.pintg._regs
+
+    @property
+    def _regidx(self):
+        return self.pintg._regidx
+
+    @property
+    def _stage_nregs(self):
+        return self.pintg._stage_nregs
+
+    @property
+    def _stepper_nregs(self):
+        return self.pintg._stepper_nregs
+
+    @property
+    def _stage_regidx(self):
+        return self.pintg._stage_regidx
+
+    @property
+    def _pseudo_stepper_nregs(self):
+        return self.pintg._pseudo_stepper_nregs
+
+    @property
+    def _subdims(self):
+        return self.pintg._subdims
 
     @property
     def pintg(self):
@@ -205,11 +228,35 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         l1sys, l2sys = self.pintgs[l1].system, self.pintgs[l2].system
 
+        # Restrict the physical stepper terms
+        for i in range(self.pintg._stepper_nregs):
+            l1sys.eles_scal_upts_inb.active = (
+                self.pintgs[l1]._stepper_regidx[i]
+            )
+            l2sys.eles_scal_upts_inb.active = (
+                self.pintgs[l2]._stepper_regidx[i]
+            )
+            self.pintg._queue % self.mgproject(l1, l2)()
+
+        # Restrict the internal stage terms
+        for i in range(self.pintg._stage_nregs):
+            l1sys.eles_scal_upts_inb.active = (
+                self.pintgs[l1]._stage_regidx[i]
+            )
+            l2sys.eles_scal_upts_inb.active = (
+                self.pintgs[l2]._stage_regidx[i]
+            )
+            self.pintg._queue % self.mgproject(l1, l2)()
+
+        # Project local dtau field to lower multigrid levels
+        if self.pintgs[self._order]._pseudo_controller_needs_lerrest:
+            self.pintg._queue % self.dtauproject(l1, l2)()
+
         # Prevsoln is used as temporal storage at l1
         rtemp = 0 if l1idxcurr == 1 else 1
 
         # rtemp = R = -∇·f - dQ/dt
-        self.pintg.system.rhs(self.tcurr, l1idxcurr, rtemp)
+        self.pintg._rhs_with_dts(self.tcurr, l1idxcurr, rtemp, False)
 
         # rtemp = -d = R - r at lower levels
         if l1 != self._order:
@@ -230,7 +277,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.pintg._queue % self.mgproject(l1, l2)()
 
         # mg0 = R = -∇·f - dQ/dt
-        self.pintg.system.rhs(self.tcurr, l2idxcurr, self._mg_regidx[0])
+        self.pintg._rhs_with_dts(self.tcurr, l2idxcurr, self._mg_regidx[0], False)
 
         # Compute the target residual r
         # mg0 = r = R + d
@@ -239,20 +286,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Need to store the non-smoothed solution Q^ns for the correction
         # mg1 = Q^ns
         self.pintg._add(0, mg1, 1, l2idxcurr)
-
-        # Restrict the physical stepper terms
-        for i in range(self.pintg._stepper_nregs):
-            l1sys.eles_scal_upts_inb.active = (
-                self.pintgs[l1]._stepper_regidx[i]
-            )
-            l2sys.eles_scal_upts_inb.active = (
-                self.pintgs[l2]._stepper_regidx[i]
-            )
-            self.pintg._queue % self.mgproject(l1, l2)()
-
-        # Project local dtau field to lower multigrid levels
-        if self.pintgs[self._order]._pseudo_controller_needs_lerrest:
-            self.pintg._queue % self.dtauproject(l1, l2)()
 
     def prolongate(self, l1, l2):
         l1idxcurr = self.pintgs[l1]._idxcurr
@@ -285,11 +318,13 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         return self.pintg._aux_regidx[-2:]
 
-    def pseudo_advance(self, tcurr):
+    def pseudo_advance(self, tcurr, stepper_coeffs, currstg):
         # Multigrid levels and step counts
         cycle, csteps = self.cycle, self.csteps
 
         self.tcurr = tcurr
+
+        self._stepper_coeffs = stepper_coeffs
 
         for i in range(self._maxniters):
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
@@ -298,9 +333,11 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 # Set the number of smoothing steps at each level
                 self.pintg.maxniters = self.pintg.minniters = n
 
-                self.pintg.pseudo_advance(tcurr)
+                self.pintg.pseudo_advance(tcurr, self._stepper_coeffs, currstg)
 
                 if m is not None and l > m:
+                    self.pintgs[m]._stepper_coeffs = stepper_coeffs
+                    self.pintgs[m]._currstg = currstg
                     self.restrict(l, m)
                 elif m is not None and l < m:
                     self.prolongate(l, m)
@@ -311,9 +348,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             # Convergence monitoring
             if self.mg_convmon(self.pintg, i, self._minniters):
                 break
-
-        # Update the dual-time stepping banks
-        self.finalise_mg_advance(self.pintg._idxcurr)
 
     def collect_stats(self, stats):
         # Collect the stats for each level
