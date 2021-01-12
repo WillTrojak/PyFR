@@ -16,9 +16,9 @@
     // Momentum fluxes
 % for i, j in pyfr.ndrange(ndims, ndims):
 % if i == j:
-    f[${i}][${j + 1}] = ${0.5*(2 - c['ac-alpha']*c['ac-zeta'])}*v[${i}]*v[${j}] + p;
+    f[${i}][${j + 1}] = ${1 - 0.5*c['ac-alpha']*c['ac-zeta']}*v[${i}]*v[${j}] + p;
 % else:
-	f[${i}][${j + 1}] = ${(1 - c['ac-alpha']*c['ac-zeta'])}v[${i}]*v[${j}];
+	f[${i}][${j + 1}] = ${1 - c['ac-alpha']*c['ac-zeta']}*v[${i}]*v[${j}];
 % endif
 % endfor
 </%pyfr:macro>
