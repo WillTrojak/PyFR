@@ -163,7 +163,7 @@ class DualSDIRK43Stepper(BaseDIRKStepper):
     stepper_name = 'sdirk43'
 
     # a_lam = (3 + 2*sqrt(3)*cos(pi/18))/6
-    a_ lam = 1.0685790213016289
+    a_lam = 1.0685790213016289
 
     a =	[[], [], []]
     a[0] = [a_lam]
