@@ -250,7 +250,7 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
 
     def localdtau(self, uinbank, inv=0):
         self.system.eles_scal_upts_inb.active = uinbank
-        self._queue % self.pintgkernels['localdtau'](inv=inv)
+        self._queue.enqueue_and_run(self.pintgkernels['localdtau'], inv=inv)
 
     @property
     def _pseudo_stepper_has_lerrest(self):
