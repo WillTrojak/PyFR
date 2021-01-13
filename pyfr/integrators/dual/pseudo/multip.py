@@ -114,7 +114,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                         fout, iself._idxcurr, *iself._stepper_regidx,
                         *iself._stage_regidx[:nstg]
                     )
-                    iself._queue % axnpby(*iself._stepper_coeffs)
+                    iself._queue.enqueue_and_run(axnpby, *iself._stepper_coeffs)
 
                     # Multigrid r addition
                     if iself._aux_regidx and rstr:
@@ -237,7 +237,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             l2sys.eles_scal_upts_inb.active = (
                 self.pintgs[l2]._stepper_regidx[i]
             )
-            self.pintg._queue % self.mgproject(l1, l2)()
+            self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
 
         # Restrict the internal stage terms
         for i in range(self.pintg._stage_nregs):
@@ -247,11 +247,13 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             l2sys.eles_scal_upts_inb.active = (
                 self.pintgs[l2]._stage_regidx[i]
             )
-            self.pintg._queue % self.mgproject(l1, l2)()
+            self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
+
+
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order]._pseudo_controller_needs_lerrest:
-            self.pintg._queue % self.dtauproject(l1, l2)()
+            self.pintg._queue.enqueue_and_run(self.dtauproject(l1, l2))
 
         # Prevsoln is used as temporal storage at l1
         rtemp = 0 if l1idxcurr == 1 else 1

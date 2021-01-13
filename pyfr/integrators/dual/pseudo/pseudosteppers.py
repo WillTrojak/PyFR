@@ -51,7 +51,8 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         axnpby = self._get_axnpby_kerns(2 + stpn + nstg, subdims=self._subdims)
         self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_regidx,
                                 *self._stage_regidx[:nstg])
-        self._queue % axnpby(*self._stepper_coeffs)
+
+        self._queue.enqueue_and_run(axnpby, *self._stepper_coeffs)
 
 
 class DualEulerPseudoStepper(BaseDualPseudoStepper):

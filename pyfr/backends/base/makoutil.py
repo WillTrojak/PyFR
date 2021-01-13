@@ -128,6 +128,8 @@ def expand(context, name, *params):
 def kernel(context, name, ndim, **kwargs):
     extrns = context['_extrns']
 
+    kwargs.update(kwargs.pop('_args', {}))
+
     # Validate the argument list
     if any(arg in extrns for arg in kwargs):
         raise ValueError('Duplicate argument in {0}: {1} {2}'
