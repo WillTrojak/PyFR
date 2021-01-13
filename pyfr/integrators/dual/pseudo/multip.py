@@ -288,23 +288,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # mg1 = Q^ns
         self.pintg._add(0, mg1, 1, l2idxcurr)
 
-<<<<<<< HEAD
-=======
-        # Restrict the physical stepper terms
-        for i in range(self.pintg._stepper_nregs):
-            l1sys.eles_scal_upts_inb.active = (
-                self.pintgs[l1]._stepper_regidx[i]
-            )
-            l2sys.eles_scal_upts_inb.active = (
-                self.pintgs[l2]._stepper_regidx[i]
-            )
-            self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
-
-        # Project local dtau field to lower multigrid levels
-        if self.pintgs[self._order]._pseudo_controller_needs_lerrest:
-            self.pintg._queue.enqueue_and_run(self.dtauproject(l1, l2))
-
->>>>>>> develop
     def prolongate(self, l1, l2):
         l1idxcurr = self.pintgs[l1]._idxcurr
         l2idxcurr = self.pintgs[l2]._idxcurr
