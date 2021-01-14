@@ -25,7 +25,6 @@ def _get_coefficients_from_txt(scheme):
 
 
 class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
-    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)       
 
@@ -36,9 +35,7 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
                        precond=self.precond, c=self.c
                       )
 
-        print(f'preconditioner: {self.precond}')
         if not self.precond=='None':
-            print('Making precond kernels')
             for ele, shape in zip(self.system.ele_map.values(),
                                        self.system.ele_shapes):
                 # Append the precond kernels to the proxylist
@@ -54,8 +51,9 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
     def collect_stats(self, stats):
         super().collect_stats(stats)
 
+    def collect_stats(self, stats):
         # Total number of RHS evaluations
-        stats.set('solver-time-integrator', 'nfevals', self._stepper_nfevals)
+        stats.set('solver-time-integrator', 'nfevals', self._pseudo_stepper_nfevals)
 
         # Total number of pseudo-steps
         stats.set('solver-time-integrator', 'npseudosteps', self.npseudosteps)
@@ -70,7 +68,7 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         # Physical stepper source addition -∇·f - dQ/dt
         axnpby = self._get_axnpby_kerns(len(svals) + 1, subdims=self._subdims)
         self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_regidx)
-        self._queue % axnpby(1, *svals)
+        self._queue.enqueue_and_run(axnpby, 1, *svals)
         if not self.precond=='None':
             self._queue.enqueue_and_run(self.pintgkernels['precond'])
 
@@ -83,8 +81,8 @@ class DualEulerPseudoStepper(BaseDualPseudoStepper):
         return False
 
     @property
-    def _stepper_nfevals(self):
-        return self.nsteps
+    def _pseudo_stepper_nfevals(self):
+        return self.npseudosteps
 
     @property
     def _pseudo_stepper_nregs(self):
@@ -95,6 +93,8 @@ class DualEulerPseudoStepper(BaseDualPseudoStepper):
         return 1
 
     def step(self, t):
+        self.npseudosteps += 1
+
         add = self._add
         rhs = self._rhs_with_dts
 
@@ -117,8 +117,8 @@ class DualTVDRK3PseudoStepper(BaseDualPseudoStepper):
         return False
 
     @property
-    def _stepper_nfevals(self):
-        return 3*self.nsteps
+    def _pseudo_stepper_nfevals(self):
+        return 3*self.npseudosteps
 
     @property
     def _pseudo_stepper_nregs(self):
@@ -129,6 +129,8 @@ class DualTVDRK3PseudoStepper(BaseDualPseudoStepper):
         return 3
 
     def step(self, t):
+        self.npseudosteps += 1
+
         add = self._add
         rhs = self._rhs_with_dts
         dtau = self._dtau
@@ -168,8 +170,8 @@ class DualRK4PseudoStepper(BaseDualPseudoStepper):
         return False
 
     @property
-    def _stepper_nfevals(self):
-        return 4*self.nsteps
+    def _pseudo_stepper_nfevals(self):
+        return 4*self.npseudosteps
 
     @property
     def _pseudo_stepper_nregs(self):
@@ -180,6 +182,8 @@ class DualRK4PseudoStepper(BaseDualPseudoStepper):
         return 4
 
     def step(self, t):
+        self.npseudosteps += 1
+
         add = self._add
         rhs = self._rhs_with_dts
         dtau = self._dtau
@@ -265,7 +269,7 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
 
     def localdtau(self, uinbank, inv=0):
         self.system.eles_scal_upts_inb.active = uinbank
-        self._queue % self.pintgkernels['localdtau'](inv=inv)
+        self._queue.enqueue_and_run(self.pintgkernels['localdtau'], inv=inv)
 
     @property
     def _pseudo_stepper_has_lerrest(self):
@@ -280,14 +284,16 @@ class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
         self.c = [0.0] + [sum(self.b[:i]) + ai for i, ai in enumerate(self.a)]
 
     @property
-    def _stepper_nfevals(self):
-        return len(self.b)*self.nsteps
+    def _pseudo_stepper_nfevals(self):
+        return len(self.b)*self.npseudosteps
 
     @property
     def _pseudo_stepper_nregs(self):
         return 4 if self._pseudo_stepper_has_lerrest else 3
 
     def step(self, t):
+        self.npseudosteps += 1
+
         add, rhs = self._add, self._rhs_with_dts
         errest = self._pseudo_stepper_has_lerrest
 
@@ -393,7 +399,13 @@ class DualDenseRKPseudoStepper(BaseDualPseudoStepper):
 
         self.a, self.b = _get_coefficients_from_txt(scheme.decode())
 
+    @property
+    def _pseudo_stepper_nfevals(self):
+        return len(self.b)*self.npseudosteps
+
     def step(self, t):
+        self.npseudosteps += 1
+
         add = self._add
         rhs = self._rhs_with_dts
 
