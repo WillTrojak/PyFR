@@ -12,6 +12,8 @@ class ACNavierStokesElements(BaseACFluidElements,
         # Register our flux kernel
         self._be.pointwise.register('pyfr.solvers.acnavstokes.kernels.tflux')
 
+        self._be.pointwise.register('pyfr.solvers.aceuler.kernels.precond')
+
         # Template parameters for the flux kernel
         tplargs = dict(ndims=self.ndims, nvars=self.nvars,
                        c=self.cfg.items_as('constants', float))

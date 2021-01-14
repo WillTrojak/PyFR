@@ -25,6 +25,32 @@ def _get_coefficients_from_txt(scheme):
 
 
 class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)       
+
+        sect = 'solver-time-integrator'
+
+        self.precond = self.cfg.get(sect, 'preconditioner', None)
+        tplargs = dict(ndims=self.system.ndims, nvars=self.system.nvars, 
+                       precond=self.precond, c=self.c
+                      )
+
+        print(f'preconditioner: {self.precond}')
+        if not self.precond=='None':
+            print('Making precond kernels')
+            for ele, shape in zip(self.system.ele_map.values(),
+                                       self.system.ele_shapes):
+                # Append the precond kernels to the proxylist
+                self.pintgkernels['precond'].append(
+                    self.backend.kernel('precond', tplargs=tplargs,
+                        dims=[ele.nupts, ele.neles], 
+                        u=ele.scal_upts_inb, f=ele.scal_upts_outb
+                    )
+                )
+
+            self.backend.commit()
+
     def collect_stats(self, stats):
         super().collect_stats(stats)
 
@@ -45,6 +71,8 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         axnpby = self._get_axnpby_kerns(len(svals) + 1, subdims=self._subdims)
         self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_regidx)
         self._queue % axnpby(1, *svals)
+        if not self.precond=='None':
+            self._queue.enqueue_and_run(self.pintgkernels['precond'])
 
 
 class DualEulerPseudoStepper(BaseDualPseudoStepper):
