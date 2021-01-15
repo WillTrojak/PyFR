@@ -48,6 +48,10 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
 
             self.backend.commit()
 
+    @property
+    def ntotiters(self):
+        return self.npseudosteps
+            
     def collect_stats(self, stats):
         super().collect_stats(stats)
 
