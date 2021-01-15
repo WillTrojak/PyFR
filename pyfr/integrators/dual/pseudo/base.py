@@ -18,6 +18,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
         self.isrestart = initsoln is not None
         self.cfg = cfg
         self._dt = dt
+        self.c = cfg.items_as('constants', float)
 
         sect = 'solver-time-integrator'
 
