@@ -12,10 +12,12 @@ class HIPBackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
+        from pyfr.backends.hip.compiler import HIPRTC
         from pyfr.backends.hip.driver import HIP
 
-        # Create the HIP context
+        # Load and wrap HIP and HIPRTC
         self.hip = HIP()
+        self.hiprtc = HIPRTC()
 
         # Get the desired HIP device
         devid = cfg.get('backend-hip', 'device-id', 'local-rank')
@@ -29,11 +31,19 @@ class HIPBackend(BaseBackend):
         # Set the device
         self.hip.set_device(int(devid))
 
+        # Get its properties
+        self.props = self.hip.device_properties(int(devid))
+
         # Take the required alignment to be 128 bytes
         self.alignb = 128
 
         # Take the SoA size to be 32 elements
         self.soasz = 32
+
+        # Get the MPI runtime type
+        self.mpitype = cfg.get('backend-hip', 'mpi-type', 'standard')
+        if self.mpitype not in {'standard', 'hip-aware'}:
+            raise ValueError('Invalid HIP backend MPI type')
 
         from pyfr.backends.hip import (blasext, gimmik, packing, provider,
                                        rocblas, types)
