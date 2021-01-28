@@ -39,6 +39,7 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
     def _rhs_with_dts(self, t, uin, fout):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
+        self.system._queues[0].enqueue_and_run(self.system._kernels['eles', 'smooth_resid'])
 
         # Coefficients for the physical stepper
         svals = [sc/self._dt for sc in self._stepper_coeffs]

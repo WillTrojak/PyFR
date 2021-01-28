@@ -159,6 +159,23 @@ class BaseShape(object):
         return np.linalg.solve(ub.vdm, A[:, None]*ub.vdm).T
 
     @lazyprop
+    @clean
+    def m12(self):
+
+        sigma = self.cfg.getfloat('residual-smooth', 'sigma')
+        rsigma2 = 1./sigma/sigma
+
+        S = np.zeros((self.nupts, self.nupts))
+        for i, x in enumerate(self.upts):
+            for j, y in enumerate(self.upts):
+                r = np.linalg.norm(x - y)
+                S[i, j] = exp(-rsigma2*r*r)
+
+        rsum = np.sum(S, axis=1)
+
+        return S/rsum[:,None]
+
+    @lazyprop
     def nupts(self):
         n = self.order + 1
         return np.polyval(self.npts_coeffs, n) // self.npts_cdenom

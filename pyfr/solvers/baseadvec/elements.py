@@ -100,3 +100,18 @@ class BaseAdvectionElements(BaseElements):
                 return ComputeMetaKernel([mul, copy])
 
             kernels['filter_soln'] = filter_soln
+
+        # Residual Averaging
+        if self.cfg.getfloat('residual-smooth', 'sigma', '0.0'):
+            def smooth_resid():
+                mul = self._be.kernel(
+                    'mul', self.opmat('M12'), self.scal_upts_outb,
+                    out=self._scal_upts_temp
+                )
+                copy = self._be.kernel(
+                    'copy', self.scal_upts_outb, self._scal_upts_temp
+                )
+
+                return ComputeMetaKernel([mul, copy])
+
+            kernels['smooth_resid'] = smooth_resid
