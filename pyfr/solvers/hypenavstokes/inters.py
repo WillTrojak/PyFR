@@ -13,7 +13,7 @@ class HypeNavierStokesIntInters(BaseAdvectionIntInters):
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self._tpl_c)
+                       c=self.c)
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=tplargs, dims=[self.ninterfpts],
