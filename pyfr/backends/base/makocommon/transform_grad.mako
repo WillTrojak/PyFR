@@ -5,7 +5,7 @@
 
 // Transforms to m=[1,0,0]^T
 // See Moler and Hughes 1999
-<%pyfr:macro name='transform_grad_to' params='n, u, t, offset'>
+<%pyfr:macro name='transform_grad_to' params='n, u, t, o'>
 
 % if ndims == 2:
     t[o + 0] =  n[0]*n[0]*u[o + 0] + n[0]*n[1]*u[o + 1] + n[0]*n[1]*u[o + 2] + n[1]*n[1]*u[o + 3];
@@ -13,7 +13,7 @@
     t[o + 2] = -n[0]*n[1]*u[o + 0] - n[1]*n[1]*u[o + 1] + n[0]*n[0]*u[o + 2] + n[0]*n[1]*u[o + 3];
     t[o + 3] =  n[1]*n[1]*u[o + 0] - n[0]*n[1]*u[o + 1] - n[0]*n[1]*u[o + 2] + n[0]*n[0]*u[o + 3];
 % elif ndims == 3:
-    fpdtype_t r[${ndoims*ndims}];
+    fpdtype_t r[${ndims*ndims}];
     if (fabs(n[0]) < ${t_tol})
     {
         fpdtype_t h = 1/(1 + n[0]);
@@ -74,7 +74,7 @@
     u[o + 2] =  n[0]*n[1]*t[o + 0] - n[1]*n[1]*t[o + 1] + n[0]*n[0]*t[o + 2] - n[0]*n[1]*t[o + 3];
     u[o + 3] =  n[1]*n[1]*t[o + 0] + n[0]*n[1]*t[o + 1] + n[0]*n[1]*t[o + 2] + n[0]*n[0]*t[o + 3];
 % elif ndims == 3:
-    fpdtype_t r[${ndoims*ndims}];
+    fpdtype_t r[${ndims*ndims}];
     if (fabs(n[0]) < ${t_tol})
     {
         fpdtype_t h = 1/(1 + n[0]);
