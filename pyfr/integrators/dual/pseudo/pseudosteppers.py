@@ -40,6 +40,7 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
     def _rhs_with_dts(self, t, uin, fout):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
+        self.system._queues[0].enqueue_and_run(self.system._kernels['eles', 'smooth_resid'])
 
         if self._stage_nregs > 1:
             self._add(0, self._stage_regidx[self._currstg], 1, fout)
