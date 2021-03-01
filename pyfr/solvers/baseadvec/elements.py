@@ -35,8 +35,8 @@ class BaseAdvectionElements(BaseElements):
         solnsrc = self._soln_in_src_exprs
 
         # Source term kernel arguments
-        source = self.cfg.get('solver-source', 'source','null_source')
-        source_sys = self.cfg.get('solver-source', 'source-sys','baseadvec')
+        source = self.cfg.get('solver-source', 'source', 'null_source')
+        source_sys = self.cfg.get('solver-source', 'source-sys', 'baseadvec')
 
         srctplargs = dict(ndims=self.ndims, nvars=self.nvars, 
             srcex=self._src_exprs, source=source, source_sys=source_sys, 
