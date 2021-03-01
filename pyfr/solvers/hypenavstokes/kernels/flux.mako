@@ -2,7 +2,6 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <% rtr = 1./c['tr'] %>
-<% az = c['ac-zeta']*c['ac-alpha'] %>
 
 <%pyfr:macro name='inviscid_flux' params='s, f'>
     // Velocity in the indices 1 to ndims+1 of the conservative variable array
@@ -19,19 +18,14 @@
 % for i, j in pyfr.ndrange(ndims, ndims):
 
     // Momentum fluxes
-% if i == j:
-    f[${i}][${j + 1}] = -${c['nu']}*s[${1 + ndims + i + j*ndims}] 
-                        + ${0.5*(2 - az)}*v[${i}]*v[${j}] + p;
-% else:
-    f[${i}][${j + 1}] = -${c['nu']}*s[${1 + ndims + i + j*ndims}] 
-                        + ${1 - az}*v[${i}]*v[${j}];
-% endif
+    f[${i}][${j + 1}] = -${c['nu']}*s[${1 + ndims + i + j*ndims}]
+                        + v[${i}]*v[${j}] ${' + p' if i == j else ''};
 
     // Gradient fluxes
 % for k in range(ndims):
 % if k == i:
     f[${i}][${1 + ndims + k + j*ndims}] = -${rtr}*v[${j}];
-% else: 
+% else:
     f[${i}][${1 + ndims + k + j*ndims}] = 0;
 % endif
 % endfor
@@ -47,19 +41,16 @@
 
     // Momentum fluxes
     f[1] = v[0]*v[0] + s[0] - ${c['nu']}*s[${1 + ndims}];
-% for j in range(2,ndims):
+% for j in range(2, ndims):
     f[${j + 2}] = v[0]*v[${j}] - ${c['nu']}*s[${1 + ndims + j*ndims}];
 % endfor
 
     // Gradient fluxes
-% for i,j in pyfr.ndrange(ndims,ndims):
+% for i, j in pyfr.ndrange(ndims, ndims):
 % if i == 0:
     f[${1 + ndims + i + j*ndims}] = -${rtr}*v[${j}];
-% else: 
+% else:
     f[${1 + ndims + i + j*ndims}] = 0;
 % endif
 % endfor
-
-
 </%pyfr:macro>
-
