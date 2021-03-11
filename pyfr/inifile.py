@@ -108,6 +108,7 @@ class Inifile:
     def items(self, section, prefix=''):
         return self.items_as(section, lambda v: v, prefix=prefix)
 
+<<<<<<< HEAD
     def items_as(self, section, type, prefix=''):
         iv = {}
 
@@ -117,6 +118,24 @@ class Inifile:
                     iv[k] = type(v)
                 except ValueError:
                     pass
+=======
+    def items_as(self, section, type_to):
+        iv = {}
+
+        for k, v in self._cp.items(section):
+            try:
+                x = self.getliteral(section, k)
+            except ValueError:
+                print(f"ERROR getliteral, unable to evaulate, see: ini [{section}], '{k}'")
+                raise
+
+            try:
+                iv[k] = type_to(x)
+            except TypeError:
+                iv[k] = [type_to(y) for y in x]
+            except ValueError:
+                pass
+>>>>>>> 109062cf (Added single scalar linear advection)
 
         return iv
 
