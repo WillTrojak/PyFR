@@ -30,6 +30,9 @@ class BaseAdvectionElements(BaseElements):
         # What anti-aliasing options we're running with
         fluxaa = 'flux' in self.antialias
 
+        # Is tensor flux kernel fusion bing used
+        flux_fussion = self.cfg.get('solver', 'flux-kernel', 'standard')
+
         # What the source term expressions (if any) are a function of
         plocsrc = self._ploc_in_src_exprs
         solnsrc = self._soln_in_src_exprs
@@ -58,6 +61,11 @@ class BaseAdvectionElements(BaseElements):
         if fluxaa:
             kernels['tdivtpcorf'] = lambda: self._be.kernel(
                 'mul', self.opmat('(M1 - M3*M2)*M10'), self._vect_qpts,
+                out=self.scal_upts_outb
+            )
+        elif flux_fussion == 'fused':
+            kernels['f_tdivtpcorf'] = lambda: self._be.kernel(
+                'mul_tensor', self.opmat('M99'), self.scal_upts_inb,
                 out=self.scal_upts_outb
             )
         else:

@@ -22,7 +22,9 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
+                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv,
+                                  prefer_l1=True
+                                 )
 
         # Determine the grid/block
         block = (128, 1, 1)
@@ -73,9 +75,9 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         )
 
         # Build the reduction kernel
-        rkern = self._build_kernel(
-            'errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2
-        )
+        rkern = self._build_kernel('errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2,
+                                   prefer_l1=True
+                                  )
 
         # Norm type
         reducer = np.max if norm == 'uniform' else np.sum

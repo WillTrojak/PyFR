@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from gimmik import generate_mm
+from gimmik import generate_mm, generate_tfmm
+from math import ceil
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, NotSuitableError
@@ -34,7 +35,8 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         # Build
         fun = self._build_kernel('gimmik_mm', src,
-                                 [np.int32, np.intp]*2 + [np.int32])
+                                 [np.int32, np.intp]*2 + [np.int32],
+                                 prefer_l1=True)
 
         # Determine the grid/block
         block = (128, 1, 1)
@@ -44,5 +46,45 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             def run(self, queue):
                 fun.exec_async(grid, block, queue.cuda_stream_comp,
                                b.ncol, b, b.leaddim, out, out.leaddim)
+
+        return MulKernel()
+
+    def mul_tensor(self, a, b, out):
+        nvars = 13
+        ndims = 3
+        p = 4
+        nele = int(b.ncol/nvars)
+        # Determine the grid/block
+        block = (128, 1, 1)
+        grid = (ceil(nele*p/block[0]), 1, 1)
+        #grid = get_grid_for_block(block, b.ncol)
+
+        print(f'grid = {grid}, block = {block}, nele = {nele}, soasz = {self.backend.soasz}')
+
+        # Generate
+        src = generate_tfmm(D=a.get(), ndims=ndims, nvars=nvars, dtype=a.dtype, block_dim = block[0],
+                            soasz=self.backend.soasz, funcn='gimmik_tfmm', flux='linadv_n',
+                            platform='cuda_tensor_flux10'
+                           )
+
+        #src = generate_tfmm_managed(D=a.get(), ndims=ndims, nvars=nvars, dtype=a.dtype, block_dim = block[0],
+        #                    soasz=self.backend.soasz, flux='hyper',
+        #                    platform='cuda_tensor_flux10'
+        #                   )
+
+        f = open("tmul.cu", "w")
+        f.write(src)
+        f.close()
+
+        # Build
+        fun = self._build_kernel('gimmik_tfmm', src,
+                                 [np.int32, np.intp]*2 + [np.int32],
+                                 prefer_l1=None,
+                                 prefer_shared=None)        
+
+        class MulKernel(ComputeKernel):
+            def run(self, queue):
+                fun.exec_async(grid, block, queue.cuda_stream_comp,
+                               nele, b, b.leaddim, out, out.leaddim)
 
         return MulKernel()

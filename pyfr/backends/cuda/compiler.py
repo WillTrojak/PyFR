@@ -104,12 +104,12 @@ class SourceModule(object):
         flags = [
             f'--gpu-architecture=compute_{cmajor}{cminor}',
             '--ftz=true',
-            '--fmad=true'
+            '--fmad=true',
         ]
 
         # Compile to PTX
         ptx = backend.nvrtc.compile('kernel', src, flags)
-
+        
         # Load it as a module
         self.mod = backend.cuda.load_module(ptx)
 
@@ -119,5 +119,6 @@ class SourceModule(object):
 
         fun = self.mod.get_function(name, argtypes)
         fun.set_cache_pref(prefer_l1=prefer_l1, prefer_shared=prefer_shared)
+
 
         return fun

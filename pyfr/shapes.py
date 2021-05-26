@@ -176,6 +176,30 @@ class BaseShape(object):
         return S/rsum[:,None]
 
     @lazyprop
+    def m99(self):
+        #smats = 0.05
+        nx = 32
+        lx = 2*np.pi
+        smats = pow(lx/(2*nx), 2)
+        #smats = 0.25
+        print(f'smats = {smats}')
+
+        if True:
+            M = self.m1 - np.matmul(self.m3, self.m2)
+
+            np.savetxt('m99.txt', smats*M, fmt='%.8e')
+            np.savetxt('m132.txt', M, fmt='%.8e')
+
+            D = np.zeros((self.order + 1, self.order + 1))
+            for i in range(self.order + 1):
+                for j in range(self.order + 1):
+                    D[i, j] = M[j, i]
+        else:
+            raise ValueError('Attmepting tensor-product contraction on non-TP element')
+
+        return smats*D
+
+    @lazyprop
     def nupts(self):
         n = self.order + 1
         return np.polyval(self.npts_coeffs, n) // self.npts_cdenom

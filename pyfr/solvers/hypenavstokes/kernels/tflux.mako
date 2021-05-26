@@ -13,7 +13,6 @@
 
     // Transform the fluxes
 % for i, j in pyfr.ndrange(ndims, nvars):
-    f[${i}][${j}] = ${' + '.join(f'smats[{i}][{k}]*ftemp[{k}][{j}]'
-                                 for k in range(ndims))};
+    f[${i}][${j}] = ${' + '.join(f'smats[{i}][{k}]*ftemp[{k}][{j}]' for k in range(ndims))};
 % endfor
 </%pyfr:kernel>
