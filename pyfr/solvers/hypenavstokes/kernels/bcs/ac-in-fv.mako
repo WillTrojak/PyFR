@@ -7,4 +7,9 @@
 % for i, v in enumerate('uvw'[:ndims]):
     ur[${i + 1}] = ${c[v]};
 % endfor
+
+% for i in range(1+ndims, nvars):
+	ur[${i}] = ul[${i}];
+% endfor
+
 </%pyfr:macro>

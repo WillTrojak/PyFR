@@ -57,6 +57,15 @@ class HypeNavierStokesBaseBCInters(BaseAdvectionBCInters):
         )
 
 
+class HypeNavierStokesNoSlpWallBCInters(HypeNavierStokesBaseBCInters):
+    type = 'no-slp-wall'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.c['v'] = self._eval_opts('uvw'[:self.ndims], default='0')
+
+
 class HypeNavierStokesInflowBCInters(HypeNavierStokesBaseBCInters):
     type = 'ac-in-fv'
 
