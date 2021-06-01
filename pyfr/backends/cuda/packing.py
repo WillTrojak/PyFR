@@ -19,7 +19,7 @@ class CUDAPackingKernels(CUDAKernelProvider, BasePackingKernels):
 
         # Build
         kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4,
-                                  prefer_l2=True
+                                  prefer_l1=True
                                  )
 
         # Compute the grid and thread-block size
