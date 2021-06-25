@@ -20,7 +20,11 @@
     fpdtype_t pmax = max(pl, pr);
     fpdtype_t rpmax = pmax / pmin;
 
+<<<<<<< HEAD
     if (rpmax <= 2 & pmin <= bpv & bpv <= pmax)
+=======
+    if (rpmax <= 2 && pmin <= bpv && bpv <= pmax)
+>>>>>>> 68799ae52f38578ad93e3d2bc447df682d204c9f
     {
         p0 = bpv;
     }
@@ -99,7 +103,11 @@
 % endfor
         if (p0 <= pl)
         {
+<<<<<<< HEAD
             if (${switch} <= vl[0] - cl)
+=======
+            if (${switch} <= (vl[0] - cl))
+>>>>>>> 68799ae52f38578ad93e3d2bc447df682d204c9f
             {
                 w0[0] = rl;
                 w0[1] = vl[0];
@@ -108,7 +116,11 @@
             else
             {
                 fpdtype_t cml = cl*pow(p0/pl, ${gmrtg});
+<<<<<<< HEAD
                 if (${switch} > us - cml)
+=======
+                if (${switch} > (us - cml))
+>>>>>>> 68799ae52f38578ad93e3d2bc447df682d204c9f
                 {
                     w0[0] = rl*pow(p0/pl, ${1/gamma});
                     w0[1] = us;
@@ -175,7 +187,11 @@
             {
                 fpdtype_t p0p = p0 / pr;
                 fpdtype_t cmr = cr*pow(p0p, ${gmrtg});
+<<<<<<< HEAD
                 if (${switch} <= us + cmr)
+=======
+                if (${switch} <= (us + cmr))
+>>>>>>> 68799ae52f38578ad93e3d2bc447df682d204c9f
                 {
                     w0[0] = rr*pow(p0p, ${1/gamma});
                     w0[1] = us;
