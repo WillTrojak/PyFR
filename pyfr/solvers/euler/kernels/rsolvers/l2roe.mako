@@ -41,11 +41,11 @@
     fpdtype_t cr = sqrt(${c['gamma']}*pr / ur[0]);
     fpdtype_t ml = sqrt(${pyfr.dot('vl[{i}]', 'vl[{i}]', i=ndims)}) / cl;
     fpdtype_t mr = sqrt(${pyfr.dot('vr[{i}]', 'vr[{i}]', i=ndims)}) / cr;
-    fpdtype_t sswl = (vl[0] - cl > 0 && vr[0] - cr < 0) ? 1 :
-                     (vl[0] + cl > 0 && vr[0] + cr < 0) ? 1 : 0;
-    fpdtype_t sswr = (vr[0] - cr > 0 && vl[0] - cl < 0) ? 1 :
-                     (vr[0] + cr > 0 && vl[0] + cl < 0) ? 1 : 0;
-    fpdtype_t z = (sswl == sswr && sswl == 0) ? min(1, max(ml, mr)) : 1;
+    fpdtype_t sswl = (vl[0] - cl > 0 & vr[0] - cr < 0) ? 1 :
+                     (vl[0] + cl > 0 & vr[0] + cr < 0) ? 1 : 0;
+    fpdtype_t sswr = (vr[0] - cr > 0 & vl[0] - cl < 0) ? 1 :
+                     (vr[0] + cr > 0 & vl[0] + cl < 0) ? 1 : 0;
+    fpdtype_t z = (sswl == sswr & sswl == 0) ? min(1, max(ml, mr)) : 1;
 
     // Get L2Roe velocity jumps
 % for i in range(ndims):

@@ -2,6 +2,8 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.euler.kernels.flux'/>
 
+<% eps = 1e-15 %>
+
 // RoeM scheme (ref: JCP 185(2), 342-374)
 <%pyfr:macro name='rsolve' params='ul, ur, n, nf'>
     // Compute the left and right fluxes + velocities and pressures
@@ -30,7 +32,7 @@
 
     // Compute Roe averaged density and enthalpy
     fpdtype_t rrr  = sqrt(ur[0]/ul[0]);
-    fpdtype_t ratl = 1.0/(1.0 + rrr);
+    fpdtype_t ratl = 1/(1 + rrr);
     fpdtype_t ratr = rrr*ratl;
     fpdtype_t ra   = rrr*ul[0];
     fpdtype_t ha   = hl*ratl + hr*ratr;
@@ -42,14 +44,14 @@
     fpdtype_t qq      = ${pyfr.dot('va[{i}]', 'va[{i}]', i=ndims)};
     fpdtype_t contraa = ${pyfr.dot('n[{i}]', 'va[{i}]', i=ndims)};
     fpdtype_t aa      = sqrt(${c['gamma'] - 1}*(ha - 0.5*qq));
-    fpdtype_t rcp_aa  = 1.0/aa;
+    fpdtype_t rcp_aa  = 1/aa;
 
     // Compute |M|, add a small number to avoid a possible singularity of f
-    fpdtype_t abs_ma  = fabs(contraa*rcp_aa) + 1e-15;
+    fpdtype_t abs_ma  = fabs(contraa*rcp_aa) + ${eps};
 
     // Eigen structure
-    fpdtype_t b1 = max(0.0, max(contraa + aa, contrar + aa));
-    fpdtype_t b2 = min(0.0, min(contraa - aa, contral - aa));
+    fpdtype_t b1 = max(0, max(contraa + aa, contrar + aa));
+    fpdtype_t b2 = min(0, min(contraa - aa, contral - aa));
 
     // Normalized wave speed
     fpdtype_t b1b2 = b1*b2;
@@ -61,9 +63,9 @@
     // 1-D shock discontinuity sensing term and Mach number based function f,g
     fpdtype_t SDST = (pl < pr) ? pl / pr : pr / pl;
 
-    fpdtype_t h = 1.0 - SDST;
+    fpdtype_t h = 1 - SDST;
     fpdtype_t f = pow(abs_ma, h);
-    fpdtype_t g = f/(1.0 + abs_ma);
+    fpdtype_t g = f/(1 + abs_ma);
 
     // Difference of U, du
 %for i in range(nvars - 1):

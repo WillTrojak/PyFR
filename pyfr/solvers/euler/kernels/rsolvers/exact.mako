@@ -20,7 +20,7 @@
     fpdtype_t pmax = max(pl, pr);
     fpdtype_t rpmax = pmax / pmin;
 
-    if (rpmax <= 2 && pmin <= bpv && bpv <= pmax)
+    if (rpmax <= 2 & pmin <= bpv & bpv <= pmax)
     {
         p0 = bpv;
     }
@@ -99,7 +99,7 @@
 % endfor
         if (p0 <= pl)
         {
-            if (${switch} <= (vl[0] - cl))
+            if (${switch} <= vl[0] - cl)
             {
                 w0[0] = rl;
                 w0[1] = vl[0];
@@ -108,7 +108,7 @@
             else
             {
                 fpdtype_t cml = cl*pow(p0/pl, ${gmrtg});
-                if (${switch} > (us - cml))
+                if (${switch} > us - cml)
                 {
                     w0[0] = rl*pow(p0/pl, ${1/gamma});
                     w0[1] = us;
@@ -175,7 +175,7 @@
             {
                 fpdtype_t p0p = p0 / pr;
                 fpdtype_t cmr = cr*pow(p0p, ${gmrtg});
-                if (${switch} <= (us + cmr))
+                if (${switch} <= us + cmr)
                 {
                     w0[0] = rr*pow(p0p, ${1/gamma});
                     w0[1] = us;
@@ -198,9 +198,9 @@
 <% pmin = 0.00001 %>
 <%pyfr:macro name='rsolve_t1d' params='ul, ur, nf'>
     // Compute the left and right fluxes + velocities and pressures
-    fpdtype_t vl[${ndims}],vr[${ndims}];
-    fpdtype_t pl,pr,p0,p1;
-    fpdtype_t fsl,fsr,fdl,fdr;
+    fpdtype_t vl[${ndims}], vr[${ndims}];
+    fpdtype_t pl, pr, p0, p1;
+    fpdtype_t fsl, fsr, fdl, fdr;
     fpdtype_t w0[${nvars}];
 
     ${pyfr.expand('inviscid_prim', 'ul', 'pl', 'vl')};
