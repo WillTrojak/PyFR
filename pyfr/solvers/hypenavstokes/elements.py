@@ -35,9 +35,14 @@ class HypeNavierStokesElements(BaseHypeNSFluidElements, BaseAdvectionElements):
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
 
+        slicem = self._slice_mat
+
         # Register our flux kernel
         self._be.pointwise.register('pyfr.solvers.hypenavstokes.kernels.tflux')
         self._be.pointwise.register('pyfr.solvers.hypenavstokes.kernels.tfluxlin')
+
+        # Register Gradient initalisation kernels
+        self._be.pointwise.register('pyfr.solvers.hypenavstokes.kernels.initgrad')
 
         # Template parameters for the flux kernels
         tplargs = {
@@ -74,4 +79,27 @@ class HypeNavierStokesElements(BaseHypeNSFluidElements, BaseAdvectionElements):
                 'tfluxlin', tplargs=tplargs, dims=[npts, regions['linear']],
                 u=u('linear'), f=f('linear'),
                 verts=self.ploc_at('linspts', 'linear'), upts=upts
+            )
+
+        self.kernels['gradu'] = lambda: self._be.kernel(
+            'mul', self.opmat('M4'), self.scal_upts_inb,
+            out=self._vect_upts
+        )
+
+        if 'curved' in regions:
+            self.kernels['initgrad_curved'] = lambda: self._be.kernel(
+                'initgrad', tplargs=tplargs, dims=[npts, regions['curved']],
+                gradu=slicem(self._vect_upts, 'curved'),
+                u=u('curved'),
+                smats=self.smat_at('upts', 'curved'),
+                rcpdjac=self.rcpdjac_at('upts', 'curved')
+            )
+
+        if 'linear' in regions:
+            self.kernels['initgrad_linear'] = lambda: self._be.kernel(
+                'initgrad', tplargs=tplargs, dims=[npts, regions['linear']],
+                gradu=slicem(self._vect_upts, 'linear'),
+                u=u('linear'),
+                smats=self.smat_at('upts', 'linear'),
+                rcpdjac=self.rcpdjac_at('upts', 'linear')
             )

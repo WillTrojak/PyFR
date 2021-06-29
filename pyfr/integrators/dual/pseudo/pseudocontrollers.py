@@ -77,7 +77,11 @@ class DualNonePseudoController(BaseDualPseudoController):
 
         self._currstg = currstg
 
-        # self._add(0, self._idxcurr, 1, self._stepper_regidx[0])
+        # Initialise gradient for HD
+        if self.cfg.get('solver', 'system') == 'hyper-ns':
+            self.system._queues[0].enqueue_and_run(self.system._kernels['eles', 'gradu'])
+            self.system._queues[0].enqueue_and_run(self.system._kernels['eles', 'initgrad_curved'])
+            self.system._queues[0].enqueue_and_run(self.system._kernels['eles', 'initgrad_linear'])
 
         for i in range(self.maxniters):
             # Take the step
@@ -86,8 +90,6 @@ class DualNonePseudoController(BaseDualPseudoController):
             # Convergence monitoring
             if self.convmon(i, self.minniters):
                 break
-
-        # self.finalize_pseudo_advance(currstg)
 
 
 class DualPIPseudoController(BaseDualPseudoController):
@@ -176,6 +178,13 @@ class DualPIPseudoController(BaseDualPseudoController):
         self._stepper_coeffs = stepper_coeffs
 
         self._currstg = currstg
+
+
+        # Initialise gradient for HD
+        if self.cfg.get('solver', 'system') == 'hyper-ns':
+            self.system._queues[0].enqueue_and_run(self.system._kernels['eles', 'gradu'])
+            self.system._queues[0].enqueue_and_run(self.system._kernels['eles', 'initgrad_curved'])
+            self.system._queues[0].enqueue_and_run(self.system._kernels['eles', 'initgrad_linear'])
 
         for i in range(self.maxniters):
             # Take the step
