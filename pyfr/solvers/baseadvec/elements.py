@@ -30,15 +30,25 @@ class BaseAdvectionElements(BaseElements):
         # What anti-aliasing options we're running with
         fluxaa = 'flux' in self.antialias
 
+        # Is tensor flux kernel fusion bing used
+        flux_fussion = self.cfg.get('solver', 'flux-kernel', 'standard')
+
         # What the source term expressions (if any) are a function of
         plocsrc = self._ploc_in_src_exprs
         solnsrc = self._soln_in_src_exprs
 
         # Source term kernel arguments
+        source = self.cfg.get('solver-source', 'source', 'null_source')
+        source_sys = self.cfg.get('solver-source', 'source-sys', 'baseadvec')
+
+        # Source term kernel arguments
         srctplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
-            'srcex': self._src_exprs
+            'srcex': self._src_exprs,
+            'source': source, 
+            'source_sys': source_sys,
+            'c': self._tpl_c
         }
 
         # Interpolation from elemental points
