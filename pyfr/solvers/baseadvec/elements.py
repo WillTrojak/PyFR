@@ -31,7 +31,7 @@ class BaseAdvectionElements(BaseElements):
         fluxaa = 'flux' in self.antialias
 
         # Is tensor flux kernel fusion bing used
-        flux_fussion = self.cfg.get('solver', 'flux-kernel', 'standard')
+        flux_fusion = self.cfg.get('solver', 'flux-kernel', 'standard')
 
         # What the source term expressions (if any) are a function of
         plocsrc = self._ploc_in_src_exprs
@@ -67,6 +67,11 @@ class BaseAdvectionElements(BaseElements):
         if fluxaa:
             kernels['tdivtpcorf'] = lambda: self._be.kernel(
                 'mul', self.opmat('(M1 - M3*M2)*M9'), self._vect_qpts,
+                out=self.scal_upts_outb
+            )
+        elif flux_fusion == 'fused':
+            kernels['f_tdivtpcorf'] = lambda: self._be.kernel(
+                'mul_tensor', self.opmat('M99'), self.scal_upts_inb,
                 out=self.scal_upts_outb
             )
         else:
