@@ -69,6 +69,11 @@ class BaseAdvectionElements(BaseElements):
                 'mul', self.opmat('(M1 - M3*M2)*M9'), self._vect_qpts,
                 out=self.scal_upts_outb
             )
+        elif flux_fusion == 'fused-source':
+            kernels['f_tdivtpcorf_s'] = lambda: self._be.kernel(
+                'mul_tensor_source', self.opmat('M99'), self.scal_upts_inb,
+                out=self.scal_upts_outb
+            )
         elif flux_fusion == 'fused':
             kernels['f_tdivtpcorf'] = lambda: self._be.kernel(
                 'mul_tensor', self.opmat('M99'), self.scal_upts_inb,
@@ -81,16 +86,18 @@ class BaseAdvectionElements(BaseElements):
             )
 
         # Second flux correction kernel
+        tdivtconf_alpha = -((32./3.14159265359)**3) if flux_fusion == 'fused-source' else 1.
+
         kernels['tdivtconf'] = lambda: self._be.kernel(
             'mul', self.opmat('M3'), self._scal_fpts, out=self.scal_upts_outb,
-            beta=1.0
+            beta=1., alpha=tdivtconf_alpha
         )
 
         # Transformed to physical divergence kernel + source term
         plocupts = self.ploc_at('upts') if plocsrc else None
         solnupts = self._scal_upts_cpy if solnsrc else None
 
-        if solnsrc:
+        if solnsrc and flux_fusion != 'fused-source':
             kernels['copy_soln'] = lambda: self._be.kernel(
                 'copy', self._scal_upts_cpy, self.scal_upts_inb
             )

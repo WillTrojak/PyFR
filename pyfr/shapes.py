@@ -156,10 +156,10 @@ class BaseShape(object):
 
     @lazyprop
     def m99(self):
-        nx = 16
+        nx = 32
         lx = 2*np.pi
         smats = pow(lx/(2*nx), 2)
-        print(f'smats = {smats}')
+        m_rcpdjac = ((nx/np.pi)**3)
 
         if True:
             M = self.m1 - np.matmul(self.m3, self.m2)
@@ -170,11 +170,21 @@ class BaseShape(object):
             D = np.zeros((self.order + 1, self.order + 1))
             for i in range(self.order + 1):
                 for j in range(self.order + 1):
-                    D[i, j] = M[j, i]
+                    D[j, i] = M[j, i]
         else:
             raise ValueError('Attmepting tensor-product contraction on non-TP element')
 
-        return smats*D
+        fusion_type = self.cfg.get('solver', 'flux-kernel', 'standard')
+        if fusion_type == 'fused':
+            C = smats
+        elif fusion_type == 'fused-source':
+            C = -smats*m_rcpdjac
+        else:
+            C = 1.
+
+        print(f'{nx=}, {smats=}, {m_rcpdjac=}, {C=}')
+
+        return C*D
 
     @lazyprop
     def nupts(self):

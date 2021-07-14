@@ -69,9 +69,14 @@ class ACHDNavierStokesElements(BaseACHDFluidElements, BaseAdvectionElements):
             )
 
         if 'linear' in regions:
-            upts = getattr(self, pts)
             self.kernels['tdisf_linear'] = lambda: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[npts, regions['linear']],
+                'tflux', tplargs=tplargs, dims=[npts, regions['linear']],
                 u=u('linear'), f=f('linear'),
-                verts=self.ploc_at('linspts', 'linear'), upts=upts
+                smats=self.smat_at(pts, 'linear')
             )
+            # upts = getattr(self, pts)
+            # self.kernels['tdisf_linear'] = lambda: self._be.kernel(
+            #     'tfluxlin', tplargs=tplargs, dims=[npts, regions['linear']],
+            #     u=u('linear'), f=f('linear'),
+            #     verts=self.ploc_at('linspts', 'linear'), upts=upts
+            # )

@@ -24,12 +24,16 @@ class BaseAdvectionSystem(BaseSystem):
             q1.enqueue(kernels['eles', 'copy_soln'])
         if ('eles', 'qptsu') in kernels:
             q1.enqueue(kernels['eles', 'qptsu'])
-        if ('eles', 'f_tdivtpcorf') in kernels:
+        
+        if ('eles', 'f_tdivtpcorf_s') in kernels:
+            q1.enqueue(kernels['eles', 'f_tdivtpcorf_s'])
+        elif ('eles', 'f_tdivtpcorf') in kernels:
             q1.enqueue(kernels['eles', 'f_tdivtpcorf'])
         else:
             q1.enqueue(kernels['eles', 'tdisf_curved'])
             q1.enqueue(kernels['eles', 'tdisf_linear'])
             q1.enqueue(kernels['eles', 'tdivtpcorf'])
+        
         q1.enqueue(kernels['iint', 'comm_flux'])
         q1.enqueue(kernels['bcint', 'comm_flux'], t=t)
 
@@ -41,5 +45,6 @@ class BaseAdvectionSystem(BaseSystem):
 
         q1.enqueue(kernels['mpiint', 'comm_flux'])
         q1.enqueue(kernels['eles', 'tdivtconf'])
-        q1.enqueue(kernels['eles', 'negdivconf'], t=t)
+        if ('eles', 'f_tdivtpcorf_s') not in kernels:
+            q1.enqueue(kernels['eles', 'negdivconf'], t=t)
         runall([q1])

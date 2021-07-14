@@ -11,9 +11,18 @@
     fpdtype_t ftemp[${ndims}][${nvars}];
     ${pyfr.expand('inviscid_flux', 'u', 'ftemp')};
 
+    fpdtype_t smats_c[${ndims}][${ndims}];
+% for i, j in pyfr.ndrange(ndims, ndims):
+% if i == j:
+    smats_c[${i}][${j}] = ${(3.1415926/32.)**2};
+% else:
+    smats_c[${i}][${j}] = 0.;
+% endif
+% endfor
+
     // Transform the fluxes
 % for i, j in pyfr.ndrange(ndims, nvars):
-    f[${i}][${j}] = ${' + '.join(f'smats[{i}][{k}]*ftemp[{k}][{j}]'
+    f[${i}][${j}] = ${' + '.join(f'smats_c[{i}][{k}]*ftemp[{k}][{j}]'
                                  for k in range(ndims))};
 % endfor
 </%pyfr:kernel>

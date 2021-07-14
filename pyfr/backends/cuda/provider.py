@@ -14,9 +14,9 @@ def get_grid_for_block(block, nrow, ncol=1):
 
 class CUDAKernelProvider(BaseKernelProvider):
     @memoize
-    def _build_kernel(self, name, src, argtypes):
+    def _build_kernel(self, name, src, argtypes, ptx=None):
         # Compile the source code and retrieve the function
-        mod = SourceModule(self.backend, src)
+        mod = SourceModule(self.backend, src, ptx)
         return mod.get_function(name, argtypes)
 
 
@@ -35,7 +35,7 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
 
         # Use this to compute the grid size
         grid = get_grid_for_block(block, dims[-1])
-
+        
         class PointwiseKernel(ComputeKernel):
             if any(isinstance(arg, str) for arg in arglst):
                 def run(self, queue, **kwargs):

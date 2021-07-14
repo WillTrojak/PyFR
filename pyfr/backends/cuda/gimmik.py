@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 
+from ctypes import create_string_buffer
 from gimmik import generate_mm, generate_tfmm, generate_tfmm_lines, generate_tfmm_managed
 import numpy as np
+from math import ceil, floor
+import subprocess
 
 from pyfr.backends.base import ComputeKernel, NotSuitableError
 from pyfr.backends.cuda.provider import (CUDAKernelProvider,
@@ -51,10 +54,6 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         return MulKernel()
 
     def mul_tensor(self, a, b, out):
-        # Ensure the matrices are compatible
-        if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
-            raise ValueError('Incompatible matrices for out = a*b')
-
         # Check that A is constant
         if 'const' not in a.tags:
             raise NotSuitableError('GiMMiK requires a constant a matrix')
@@ -78,8 +77,8 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             shr_pref = True
             src, shr_size = generate_tfmm_lines(arr, ndims=3, nvars=13,
                                 dtype=a.dtype, soasz=32, shr_max=96000,
-                                platform='cuda_tensor_lines_glb_12')
-            block = (400, 1, 1)
+                                platform='cuda_tensor_lines_24')
+            block = (200, 1, 1)
             grid = (ceil(nele*p*p/block[0]), 1, 1)
         elif p == 4:
             l1_pref  = False
@@ -93,7 +92,10 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                                 shared_max=67584, ufc_size=4*(2**15), 
                                 block_dim=128)
             block = (128, 1, 1)
-            grid = (ceil(nele*p/block[0]), 1, 1)
+            warp_size = 32
+            elem_warp = int(warp_size/p)
+            elem_block = int(block[0]/warp_size)*elem_warp
+            grid = (ceil(nele/elem_block), 1, 1)
         elif p <= 3:
             l1_pref  = False
             shr_pref = True
@@ -102,7 +104,111 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                                 block_dim=128, soasz=32, flux='hyper',
                                 platform='cuda_tensor_flux12')
             block = (128, 1, 1)
-            grid = (ceil(nele*p/block[0]), 1, 1)
+            warp_size = 32
+            elem_warp = int(warp_size/p)
+            elem_block = int(block[0]/warp_size)*elem_warp
+            grid = (ceil(nele/elem_block), 1, 1)        
+
+        src = f'extern "C"\n{{\n{src}\n}}'
+
+        print(f'{nele=}, {shr_size=}, {p=}, {block=}, {grid=}')
+
+        base_name =  f'tmul_p{p-1}'
+        src_name = base_name + '.cu'
+        ptx_name = base_name + '.ptx'
+        f = open(src_name, 'w')
+        f.write(src)
+        f.close()
+
+        # sm = 70
+        # comp = 'nvcc'
+        #opt = (f'--gpu-code=compute_{sm} --gpu-architecture=compute_{sm}'
+        #        ' -O3 --std=c++17 --use_fast_math --fassociative-math')
+        #comp_cmd = f'{comp} {src_name} {opt} -ptx -o {ptx_name}'
+        # opt = (f"-arch='sm_{sm}' -O3 --std=c++17 --use_fast_math --fassociative-math")
+        # comp_cmd = f'{comp} {src_name} {opt} -cubin -o {ptx_name}'
+        # print(comp_cmd)
+        # nvcc_out = (subprocess.check_output(comp_cmd, stderr=subprocess.STDOUT, shell=True)).decode("utf-8")
+
+        # f = open(ptx_name, 'rb')
+        # ptx = f.read()
+        # f.close()
+
+        # Build
+        fun = self._build_kernel('gimmik_tfmm', src,
+                                 [np.int32, np.intp]*2 + [np.int32])#, ptx=ptx)
+        fun.set_cache_pref(prefer_l1=l1_pref, prefer_shared=shr_pref)
+        fun.set_shared_size(dynm_shared=shr_size)
+
+        class MulKernel(ComputeKernel):
+            def run(self, queue):
+                fun.exec_async(grid, block, queue.stream_comp, nele, b,
+                               b.leaddim, out, out.leaddim,
+                               dynm_shared=shr_size)
+
+        return MulKernel()
+
+    def mul_tensor_source(self, a, b, out):
+        # Check that A is constant
+        if 'const' not in a.tags:
+            raise NotSuitableError('GiMMiK requires a constant a matrix')
+
+        # Fetch the matrix and tally up the number of non-zeros
+        arr = a.get()
+        nnz, nuq = np.count_nonzero(arr), len(np.unique(np.abs(arr)))
+
+        # Check that A is suitable
+        if nuq > 28 and nnz / arr.size > 0.15:
+            raise NotSuitableError('Matrix is inappropriate for GiMMiK')
+
+        (p, k) = np.shape(arr)
+        nele = int(b.ncol/13)
+
+        shr_size = 0
+
+        # Generate
+        if p == 5:
+            l1_pref  = False
+            shr_pref = True
+            src, shr_size = generate_tfmm_lines(arr, ndims=3, nvars=13,
+                                dtype=a.dtype, soasz=32, shr_max=96000,
+                                platform='cuda_S_tensor_lines_24')
+            block = (200, 1, 1)
+            grid = (ceil(nele*p*p/block[0]), 1, 1)
+        elif p == 4:
+            l1_pref  = False
+            shr_pref = True
+            opargs = {'ld_opt': True, 'st_opt': False, 'intl_opt': False,
+                      'pipe_opt': False, 'max_coag': 0, 'compute_size': 0,
+                      'shr_op_order': 'grs', 'shr_bdc': True}
+            src, shr_size = generate_tfmm_managed(arr, ndims=3, nvars=13, 
+                                soasz=32, dtype=a.dtype, opargs=opargs,
+                                platform='cuda_tfmm_managed', flux='hyperns',
+                                shared_max=67584, ufc_size=4*(2**15), 
+                                block_dim=128, source_term=True)
+            block = (128, 1, 1)
+            warp_size = 32
+            elem_warp = int(warp_size/p)
+            elem_block = int(block[0]/warp_size)*elem_warp
+            grid = (ceil(nele/elem_block), 1, 1)
+        elif p <= 3:
+            l1_pref  = False
+            shr_pref = True
+
+            src, shr_size = generate_tfmm(arr, ndims=3, nvars=13, dtype=a.dtype,
+                                block_dim=128, soasz=32, flux='hyper',
+                                platform='cuda_S_tensor_flux12')
+            block = (128, 1, 1)
+            warp_size = 32
+            elem_warp = int(warp_size/p)
+            elem_block = int(block[0]/warp_size)*elem_warp
+            grid = (ceil(nele/elem_block), 1, 1)
+
+        print(f'{nele=}, {shr_size=}, {p=}, {block=}, {grid=}')
+
+        f = open(f'tmul_S_p{p-1}.cu', 'w')
+        f.write(src)
+        f.close()
 
         # Build
         fun = self._build_kernel('gimmik_tfmm', src,
@@ -112,7 +218,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                fun.exec_async(grid, block, queue.stream_comp, b.ncol, b,
+                fun.exec_async(grid, block, queue.stream_comp, nele, b,
                                b.leaddim, out, out.leaddim,
                                dynm_shared=shr_size)
 
