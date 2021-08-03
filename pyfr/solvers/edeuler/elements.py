@@ -9,11 +9,9 @@ class BaseEDFluidElements(object):
     privarmap = {2: ['p', 'u', 'v'],
                  3: ['p', 'u', 'v', 'w']}
 
-    convarmap = {2: ['p', 'u', 'v'],
-                 3: ['p', 'u', 'v', 'w']}
+    convarmap = privarmap
 
-    dualcoeffs = {2: ['p', 'u', 'v'],
-                  3: ['p', 'u', 'v', 'w']}
+    dualcoeffs = convarmap
 
     visvarmap = {
         2: [('velocity', ['u', 'v']),

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.solvers.edeuler.elements import BaseEDFluidElements
 from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionElements
+from pyfr.solvers.edeuler.elements import BaseEDFluidElements
 
 
 class EDNavierStokesElements(BaseEDFluidElements,
