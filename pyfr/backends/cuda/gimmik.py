@@ -30,7 +30,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             raise NotSuitableError('Matrix is inappropriate for GiMMiK')
 
         order = self.backend.cfg.get('solver', 'order', 0)
-        split = order + 1
+        split = int(order) + 1
 
         # Determine the grid/block
         block_s = (32, 1, 1)
