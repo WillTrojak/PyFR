@@ -10,7 +10,8 @@ from pyfr.plugins.base import BasePlugin, init_csv
 
 class FluidForcePlugin(BasePlugin):
     name = 'fluidforce'
-    systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
+    systems = ['ac-euler', 'ac-navier-stokes', 'ed-euler', 'ed-navier-stokes',
+               'euler', 'navier-stokes']
     formulations = ['dual', 'std']
 
     def __init__(self, intg, cfgsect, suffix):
@@ -25,7 +26,8 @@ class FluidForcePlugin(BasePlugin):
         self._viscous = 'navier-stokes' in intg.system.name
 
         # Check if the system is incompressible
-        self._ac = intg.system.name.startswith('ac')
+        self._ac  = intg.system.name.startswith('ac')
+        self._ac |= intg.system.name.startswith('ed')
 
         # Viscous correction
         self._viscorr = self.cfg.get('solver', 'viscosity-correction', 'none')
