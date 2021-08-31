@@ -8,17 +8,13 @@
     ${pyfr.expand('inviscid_flux', 'ul', 'fl')};
     ${pyfr.expand('inviscid_flux', 'ur', 'fr')};
 
-    fpdtype_t vl[${ndims}] = ${pyfr.array('ul[{i}]', i=(1, ndims + 1))};
-    fpdtype_t vr[${ndims}] = ${pyfr.array('ur[{i}]', i=(1, ndims + 1))};
-
     // Normal of the average interface velocity
-    fpdtype_t nv = 0.5*${pyfr.dot('n[{i}]', 'vl[{i}] + vr[{i}]', i=ndims)};
-
-    // Mean Pressure
-    fpdtype_t pavg = 0.5*(ul[0] + ur[0]);
+    fpdtype_t unl = ${pyfr.dot('n[{i}]', 'ul[1+{i}]', i=ndims)};
+    fpdtype_t unr = ${pyfr.dot('n[{i}]', 'ur[1+{i}]', i=ndims)};
 
     // Estimate the wave speed
-    fpdtype_t a = 1.5*fabs(nv) + sqrt(0.5*nv*nv + ${c['ed-zeta']} + pavg);
+    fpdtype_t a = max(1.5*fabs(unl) + sqrt(0.25*unl*unl + ${c['ed-zeta']} + ul[0]), 
+                      1.5*fabs(unr) + sqrt(0.25*unr*unr + ${c['ed-zeta']} + ur[0])); 
 
     // Output
 % for i in range(nvars):
