@@ -2,6 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.edeuler.kernels.flux'/>
 
+<% t_tol = 0.99 %>
 <%pyfr:macro name='transform_to' params='n, u, t, offset'>
 % if ndims == 2:
     t[offset + 0] =  n[0]*u[offset + 0] + n[1]*u[offset + 1];
