@@ -45,7 +45,10 @@ class BasePartitioner(object):
                 if n > 0:
                     offs[en][i] = off = sum(s.shape[1] for s in spts[en])
                     spts[en].append(mesh[f'spt_{en}_p{i}'])
-                    linf[en].append(mesh[f'spt_{en}_p{i}', 'linear'])
+                    try:
+                        linf[en].append(mesh[f'spt_{en}_p{i}', 'linear'])
+                    except KeyError:
+                        pass
                     rnum[en].update(((i, j), (0, off + j)) for j in range(n))
 
         def offset_con(con, pr):
@@ -84,7 +87,8 @@ class BasePartitioner(object):
 
         for en in spts:
             newmesh[f'spt_{en}_p0'] = np.hstack(spts[en])
-            newmesh[f'spt_{en}_p0', 'linear'] = np.hstack(linf[en])
+            if linf[en]:
+                newmesh[f'spt_{en}_p0', 'linear'] = np.hstack(linf[en])
 
         for k, v in bccon.items():
             newmesh[f'bcon_{k}_p0'] = np.hstack(v).astype(dtype)
@@ -168,10 +172,14 @@ class BasePartitioner(object):
                 if (etype, eidx) in bndeti:
                     continue
 
-                if mesh[f'spt_{etype}_p0', 'linear'][eidx]:
-                    linsvetimap[spart].append((etype, eidx))
-                else:
+                try:
+                    if mesh[f'spt_{etype}_p0', 'linear'][eidx]:
+                        linsvetimap[spart].append((etype, eidx))
+                    else:
+                        cursvetimap[spart].append((etype, eidx))
+                except KeyError:
                     cursvetimap[spart].append((etype, eidx))
+
 
             # Append to the global list
             nvetimap.extend(it.chain(*cursvetimap, *linsvetimap))
@@ -187,14 +195,18 @@ class BasePartitioner(object):
             f = f'spt_{etype}_p0'
 
             spt_px[etype, part].append(mesh[f][:, eidxg, :])
-            lin_px[etype, part].append(mesh[f, 'linear'][eidxg])
+            try:
+                lin_px[etype, part].append(mesh[f, 'linear'][eidxg])
+            except KeyError:
+                pass
 
         newmesh = {}
         for etype, pn in spt_px:
             f = f'spt_{etype}_p{pn}'
 
             newmesh[f] = np.array(spt_px[etype, pn]).swapaxes(0, 1)
-            newmesh[f, 'linear'] = np.array(lin_px[etype, pn])
+            if lin_px[etype, pn]:
+                newmesh[f, 'linear'] = np.array(lin_px[etype, pn])
 
         return newmesh
 
