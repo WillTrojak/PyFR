@@ -19,6 +19,9 @@ class ACNavierStokesElements(BaseACFluidElements,
         self._be.pointwise.register(f'{kprefix}.tfluxlin')
 
         # Template parameters for the flux kernels
+        alpha = self.cfg.get('constants', 'ac-alpha', 0.)
+        if alpha == 0.:
+            self.cfg.set('constants', 'ac-alpha', 0.)
         tplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
