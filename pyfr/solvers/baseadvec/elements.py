@@ -30,15 +30,25 @@ class BaseAdvectionElements(BaseElements):
         # What anti-aliasing options we're running with
         fluxaa = 'flux' in self.antialias
 
+        # Is tensor flux kernel fusion bing used
+        flux_fusion = self.cfg.get('solver', 'flux-kernel', 'standard')
+
         # What the source term expressions (if any) are a function of
         plocsrc = self._ploc_in_src_exprs
         solnsrc = self._soln_in_src_exprs
 
         # Source term kernel arguments
+        source = self.cfg.get('solver-source', 'source', 'null_source')
+        source_sys = self.cfg.get('solver-source', 'source-sys', 'baseadvec')
+
+        # Source term kernel arguments
         srctplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
-            'srcex': self._src_exprs
+            'srcex': self._src_exprs,
+            'source': source, 
+            'source_sys': source_sys,
+            'c': self._tpl_c
         }
 
         # Interpolation from elemental points
@@ -59,6 +69,16 @@ class BaseAdvectionElements(BaseElements):
                 'mul', self.opmat('(M1 - M3*M2)*M9'), self._vect_qpts,
                 out=self.scal_upts_outb
             )
+        elif flux_fusion == 'fused-source':
+            kernels['f_tdivtpcorf_s'] = lambda: self._be.kernel(
+                'mul_tensor_source', self.opmat('M99'), self.scal_upts_inb,
+                out=self.scal_upts_outb
+            )
+        elif flux_fusion == 'fused':
+            kernels['f_tdivtpcorf'] = lambda: self._be.kernel(
+                'mul_tensor', self.opmat('M99'), self.scal_upts_inb,
+                out=self.scal_upts_outb
+            )
         else:
             kernels['tdivtpcorf'] = lambda: self._be.kernel(
                 'mul', self.opmat('M1 - M3*M2'), self._vect_upts,
@@ -66,16 +86,18 @@ class BaseAdvectionElements(BaseElements):
             )
 
         # Second flux correction kernel
+        tdivtconf_alpha = -((32./3.14159265359)**3) if flux_fusion == 'fused-source' else 1.
+
         kernels['tdivtconf'] = lambda: self._be.kernel(
             'mul', self.opmat('M3'), self._scal_fpts, out=self.scal_upts_outb,
-            beta=1.0
+            beta=1., alpha=tdivtconf_alpha
         )
 
         # Transformed to physical divergence kernel + source term
         plocupts = self.ploc_at('upts') if plocsrc else None
         solnupts = self._scal_upts_cpy if solnsrc else None
 
-        if solnsrc:
+        if solnsrc and flux_fusion != 'fused-source':
             kernels['copy_soln'] = lambda: self._be.kernel(
                 'copy', self._scal_upts_cpy, self.scal_upts_inb
             )

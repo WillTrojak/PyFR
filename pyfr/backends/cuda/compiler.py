@@ -54,6 +54,7 @@ class NVRTC(object):
     def compile(self, name, src, flags=[]):
         # Create the program
         prog = c_void_p()
+
         self.lib.nvrtcCreateProgram(prog, src.encode(), f'{name}.cu'.encode(),
                                     0, None, None)
 
@@ -94,24 +95,25 @@ class NVRTC(object):
 
 
 class SourceModule(object):
-    def __init__(self, backend, src):
-        # Prepare the source code
-        src = f'extern "C"\n{{\n{src}\n}}'
+    def __init__(self, backend, src, ptx=None):
+        if ptx is None:
+            # Prepare the source code
+            src = f'extern "C"\n{{\n{src}\n}}'
 
-        # Obtain the compute capability for our device
-        cmajor, cminor = backend.cuda.compute_capability()
+            # Obtain the compute capability for our device
+            cmajor, cminor = backend.cuda.compute_capability()
 
-        # Compiler flags
-        flags = [
-            f'--gpu-architecture=compute_{cmajor}{cminor}',
-            '--ftz=true',
-            '--fmad=true'
-        ]
+            # Compiler flags
+            flags = [
+                f'--gpu-architecture=compute_{cmajor}{cminor}',
+                '--ftz=true',
+                '--fmad=true'
+            ]
 
-        flags += shlex.split(backend.cfg.get('backend-cuda', 'cflags', ''))
-        
-        # Compile to PTX
-        ptx = backend.nvrtc.compile('kernel', src, flags)
+            flags += shlex.split(backend.cfg.get('backend-cuda', 'cflags', ''))
+            
+            # Compile to PTX
+            ptx = backend.nvrtc.compile('kernel', src, flags)
 
         # Load it as a module
         self.mod = backend.cuda.load_module(ptx)

@@ -1,22 +1,43 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.solvers.aceuler.elements import BaseACFluidElements
-from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionElements
+from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
-class ACNavierStokesElements(BaseACFluidElements,
-                             BaseAdvectionDiffusionElements):
+class BaseACHDFluidElements(object):
+    formulations = ['dual']
+
+    privarmap = {2: ['p', 'u', 'v', 'qx', 'qy', 'rx', 'ry'],
+                 3: ['p', 'u', 'v', 'w', 'qx', 'qy', 'qz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz']}
+
+    convarmap = {2: ['p', 'u', 'v', 'qx', 'qy', 'rx', 'ry'],
+                 3: ['p', 'u', 'v', 'w', 'qx', 'qy', 'qz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz']}
+
+    dualcoeffs = {2: ['u', 'v'],
+                  3: ['u', 'v', 'w']}
+
+    visvarmap = {
+        2: [('velocity', ['u', 'v']),
+            ('pressure', ['p'])],
+        3: [('velocity', ['u', 'v', 'w']),
+            ('pressure', ['p'])]
+    }
+
     @staticmethod
-    def grad_con_to_pri(cons, grad_cons, cfg):
-        return grad_cons
+    def pri_to_con(pris, cfg):
+        return pris
 
+    @staticmethod
+    def con_to_pri(convs, cfg):
+        return convs
+
+
+class ACHDNavierStokesElements(BaseACHDFluidElements, BaseAdvectionElements):
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
 
         # Register our flux kernels
-        kprefix = 'pyfr.solvers.acnavstokes.kernels'
-        self._be.pointwise.register(f'{kprefix}.tflux')
-        self._be.pointwise.register(f'{kprefix}.tfluxlin')
+        self._be.pointwise.register('pyfr.solvers.achdnavstokes.kernels.tflux')
+        self._be.pointwise.register('pyfr.solvers.achdnavstokes.kernels.tfluxlin')
 
         # Template parameters for the flux kernels
         tplargs = {

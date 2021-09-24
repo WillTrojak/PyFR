@@ -155,6 +155,38 @@ class BaseShape(object):
         return np.linalg.solve(ub.vdm, A[:, None]*ub.vdm).T
 
     @lazyprop
+    def m99(self):
+        nx = 32
+        lx = 2*np.pi
+        smats = pow(lx/(2*nx), 2)
+        m_rcpdjac = ((nx/np.pi)**3)
+
+        if True:
+            M = self.m1 - np.matmul(self.m3, self.m2)
+
+            np.savetxt(f'm99_{self.order}.txt', smats*M, fmt='%.8e')
+            np.savetxt(f'm132_{self.order}.txt', M, fmt='%.8e')
+
+            D = np.zeros((self.order + 1, self.order + 1))
+            for i in range(self.order + 1):
+                for j in range(self.order + 1):
+                    D[j, i] = M[j, i]
+        else:
+            raise ValueError('Attmepting tensor-product contraction on non-TP element')
+
+        fusion_type = self.cfg.get('solver', 'flux-kernel', 'standard')
+        if fusion_type == 'fused':
+            C = smats
+        elif fusion_type == 'fused-source':
+            C = -smats*m_rcpdjac
+        else:
+            C = 1.
+
+        print(f'{nx=}, {smats=}, {m_rcpdjac=}, {C=}')
+
+        return C*D
+
+    @lazyprop
     def nupts(self):
         n = self.order + 1
         return int(np.polyval(self.npts_coeffs, n)) // self.npts_cdenom

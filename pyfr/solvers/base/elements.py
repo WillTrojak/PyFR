@@ -49,6 +49,9 @@ class BaseElements(object):
         self.nfacefpts = basis.nfacefpts
         self.nmpts = basis.nmpts
 
+        # Kernel constants
+        self._tpl_c = cfg.items_as('constants', float)
+
     def pri_to_con(pris, cfg):
         pass
 
@@ -157,11 +160,17 @@ class BaseElements(object):
 
     @lazyprop
     def _ploc_in_src_exprs(self):
-        return any(re.search(r'\bploc\b', ex) for ex in self._src_exprs)
+        ploc_src_exprs = any(re.search(r'\bploc\b', ex) for ex in self._src_exprs)
+        ploc_src_macro = self.cfg.hasopt('solver-source', 'source')
+
+        return ploc_src_exprs or ploc_src_macro
 
     @lazyprop
     def _soln_in_src_exprs(self):
-        return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
+        soln_src_exprs = any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
+        soln_src_macro = self.cfg.hasopt('solver-source', 'source')
+
+        return soln_src_exprs or soln_src_macro
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
         self._be = backend
