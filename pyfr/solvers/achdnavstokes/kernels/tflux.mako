@@ -14,7 +14,7 @@
     fpdtype_t smats_c[${ndims}][${ndims}];
 % for i, j in pyfr.ndrange(ndims, ndims):
 % if i == j:
-    smats_c[${i}][${j}] = ${(3.1415926/26.)**2};
+    smats_c[${i}][${j}] = ${(3.1415926/32.)**2};
 % else:
     smats_c[${i}][${j}] = 0.;
 % endif

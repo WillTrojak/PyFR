@@ -11,7 +11,7 @@
               u='in fpdtype_t[${str(nvars)}]'
               rcpdjac='in fpdtype_t'>
 
-    fpdtype_t rcpdjac_c = ${(26./3.14159265359)**3};
+    fpdtype_t rcpdjac_c = ${(32./3.14159265359)**3};
 
 % for i, ex in enumerate(srcex):
     tdivtconf[${i}] = -rcpdjac_c*tdivtconf[${i}] + ${ex};

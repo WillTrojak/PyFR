@@ -156,7 +156,7 @@ class BaseShape(object):
 
     @lazyprop
     def m99(self):
-        nx = 26
+        nx = 32
         lx = 2*np.pi
         smats = pow(lx/(2*nx), 2)
         m_rcpdjac = ((nx/np.pi)**3)
