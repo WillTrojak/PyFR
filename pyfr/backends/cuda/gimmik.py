@@ -128,17 +128,28 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             if p == 3:
                 l1_pref  = False
                 shr_pref = True
-                shr_max = 60416
-                opargs = {'ld_opt': True, 'st_opt': False, 'intl_opt': False,
-                        'pipe_opt': False, 'max_coag': 0, 'compute_size': 0,
-                        'shr_op_order': 'grs', 'shr_bdc': True}
-                src, shr_size = generate_tfmm_managed(arr, ndims=3, nvars=13, 
-                                    soasz=32, dtype=a.dtype, opargs=opargs,
-                                    platform='cuda_tfmm_managed', flux='hyperns',
-                                    shared_max=shr_max, ufc_size=4*(2**15), 
-                                    block_dim=128)
+
+                src, shr_size = generate_tfmm(arr, ndims=3, nvars=13, dtype=a.dtype,
+                                    block_dim=128, soasz=32, flux='hyper',
+                                    platform='cuda_tensor_flux12')
                 block = (128, 1, 1)
-                grid = (ceil(nele*p/block[0]), 1, 1)
+                warp_size = 32
+                elem_warp = int(warp_size/p)
+                elem_block = int(block[0]/warp_size)*elem_warp
+                grid = (ceil(nele/elem_block), 1, 1)
+                # l1_pref  = False
+                # shr_pref = True
+                # shr_max = 60416
+                # opargs = {'ld_opt': True, 'st_opt': False, 'intl_opt': False,
+                #         'pipe_opt': False, 'max_coag': 0, 'compute_size': 0,
+                #         'shr_op_order': 'grs', 'shr_bdc': True}
+                # src, shr_size = generate_tfmm_managed(arr, ndims=3, nvars=13, 
+                #                     soasz=32, dtype=a.dtype, opargs=opargs,
+                #                     platform='cuda_tfmm_managed', flux='hyperns',
+                #                     shared_max=shr_max, ufc_size=4*(2**15), 
+                #                     block_dim=128)
+                # block = (128, 1, 1)
+                # grid = (ceil(nele*p/block[0]), 1, 1)
             if p == 2:
                 l1_pref  = False
                 shr_pref = True
