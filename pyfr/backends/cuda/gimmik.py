@@ -279,7 +279,10 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                                     shared_max=shr_max, ufc_size=4*(2**15), 
                                     block_dim=128, source_term=True)
                 block = (128, 1, 1)
-                grid = (ceil(nele*p/block[0]), 1, 1)
+                warp_size = 32
+                elem_warp = int(warp_size/p)
+                elem_block = int(block[0]/warp_size)*elem_warp
+                grid = (ceil(nele/elem_block), 1, 1)
             if p == 2:
                 l1_pref  = False
                 shr_pref = True
@@ -293,7 +296,10 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                                     shared_max=shr_max, ufc_size=4*(2**15), 
                                     block_dim=128, source_term=True)
                 block = (128, 1, 1)
-                grid = (ceil(nele*p/block[0]), 1, 1)
+                warp_size = 32
+                elem_warp = int(warp_size/p)
+                elem_block = int(block[0]/warp_size)*elem_warp
+                grid = (ceil(nele/elem_block), 1, 1)
 
         print(f'{nele=}, {shr_size=}, {p=}, {block=}, {grid=}')
 
