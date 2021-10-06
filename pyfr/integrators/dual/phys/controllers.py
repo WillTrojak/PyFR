@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import csv
+
 from pyfr.integrators.dual.phys.base import BaseDualIntegrator
 
 
@@ -9,6 +11,15 @@ class BaseDualController(BaseDualIntegrator):
 
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
+
+        self.step_file = self.cfg.get('solver-time-integrator', 'step-file', None)
+        if self.step_file != 'None':
+            with open(self.step_file, newline='') as f:
+                reader = csv.reader(f, delimiter=',')
+                self.p_nsteps = list(reader)
+        else:
+            print('Not using step file')
+
 
     def _accept_step(self, idxcurr):
         self.tcurr += self._dt
@@ -42,6 +53,11 @@ class DualNoneController(BaseDualController):
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
 
-        while self.tcurr < t:
-            self.pseudointegrator.pseudo_advance(self.tcurr)
-            self._accept_step(self.pseudointegrator._idxcurr)
+        if self.step_file != 'None':
+            for step in iter(self.p_nsteps):
+                self.pseudointegrator.pseudo_advance(self.tcurr, nstep=int(step[1]))
+                self._accept_step(self.pseudointegrator._idxcurr)
+        else:
+            while self.tcurr < t:
+                self.pseudointegrator.pseudo_advance(self.tcurr)
+                self._accept_step(self.pseudointegrator._idxcurr)

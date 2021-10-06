@@ -134,10 +134,12 @@ class DualPIPseudoController(BaseDualPseudoController):
         self.system.eles_scal_upts_inb.active = errbank
         self._queue.enqueue_and_run(self.pintgkernels['localerrest'])
 
-    def pseudo_advance(self, tcurr):
+    def pseudo_advance(self, tcurr, nstep=None):
         self.tcurr = tcurr
 
-        for i in range(self.maxniters):
+        steps = nstep if nstep is not None else self.maxniters
+
+        for i in range(steps):
             # Take the step
             self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
             self.localerrest(self._idxerr)
