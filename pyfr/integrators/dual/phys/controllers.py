@@ -20,6 +20,10 @@ class BaseDualController(BaseDualIntegrator):
         else:
             print('Not using step file')
 
+        # Fire off any event handlers if not restarting
+        if not self.isrestart:
+            self.completed_step_handlers(self)
+
 
     def _accept_step(self, idxcurr):
         self.tcurr += self._dt
@@ -51,7 +55,7 @@ class DualNoneController(BaseDualController):
 
     def advance_to(self, t):
         if t < self.tcurr:
-            raise ValueError('Advance time is in the past')
+            raise ValueError('Advance time is in the p../../pyfr/integrators/dual/phys/controllers.pyast')
 
         if self.step_file != 'None':
             for step in iter(self.p_nsteps):

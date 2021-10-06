@@ -59,8 +59,7 @@ class BaseAdvectionElements(BaseElements):
 
         if fluxaa:
             kernels['qptsu'] = lambda: self._be.kernel(
-                'mul', self.opmat('M7'), self.scal_upts_inb,
-                out=self._scal_qpts
+                'mul', self.opmatdivtconf_alphaqpts
             )
 
         # First flux correction kernel
