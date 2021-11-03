@@ -45,7 +45,7 @@ def get_pseudo_stepper_cls(name, porder):
                                   pseudo_stepper_porder=p)
         except KeyError:
             pass
-
+        
     return subclass_where(BaseDualPseudoStepper, pseudo_stepper_name=name)
 
 
