@@ -4,6 +4,7 @@ from itertools import chain
 from pkg_resources import resource_string
 
 import numpy as np
+import rkopt
 
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
 from pyfr.util import memoize
@@ -356,3 +357,66 @@ class DualDenseRKPseudoStepper(BaseDualPseudoStepper):
 
         # Return the bank indices of u(n+1,m+1) and u(n+1,m)
         return r[1], r[0]
+
+
+class DualOptRKPseudoStepper(BaseDualPseudoStepper):
+    pseudo_stepper_name = 'opt-rk'
+    pseudo_stepper_order = 1
+    pseudo_stepper_nregs = 2
+    pseudo_stepper_has_lerrest = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self._order = self.cfg.getint('solver', 'order')
+        self._h = self.cfg.getfloat('solver-time-integrator', 'char-h', 1.)
+        self._c = self.cfg.getfloat('solver-time-integrator', 'char-c', 1.)
+        self._sf = self.cfg.getfloat('solver-time-integrator', 'safety-fact', 0.9)
+        self._stages = self.cfg.getint('solver-time-integrator', 'pseudo-stages', 3)
+
+    @property
+    def pseudo_stepper_nfevals(self):
+        return 3*self.npseudosteps
+
+    def step(self, t):
+        self.npseudosteps += 1
+
+        add = self._add
+        rhs = self._rhs_with_dts
+
+        dt_hat = self._dt*self._c/self._h
+        dtau_max_hat, Ac = self._rk_constants(self._order, dt_hat, self.npseudosteps, self._stages)
+        dtau = dtau_max_hat*self._sf*self._h/self._c
+
+        # Get the bank indices for pseudo-registers (n+1,m; n+1,m+1; rhs),
+        # where m = pseudo-time and n = real-time
+        r0, r1, r2 = self._pseudo_stepper_regidx
+
+        # Ensure r0 references the bank containing u(n+1,m)
+        if r0 != self._idxcurr:
+            r0, r1 = r1, r0
+
+        for i in range(self._stages-1):
+            if i == 0:
+                rhs(t, r0, r2)
+            else:
+                rhs(t, r1, r2)
+
+            # r1 = Ac[i, 0]*r0 + dtau*Ac[i, 1]*r2
+            add(0, r1, Ac[i, 0], r0, dtau*Ac[i, 1], r2)
+
+        # Return the index of the bank containing u(n+1,m+1)
+        return r1, r0
+
+    @memoize
+    def _rk_constants(self, order, dt_hat, m, s):
+        dtau_max_hat, A, _ = rkopt.optimise(order, 1., dt_hat, m, s)
+
+        Ac = np.zeros((s - 1, 2))
+        for i in range(s-1):
+            if i == 0:
+                Ac[0, 0] = 1.
+            else:
+                Ac[i, 0] = A[i+1, 0] + 1.
+            Ac[i, 1] = A[i+1, i]
+        return dtau_max_hat, Ac
