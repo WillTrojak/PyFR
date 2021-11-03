@@ -111,12 +111,13 @@ install_requires = [
     'mako >= 1.0.0',
     'mpi4py >= 3.0',
     'numpy >= 1.20',
-    'pytools >= 2016.2.1'
+    'pytools >= 2016.2.1',
+    'rkopt >= 0.1'
 ]
 
 # Soft dependencies
 extras_require = {
-    'opencl': ['pyopencl >= 2015.2.4']
+    'opencl': ['pyopencl >= 2015.2.4'],
 }
 
 # Scripts
