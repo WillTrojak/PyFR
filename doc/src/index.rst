@@ -7,7 +7,7 @@ PyFR
 .. _website: http://www.pyfr.org/
 .. _forum: https://pyfr.discourse.group/
 
-PyFR 1.12.3 test2 is an open-source flow solver that uses the high-order flux reconstruction
+PyFR 1.12.3 test 3 is an open-source flow solver that uses the high-order flux reconstruction
 method. For more information on the PyFR project visit our
 website_, or to ask a question visit our
 forum_.
