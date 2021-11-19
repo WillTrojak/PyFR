@@ -52,6 +52,8 @@ class CUDAWrappers(LibWrapper):
     COMPUTE_CAPABILITY_MAJOR = 75
     COMPUTE_CAPABILITY_MINOR = 76
     EVENT_DISABLE_TIMING = 2
+    FUNC_ATTR_MAX_DYNAMIC_SHARED_SIZE_BYTES = 8
+    FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
     FUNC_CACHE_PREFER_NONE = 0
     FUNC_CACHE_PREFER_SHARED = 1
     FUNC_CACHE_PREFER_L1 = 2
@@ -87,6 +89,7 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
         (c_int, 'cuLaunchKernel', c_void_p, c_uint, c_uint, c_uint, c_uint,
          c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p),
+        (c_int, 'cuFuncSetAttribute', c_void_p, c_int, c_int),
         (c_int, 'cuFuncSetCacheConfig', c_void_p, c_int)
     ]
 
@@ -198,11 +201,19 @@ class CUDAFunction(_CUDABase):
         pref = self.cuda._get_cache_pref(prefer_l1, prefer_shared)
         self.cuda.lib.cuFuncSetCacheConfig(self, pref)
 
-    def exec_async(self, grid, block, stream, *args):
+    def set_shared_size(self, *, dynm_shared=0, carveout=None):
+        attr = self.cuda.lib.FUNC_ATTR_MAX_DYNAMIC_SHARED_SIZE_BYTES
+        self.cuda.lib.cuFuncSetAttribute(self, attr, dynm_shared)
+
+        if carveout is not None:
+            attr = self.cuda.lib.FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT
+            self.cuda.lib.cuFuncSetAttribute(self, attr, carveout)
+
+    def exec_async(self, grid, block, stream, *args, dynm_shared=0):
         for src, dst in zip(args, self._args):
             dst.value = getattr(src, '_as_parameter_', src)
 
-        self.cuda.lib.cuLaunchKernel(self, *grid, *block, 0, stream,
+        self.cuda.lib.cuLaunchKernel(self, *grid, *block, dynm_shared, stream,
                                      self._arg_ptrs, None)
 
 
