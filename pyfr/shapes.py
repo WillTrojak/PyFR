@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from configparser import NoSectionError
 import itertools as it
 from functools import cached_property
 from math import exp
@@ -105,15 +106,44 @@ class BaseShape(object):
 
     @cached_property
     def m3(self):
+        # Suitable quadrature rules for various topos
+        qrule_map = {
+            'line': ('gauss-legendre', self.order + 1),
+            'quad': ('gauss-legendre', (self.order + 1)**2),
+            'tri': ('williams-shunn', 36)
+        }
+        qs = get_quadrule(self.name, *qrule_map[self.name])
+
+
+        Lsq = self.ubasis.nodal_basis_at(qs.pts)
+        Lsf = self.m0
+        Mq = np.diag(qs.wts)
+        Pqs = np.linalg.solve(Lsq.T @ Mq @ Lsq, Lsq.T @ Mq)
+        W = np.diag(self.fpts_wts)
+
+        if self.cfg.hasopt(f'solver-corr-{self.name}','Q'):
+            Q_m = self.cfg.getliteral(f'solver-corr-{self.name}','Q')
+            invuvq = self.ubasis.invvdm @ Pqs
+            Qq = np.transpose(invuvq) @ Q_m @ invuvq
+            try:
+                _ = np.linalg.cholesky(Mq + Qq)
+            except np.linalg.LinAlgError:
+                raise ValueError('Invalid Q matrix')
+            C = Pqs @ np.linalg.solve(Mq + Qq, np.transpose(Lsf @ Pqs) @ W)
+        else:
+            C = Pqs @ np.linalg.solve(Mq, np.transpose(Lsf @ Pqs) @ W)
+
         m = self.gbasis_at(self.upts)
 
         if 'surf-flux' in self.antialias:
             fp = [_proj_l2(self._iqrules[kind], self.facebases[kind])
                   for kind, proj, norm in self.faces]
 
-            m = m @ block_diag(fp)
+            C = m @ block_diag(fp)
 
-        return m
+        print(C-m)
+
+        return C
 
     @cached_property
     def m4(self):
@@ -163,6 +193,11 @@ class BaseShape(object):
     def upts(self):
         rname = self.cfg.get(f'solver-elements-{self.name}', 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).pts
+
+    @lazyprop
+    def uwts(self):
+        rname = self.cfg.get(f'solver-elements-{self.name}', 'soln-pts')
+        return get_quadrule(self.name, rname, self.nupts).wts
 
     def _get_qrule(self, eleint, kind, **kwargs):
         sect = f'solver-{eleint}-{kind}'
