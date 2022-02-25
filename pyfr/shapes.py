@@ -114,7 +114,6 @@ class BaseShape(object):
         }
         qs = get_quadrule(self.name, *qrule_map[self.name])
 
-
         Lsq = self.ubasis.nodal_basis_at(qs.pts)
         Lsf = self.m0
         Mq = np.diag(qs.wts)
@@ -140,8 +139,6 @@ class BaseShape(object):
                   for kind, proj, norm in self.faces]
 
             C = m @ block_diag(fp)
-
-        print(C-m)
 
         return C
 
@@ -194,7 +191,7 @@ class BaseShape(object):
         rname = self.cfg.get(f'solver-elements-{self.name}', 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).pts
 
-    @lazyprop
+    @cached_property
     def uwts(self):
         rname = self.cfg.get(f'solver-elements-{self.name}', 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).wts
@@ -219,11 +216,11 @@ class BaseShape(object):
         return {kind: self._get_qrule('interfaces', kind, flags='s')
                 for kind in {k for k, p, n in self.faces}}
 
-    @property
+    @cached_property
     def qpts(self):
         return self._eqrule.pts
 
-    @property
+    @cached_property
     def nqpts(self):
         return len(self.qpts)
 
@@ -294,7 +291,7 @@ class BaseShape(object):
     def gbasis_at(self, pts):
         return (self.gbasis_coeffs @ self.ubasis.ortho_basis_at(pts)).T
 
-    @property
+    @cached_property
     def facenorms(self):
         return [norm for kind, proj, norm in self.faces]
 
@@ -339,7 +336,7 @@ class BaseShape(object):
 
         return [cnt(kind) for kind, proj, norm in self.faces]
 
-    @property
+    @cached_property
     def nfpts(self):
         return sum(self.nfacefpts)
 
