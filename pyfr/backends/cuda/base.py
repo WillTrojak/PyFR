@@ -21,8 +21,7 @@ class CUDABackend(BaseBackend):
         # Get the desired CUDA device
         devid = cfg.get('backend-cuda', 'device-id', 'local-rank')
 
-        uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-        if not re.match(rf'(round-robin|local-rank|\d+|{uuid})$', devid):
+        if not re.match(rf'(round-robin|local-rank)$', devid):
             raise ValueError('Invalid device-id')
 
         # For round-robin try each device until we find one that works
@@ -37,13 +36,6 @@ class CUDABackend(BaseBackend):
                 raise RuntimeError('Unable to create a CUDA context')
         elif devid == 'local-rank':
             self.cuda.set_device(get_local_rank())
-        elif '-' in devid:
-            for i in range(self.cuda.device_count()):
-                if str(self.cuda.device_uuid(i)) == devid:
-                    self.cuda.set_device(i)
-                    break
-            else:
-                raise RuntimeError(f'Unable to find CUDA device {devid}')
         else:
             self.cuda.set_device(int(devid))
 

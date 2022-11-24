@@ -137,7 +137,6 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuDeviceGet', POINTER(c_int), c_int),
         (c_int, 'cuDeviceGetCount', POINTER(c_int)),
         (c_int, 'cuDeviceGetAttribute', POINTER(c_int), c_int, c_int),
-        (c_int, 'cuDeviceGetUuid_v2', 16*c_char, c_int),
         (c_int, 'cuDevicePrimaryCtxRetain', POINTER(c_void_p), c_int),
         (c_int, 'cuDevicePrimaryCtxRelease', c_int),
         (c_int, 'cuCtxSetCurrent', c_void_p),
@@ -461,15 +460,6 @@ class CUDA:
         self.lib.cuDeviceGetCount(count)
 
         return count.value
-
-    def device_uuid(self, devid):
-        dev = c_int()
-        self.lib.cuDeviceGet(dev, devid)
-
-        buf = create_string_buffer(16)
-        self.lib.cuDeviceGetUuid(buf, dev)
-
-        return UUID(bytes=buf.raw)
 
     def set_device(self, devid):
         if self.ctx:
