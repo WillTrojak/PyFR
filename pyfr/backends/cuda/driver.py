@@ -179,8 +179,8 @@ class CUDAWrappers(LibWrapper):
          POINTER(c_void_p), c_size_t, c_void_p),
         (c_int, 'cuGraphAddMemcpyNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, POINTER(CUDAMemcpy3D), c_void_p),
-        (c_int, 'cuGraphInstantiateWithFlags', POINTER(c_void_p), c_void_p,
-         c_ulonglong),
+        (c_int, 'cuGraphInstantiate', POINTER(c_void_p), c_void_p, 
+         POINTER(c_void_p), c_void_p, c_size_t),
         (c_int, 'cuGraphExecKernelNodeSetParams', c_void_p, c_void_p,
          POINTER(CUDAKernelNodeParams)),
         (c_int, 'cuGraphExecDestroy', c_void_p),
@@ -420,7 +420,8 @@ class CUDAExecGraph(_CUDABase):
 
     def __init__(self, cuda, graph):
         ptr = c_void_p()
-        cuda.lib.cuGraphInstantiateWithFlags(ptr, graph, 0)
+        ptr_rtn = c_void_p()
+        cuda.lib.cuGraphInstantiate(ptr, graph, ptr_rtn, None, 0)
 
         super().__init__(cuda, ptr)
 
