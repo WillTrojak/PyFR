@@ -171,8 +171,6 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuGraphDestroy', c_void_p),
         (c_int, 'cuGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t),
-        (c_int, 'cuGraphAddEventRecordNode', POINTER(c_void_p), c_void_p,
-         POINTER(c_void_p), c_size_t, c_void_p),
         (c_int, 'cuGraphAddKernelNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, POINTER(CUDAKernelNodeParams)),
         (c_int, 'cuGraphAddChildGraphNode', POINTER(c_void_p), c_void_p,
@@ -361,13 +359,6 @@ class CUDAGraph(_CUDABase):
     def add_empty(self, deps=None):
         ptr = c_void_p()
         self.cuda.lib.cuGraphAddEmptyNode(ptr, self, *self._make_deps(deps))
-
-        return ptr.value
-
-    def add_event_record(self, event, deps=None):
-        ptr = c_void_p()
-        self.cuda.lib.cuGraphAddEventRecordNode(ptr, self,
-                                                *self._make_deps(deps), event)
 
         return ptr.value
 

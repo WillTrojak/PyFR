@@ -87,10 +87,7 @@ class CUDAGraph(base.Graph):
         super().add_mpi_req(req, deps)
 
         if deps:
-            event = self.backend.cuda.create_event()
-            self.graph.add_event_record(event, [self.knodes[d] for d in deps])
-
-            self.mpi_events.append((event, req))
+            raise RuntimeError('MPI dep not supported in CUDA 10')
 
     def commit(self):
         super().commit()
