@@ -1,15 +1,9 @@
 # -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%pyfr:macro name='inviscid_flux' params='s, f, a, d, p, v'>
+<%pyfr:macro name='inviscid_flux' params='s, f, d, p, v, g'>
     d = ${' + '.join('s[{i}]'.format(i=i) for i in range(nspec))};
     fpdtype_t invrho = 1/d, E = s[${ndims + nspec}];
-
-% for i in range(nspec - 1):
-    //a[${i}] = max(min(s[${nspec + ndims + 1 + i}], 1), 0);
-    a[${i}] = s[${nspec + ndims + 1 + i}];
-% endfor
-    a[${nspec - 1}] = 1 - (${' + '.join('a[{i}]'.format(i=i) for i in range(nspec - 1))});
 
     // Compute the velocities
     fpdtype_t rhov[${ndims}];
@@ -20,8 +14,10 @@
 
     // Compute the pressure
     fpdtype_t rhoe = E - 0.5*invrho*${pyfr.dot('rhov[{i}]', i=ndims)};
-    fpdtype_t agm = ${' + '.join('{rgm}*a[{i}]'.format(i=i, rgm=1/(c[f'gamma{i}']-1)) for i in range(nspec))};
-    p = rhoe/agm;
+    fpdtype_t rcp = (${' + '.join('{cp}*s[{i}]'.format(i=i, cp=c[f'cp{i}']) for i in range(nspec))});
+    fpdtype_t rcv_inv = 1/(${' + '.join('{cv}*s[{i}]'.format(i=i, cv=c[f'cv{i}']) for i in range(nspec))});
+    g = 1.4;
+    p = rhoe/(g - 1);
 
     // Mass flux
 % for i, j in pyfr.ndrange(ndims, nspec):

@@ -13,8 +13,8 @@
               smats='in fpdtype_t[${str(ndims)}][${str(ndims)}]'>
     // Compute the flux (F = Fi + Fv)
     fpdtype_t ftemp[${ndims}][${nvars}];
-    fpdtype_t a[${nspec}], d, p, v[${ndims}];
-    ${pyfr.expand('inviscid_flux', 'u', 'ftemp',  'a', 'd', 'p', 'v')};
+    fpdtype_t a[${nspec}], d, p, v[${ndims}], g;
+    ${pyfr.expand('inviscid_flux', 'u', 'ftemp', 'd', 'p', 'v', 'g')};
     ${pyfr.expand('viscous_flux_add', 'u', 'grad', 'ftemp')};
 
     // Transform the fluxes

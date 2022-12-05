@@ -67,10 +67,10 @@ class BaseMPFluidElements:
         rhovs = [rho*c for c in pris[ns:-ns]]
 
         # Compute the energy
-        gamma = [cfg.getfloat('constants', f'gamma{i}') for i in range(ns)]
-        rhoe = p*sum(alpha[i]/(gamma[i] - 1) for i in range(ns))
+        gamma = (sum(arho[i]*cfg.getfloat('constants', f'cp{i}') for i in range(ns)) / 
+                 sum(arho[i]*cfg.getfloat('constants', f'cv{i}') for i in range(ns)))
 
-        E = rhoe + 0.5*rho*sum(c*c for c in pris[ns:-ns])
+        E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[ns:-ns])
 
         return np.vstack((arho, rhovs, [E], alpha[:ns-1]))
 
@@ -88,9 +88,9 @@ class BaseMPFluidElements:
         vs = [rhov/rho for rhov in cons[ns:-ns]]
 
         # Compute the pressure
-        gamma = [cfg.getfloat('constants', f'gamma{i}') for i in range(ns)]
-        rhoe = (E - 0.5*rho*sum(v*v for v in vs))
-        p = rhoe/sum(alpha[i]/(gamma[i] - 1) for i in range(ns))
+        gamma = (sum(arho[i]*cfg.getfloat('constants', f'cp{i}') for i in range(ns)) / 
+                 sum(arho[i]*cfg.getfloat('constants', f'cv{i}') for i in range(ns)))
+        p = (E - 0.5*rho*sum(v*v for v in vs))*(gamma - 1)
 
         return np.vstack((Rho, vs, [p], alpha[:ns-1]))
 
