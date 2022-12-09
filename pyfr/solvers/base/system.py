@@ -44,9 +44,6 @@ class BaseSystem:
         self.ele_ndofs = [e.neles*e.nupts*e.nvars for e in eles]
         self.ele_shapes = [(e.nupts, e.nvars, e.neles) for e in eles]
 
-        # Get the banks for passive scalars
-        self.eles_pasv_upts = [e.pasv_upts for e in eles]
-
         # Get all the solution point locations for the elements
         self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
 
@@ -59,7 +56,6 @@ class BaseSystem:
         # Save the number of dimensions and field variables
         self.ndims = eles[0].ndims
         self.nvars = eles[0].nvars
-        self.npass = eles[0].npass
 
         # Load the interfaces
         int_inters = self._load_int_inters(rallocs, mesh, elemap)
@@ -317,9 +313,6 @@ class BaseSystem:
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]
-
-    def get_pasv_upts(self):
-        return [e.get() for e in self.eles_pasv_upts]
 
     def get_ele_entmin_int(self):
         return [e.get() for e in self.eles_entmin_int]

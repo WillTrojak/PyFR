@@ -18,11 +18,6 @@ class BaseAdvectionIntInters(BaseInters):
         self._scal_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
         self._scal_rhs = self._scal_view(rhs, 'get_scal_fpts_for_inter')
 
-        # Generate the left and right hand side view matrices for passives
-        if self.npass != 0:
-            self._pasv_lhs = self._scal_view(lhs, 'get_pasv_fpts_for_inter')
-            self._pasv_rhs = self._scal_view(rhs, 'get_pasv_fpts_for_inter')
-
         # Generate the additional view matrices for entropy filtering
         if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._entmin_lhs = self._view(lhs, 'get_entmin_int_fpts_for_inter')
@@ -60,11 +55,6 @@ class BaseAdvectionMPIInters(BaseInters):
         self._scal_lhs = self._scal_xchg_view(lhs, 'get_scal_fpts_for_inter')
         self._scal_rhs = be.xchg_matrix_for_view(self._scal_lhs)
 
-        # Generate the left hand view matrix and its dual for passives
-        if self.npass != 0:
-            self._pasv_lhs = self._scal_xchg_view(lhs, 'get_pasv_fpts_for_inter')
-            self._pasv_rhs = be.xchg_matrix_for_view(self._pasv_lhs)
-
         self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inter')
 
         # Kernels
@@ -83,25 +73,6 @@ class BaseAdvectionMPIInters(BaseInters):
         self.mpireqs['scal_fpts_recv'] = lambda: self._scal_rhs.recvreq(
             self._rhsrank, scal_fpts_tag
         )
-
-        if self.npass != 0:
-            # Kernels
-            self.kernels['pasv_fpts_pack'] = lambda: be.kernel(
-                'pack', self._pasv_lhs
-            )
-            self.kernels['pasv_fpts_unpack'] = lambda: be.kernel(
-                'unpack', self._pasv_rhs
-            )
-
-            # Associated MPI requests
-            pasv_fpts_tag = next(self._mpi_tag_counter)
-            self.mpireqs['pasv_fpts_send'] = lambda: self._pasv_lhs.sendreq(
-                self._rhsrank, pasv_fpts_tag
-            )
-            self.mpireqs['pasv_fpts_recv'] = lambda: self._pasv_rhs.recvreq(
-                self._rhsrank, pasv_fpts_tag
-            )
-
 
         if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._entmin_lhs = self._xchg_view(
@@ -142,10 +113,6 @@ class BaseAdvectionBCInters(BaseInters):
         # LHS view and constant matrices
         self._scal_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
         self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inter')
-
-        # LHS view matrix for passives
-        if self.npass != 0:
-            self._pasv_lhs = self._scal_view(lhs, 'get_pasv_fpts_for_inter')
 
         # Make the simulation time available inside kernels
         self._set_external('t', 'scalar fpdtype_t')

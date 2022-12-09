@@ -5,7 +5,6 @@ from pyfr.solvers.aceuler import ACEulerSystem
 from pyfr.solvers.acnavstokes import ACNavierStokesSystem
 from pyfr.solvers.base import BaseSystem
 from pyfr.solvers.euler import EulerSystem
-from pyfr.solvers.mpaceuler import MPACEulerSystem
 from pyfr.solvers.mpeuler import MPEulerSystem
 from pyfr.solvers.mpnavstokes import MPNavierStokesSystem
 from pyfr.solvers.navstokes import NavierStokesSystem
