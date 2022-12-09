@@ -71,13 +71,9 @@ class MPNavierStokesElements(BaseMPFluidElements,
             return
 
         # Register our flux kernels
-        kern_path = 'pyfr.solvers.mpnavstokes.kernels.'
-        self._be.pointwise.register(kern_path + 'tflux')
-        self._be.pointwise.register(kern_path + 'tfluxlin')
-        self._be.pointwise.register(kern_path + 'negdivconf_mp')
-        self._be.pointwise.register(kern_path + 'negdivconf_mp_aa')
-        self._be.pointwise.register(kern_path + 'fgrad_copy')
-        self._be.pointwise.register(kern_path + 'frac_matdiv')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tflux')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tfluxlin')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.negdivconf_mp')
 
         # Handle shock capturing and Sutherland's law
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
@@ -224,16 +220,23 @@ class MPNavierStokesElements(BaseMPFluidElements,
             self.kernels['gradcoru_qpts'] = gradcoru_qpts
 
     def _fraction_aa_kernels(self, nonce, tplargs):
+        kern_path = 'pyfr.solvers.mpnavstokes.kernels.'
+        self._be.pointwise.register(kern_path + 'negdivconf_mp_aa')
+        self._be.pointwise.register(kern_path + 'ugrad_copy')
+        self._be.pointwise.register(kern_path + 'frac_matdiv')
+
         kernel = self._be.kernel
         # Allocate extra memory for fraction material derivative
         tags = {'align'}
-        ext = nonce + 'vect_upts_fgrad'
-        self._vect_upts_fgrad = self._be.matrix((self.ndims, self.nupts, 
-                                                 self.nspec - 1, self.neles),
+        ext = nonce + 'vect_upts_ugrad'
+        self._vect_upts_ugrad = self._be.matrix((self.ndims, self.nupts, 
+                                                 self.nspec + self.ndims, 
+                                                 self.neles),
                                                  tags=tags, extent=ext)
-        ext = nonce + 'vect_qpts_fgrad'
-        self._vect_qpts_fgrad = self._be.matrix((self.ndims, self.nqpts, 
-                                                 self.nspec - 1, self.neles),
+        ext = nonce + 'vect_qpts_ugrad'
+        self._vect_qpts_ugrad = self._be.matrix((self.ndims, self.nqpts, 
+                                                 self.nspec + self.ndims,
+                                                 self.neles),
                                                  tags=tags, extent=ext)
         ext = nonce + 'scal_upts_ugrad'
         self._scal_upts_ugrad = self._be.matrix((self.nupts, self.nspec - 1, 
@@ -244,14 +247,14 @@ class MPNavierStokesElements(BaseMPFluidElements,
                                                  self.neles),
                                                  tags=tags, extent=ext)
 
-        self.kernels['fgrad_copy'] = lambda uin: kernel(
-            'fgrad_copy', tplargs=tplargs, dims=[self.nupts, self.neles],
-            grad=self._vect_upts_cpy, fgrad=self._vect_upts_fgrad
+        self.kernels['ugrad_copy'] = lambda uin: kernel(
+            'ugrad_copy', tplargs=tplargs, dims=[self.nupts, self.neles],
+            grad=self._vect_upts_cpy, ugrad=self._vect_upts_ugrad
         )
 
-        def fgradcoru_qpts():
+        def ugradcoru_qpts():
             nupts, nqpts = self.nupts, self.nqpts
-            vupts, vqpts = self._vect_upts_fgrad, self._vect_qpts_fgrad
+            vupts, vqpts = self._vect_upts_ugrad, self._vect_qpts_ugrad
 
             # Exploit the block-diagonal form of the operator
             muls = [self._be.kernel('mul', self.opmat('M7'),
@@ -260,11 +263,11 @@ class MPNavierStokesElements(BaseMPFluidElements,
                     for i in range(self.ndims)]
 
             return self._be.unordered_meta_kernel(muls)
-        self.kernels['fgradcoru_qpts'] = fgradcoru_qpts
+        self.kernels['ugradcoru_qpts'] = ugradcoru_qpts
 
         self.kernels['frac_matdiv'] = lambda uin: kernel(
             'frac_matdiv', tplargs=tplargs, dims=[self.nqpts, self.neles],
-            fgrad=self._vect_qpts_fgrad, u=self._scal_qpts, 
+            ugrad=self._vect_qpts_ugrad, u=self._scal_qpts, 
             mat=self._scal_qpts_ugrad
         )
 

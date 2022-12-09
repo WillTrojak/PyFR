@@ -92,11 +92,11 @@ class MPNavierStokesSystem(BaseAdvectionDiffusionSystem):
             g2.add(l, deps=deps(l, 'eles/tgradcoru_upts'))
 
         # Copy the fraction gradients to a separate buffer 
-        g2.add_all(k['eles/fgrad_copy'], deps=k['eles/gradcoru_upts_curved'] + 
+        g2.add_all(k['eles/ugrad_copy'], deps=k['eles/gradcoru_upts_curved'] + 
                                               k['eles/gradcoru_upts_linear'])
 
         # Interpolate the fraction grad to the quad points
-        for l in k['eles/fgradcoru_qpts']:
+        for l in k['eles/ugradcoru_qpts']:
             g2.add(l, deps=deps(l, 'eles/fgrad_copy'))
 
         # Interpolate these gradients to the flux points
