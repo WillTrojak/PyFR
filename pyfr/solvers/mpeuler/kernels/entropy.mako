@@ -23,21 +23,19 @@
     a_acc -= u[${nspec + ndims + 1 + i}];
 % endfor
     amin = min(amin, a_acc);
-    amax = max(amax, a_acc);
-    amax = 1 - amax;
+    amax = 1 - max(amax, a_acc);
 
     // Compute the pressure
     fpdtype_t rhoe = E - 0.5*rcpd*${pyfr.dot('rhov[{i}]', i=ndims)};
-    //fpdtype_t rcp = (${' + '.join('{cp}*u[{i}]'.format(i=i, cp=c[f'cp{i}']) for i in range(nspec))});
-    fpdtype_t rcv_inv = 1/(${' + '.join('{cv}*u[{i}]'.format(i=i, cv=c[f'cv{i}']) for i in range(nspec))});
-    //fpdtype_t gamma = rcp*rcv_inv;
-    T = rhoe*rcv_inv;
+    fpdtype_t cv = ${' + '.join('{cv}*u[{i}]'.format(i=i, cv=c[f'cv{i}']) 
+                     for i in range(nspec))};
+    T = rhoe/cv;
 
     // Compute combined species entropies
-    e = ${' + '.join('{cv}*u[{i}]*log(T*pow(u[{i}], {gam}))'.format(i=i, cv=c[f'cv{i}'], gam=1-c[f'cp{i}']/c[f'cv{i}']) for i in range(nspec))};
+    e = ${' + '.join('{cv}*u[{i}]*log(T*pow(u[{i}], {gam}))'.format(i=i, 
+          cv=c[f'cv{i}'], gam=1-c[f'cp{i}']/c[f'cv{i}']) for i in range(nspec))};
     e = e*rcpd;
 
     // Compute specific physical entropy
-    // e = ((T > 0) && (amin > 0) && (amax > 0) && (ad > 0)) ? exp(e) : ${inf};
     e = ((T > 0) && (amin > 0) && (amax > 0) && (ad > 0)) ? e : ${inf};
 </%pyfr:macro>

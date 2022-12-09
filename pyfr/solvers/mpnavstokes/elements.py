@@ -19,6 +19,8 @@ class MPNavierStokesElements(BaseMPFluidElements,
 
         if 'flux' in self.antialias:
             bufs |= {'vect_qpts_cpy', 'scal_qpts', 'vect_qpts'}
+        elif 'fraction' in self.antialias:
+            bufs |= {'scal_qpts'}
 
         return bufs
 
@@ -61,17 +63,21 @@ class MPNavierStokesElements(BaseMPFluidElements,
 
         return np.vstack((grad_Rho, grad_uvw, [grad_p], grad_a[:ns-1]))
 
-    def set_backend(self, *args, **kwargs):
-        super().set_backend(*args, **kwargs)
+    def set_backend(self, backend, nscalupts, nonce, linoff):
+        super().set_backend(backend, nscalupts, nonce, linoff)
 
         # Can elide interior flux calculations at p = 0
         if self.basis.order == 0:
             return
 
         # Register our flux kernels
-        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tflux')
-        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tfluxlin')
-        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.negdivconf_mp')
+        kern_path = 'pyfr.solvers.mpnavstokes.kernels.'
+        self._be.pointwise.register(kern_path + 'tflux')
+        self._be.pointwise.register(kern_path + 'tfluxlin')
+        self._be.pointwise.register(kern_path + 'negdivconf_mp')
+        self._be.pointwise.register(kern_path + 'negdivconf_mp_aa')
+        self._be.pointwise.register(kern_path + 'fgrad_copy')
+        self._be.pointwise.register(kern_path + 'frac_matdiv')
 
         # Handle shock capturing and Sutherland's law
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
@@ -145,11 +151,21 @@ class MPNavierStokesElements(BaseMPFluidElements,
             'copy', self._scal_upts_cpy, self.scal_upts[uin]
         )
 
-        self.kernels['negdivconf_mp'] = lambda fout: kernel(
-            'negdivconf_mp', tplargs=srctplargs, dims=[self.nupts, self.neles],
-            tdivtconf=self.scal_upts[fout], rcpdjac=self.rcpdjac_at('upts'),
-            ploc=plocupts, u=self._scal_upts_cpy, grad=self._vect_upts_cpy,
-        )
+        if 'fraction' in self.antialias:
+            self._fraction_aa_kernels(nonce, srctplargs)
+            self.kernels['negdivconf_mp'] = lambda fout: kernel(
+                'negdivconf_mp_aa', tplargs=srctplargs, 
+                dims=[self.nupts, self.neles], tdivtconf=self.scal_upts[fout], 
+                rcpdjac=self.rcpdjac_at('upts'), mat=self._scal_upts_ugrad,
+                ploc=plocupts, u=self._scal_upts_cpy
+            )
+        else:
+            self.kernels['negdivconf_mp'] = lambda fout: kernel(
+                'negdivconf_mp', tplargs=srctplargs, 
+                dims=[self.nupts, self.neles], tdivtconf=self.scal_upts[fout], 
+                rcpdjac=self.rcpdjac_at('upts'), ploc=plocupts, 
+                u=self._scal_upts_cpy, grad=self._vect_upts_cpy,
+            )
 
         # Re-register kernels for gradient calcs
         if self.basis.order > 0:
@@ -206,3 +222,53 @@ class MPNavierStokesElements(BaseMPFluidElements,
                 return self._be.unordered_meta_kernel(muls)
 
             self.kernels['gradcoru_qpts'] = gradcoru_qpts
+
+    def _fraction_aa_kernels(self, nonce, tplargs):
+        kernel = self._be.kernel
+        # Allocate extra memory for fraction material derivative
+        tags = {'align'}
+        ext = nonce + 'vect_upts_fgrad'
+        self._vect_upts_fgrad = self._be.matrix((self.ndims, self.nupts, 
+                                                 self.nspec - 1, self.neles),
+                                                 tags=tags, extent=ext)
+        ext = nonce + 'vect_qpts_fgrad'
+        self._vect_qpts_fgrad = self._be.matrix((self.ndims, self.nqpts, 
+                                                 self.nspec - 1, self.neles),
+                                                 tags=tags, extent=ext)
+        ext = nonce + 'scal_upts_ugrad'
+        self._scal_upts_ugrad = self._be.matrix((self.nupts, self.nspec - 1, 
+                                                 self.neles),                          
+                                                 tags=tags, extent=ext)
+        ext = nonce + 'scal_qpts_ugrad'
+        self._scal_qpts_ugrad = self._be.matrix((self.nqpts, self.nspec - 1,
+                                                 self.neles),
+                                                 tags=tags, extent=ext)
+
+        self.kernels['fgrad_copy'] = lambda uin: kernel(
+            'fgrad_copy', tplargs=tplargs, dims=[self.nupts, self.neles],
+            grad=self._vect_upts_cpy, fgrad=self._vect_upts_fgrad
+        )
+
+        def fgradcoru_qpts():
+            nupts, nqpts = self.nupts, self.nqpts
+            vupts, vqpts = self._vect_upts_fgrad, self._vect_qpts_fgrad
+
+            # Exploit the block-diagonal form of the operator
+            muls = [self._be.kernel('mul', self.opmat('M7'),
+                                    vupts.slice(i*nupts, (i + 1)*nupts),
+                                    vqpts.slice(i*nqpts, (i + 1)*nqpts))
+                    for i in range(self.ndims)]
+
+            return self._be.unordered_meta_kernel(muls)
+        self.kernels['fgradcoru_qpts'] = fgradcoru_qpts
+
+        self.kernels['frac_matdiv'] = lambda uin: kernel(
+            'frac_matdiv', tplargs=tplargs, dims=[self.nqpts, self.neles],
+            fgrad=self._vect_qpts_fgrad, u=self._scal_qpts, 
+            mat=self._scal_qpts_ugrad
+        )
+
+        self.kernels['matd_proj'] =  lambda uin: kernel(
+            'mul', self.opmat('M8'), self._scal_qpts_ugrad,
+            out=self._scal_upts_ugrad
+        )

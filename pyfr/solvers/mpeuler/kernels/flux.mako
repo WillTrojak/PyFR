@@ -14,10 +14,9 @@
 
     // Compute the pressure
     fpdtype_t rhoe = E - 0.5*invrho*${pyfr.dot('rhov[{i}]', i=ndims)};
-    fpdtype_t rcp = (${' + '.join('{cp}*s[{i}]'.format(i=i, cp=c[f'cp{i}']) for i in range(nspec))});
-    fpdtype_t rcv_inv = 1/(${' + '.join('{cv}*s[{i}]'.format(i=i, cv=c[f'cv{i}']) for i in range(nspec))});
-    g = 1.4;
-    p = rhoe/(g - 1);
+    fpdtype_t g = (${' + '.join('{cp}*s[{i}]'.format(i=i, cp=c[f'cp{i}']) for i in range(nspec))}) /
+                  (${' + '.join('{cv}*s[{i}]'.format(i=i, cv=c[f'cv{i}']) for i in range(nspec))});
+    p = rhoe*(g - 1);
 
     // Mass flux
 % for i, j in pyfr.ndrange(ndims, nspec):

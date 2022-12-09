@@ -91,6 +91,14 @@ class MPNavierStokesSystem(BaseAdvectionDiffusionSystem):
         for l in k['eles/gradcoru_upts_linear']:
             g2.add(l, deps=deps(l, 'eles/tgradcoru_upts'))
 
+        # Copy the fraction gradients to a separate buffer 
+        g2.add_all(k['eles/fgrad_copy'], deps=k['eles/gradcoru_upts_curved'] + 
+                                              k['eles/gradcoru_upts_linear'])
+
+        # Interpolate the fraction grad to the quad points
+        for l in k['eles/fgradcoru_qpts']:
+            g2.add(l, deps=deps(l, 'eles/fgrad_copy'))
+
         # Interpolate these gradients to the flux points
         for l in k['eles/gradcoru_fpts']:
             ldeps = deps(l, 'eles/gradcoru_upts_curved',
@@ -115,6 +123,13 @@ class MPNavierStokesSystem(BaseAdvectionDiffusionSystem):
 
         # Interpolate the solution to the quadrature points
         g2.add_all(k['eles/qptsu'])
+
+        # Calculation the fraction material derivative
+        g2.add_all(k['eles/frac_matdiv'], deps=k['eles/qptsu'] +
+                   k['eles/gradcoru_qpts'])
+
+        # Project the material derivative from the qaudrature to solution points
+        g2.add_all(k['eles/matd_proj'], deps=k['eles/frac_matdiv'])
 
         # Compute the transformed flux
         for l in k['eles/tdisf_curved'] + k['eles/tdisf_linear']:

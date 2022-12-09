@@ -43,7 +43,7 @@ class BaseShape:
         self.antialias = cfg.get('solver', 'anti-alias', 'none')
         self.antialias = {s.strip() for s in self.antialias.split(',')}
         self.antialias.discard('none')
-        if self.antialias - {'flux', 'surf-flux'}:
+        if self.antialias - {'flux', 'surf-flux', 'fraction'}:
             raise ValueError('Invalid anti-alias options')
 
         self.ubasis = get_polybasis(self.name, self.order + 1, self.upts)

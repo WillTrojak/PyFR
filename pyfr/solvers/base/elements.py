@@ -54,7 +54,7 @@ class BaseElements:
         self.antialias = basis.antialias
 
         # If we need quadrature points or not
-        haveqpts = 'flux' in self.antialias
+        haveqpts = set(self.antialias).issubset({'flux', 'fraction'})
 
         # Sizes
         self.nupts = basis.nupts
@@ -72,6 +72,10 @@ class BaseElements:
 
     def con_to_pri(cons, cfg, pasv=None):
         pass
+
+    @staticmethod
+    def con_to_plot(cons, cfg, pasv=None):
+        return BaseElements.con_to_pri(cons, cfg)
 
     def set_ics_from_cfg(self):
         # Bring simulation constants into scope

@@ -28,6 +28,7 @@ class BaseAdvectionElements(BaseElements):
 
         # What anti-aliasing options we're running with
         fluxaa = 'flux' in self.antialias
+        fracaa = 'fraction' in self.antialias
 
         # What the source term expressions (if any) are a function of
         plocsrc = self._ploc_in_src_exprs
@@ -46,7 +47,7 @@ class BaseAdvectionElements(BaseElements):
             out=self._scal_fpts
         )
 
-        if fluxaa and self.basis.order > 0:
+        if (fluxaa or fracaa) and self.basis.order > 0:
             kernels['qptsu'] = lambda uin: self._be.kernel(
                 'mul', self.opmat('M7'), self.scal_upts[uin],
                 out=self._scal_qpts
