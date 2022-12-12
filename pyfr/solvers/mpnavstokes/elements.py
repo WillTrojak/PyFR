@@ -73,7 +73,6 @@ class MPNavierStokesElements(BaseMPFluidElements,
         # Register our flux kernels
         self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tflux')
         self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tfluxlin')
-        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.negdivconf_mp')
 
         # Handle shock capturing and Sutherland's law
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
@@ -97,181 +96,31 @@ class MPNavierStokesElements(BaseMPFluidElements,
         c, l = 'curved', 'linear'
         r, s = self._mesh_regions, self._slice_mat
         av = self.artvisc
-        kernel = self._be.kernel
 
         if c in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_curved'] = lambda uin: kernel(
+            self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
                 'tflux', tplargs=tplargs, dims=[self.nupts, r[c]],
-                u=s(self.scal_upts[uin], c), grad=s(self._vect_upts_cpy, c),
-                f=s(self._vect_upts, c), artvisc=s(av, c), 
-                smats=self.curved_smat_at('upts')
+                u=s(self.scal_upts[uin], c), f=s(self._vect_upts, c),
+                artvisc=s(av, c), smats=self.curved_smat_at('upts')
             )
         elif c in r:
-            self.kernels['tdisf_curved'] = lambda: kernel(
+            self.kernels['tdisf_curved'] = lambda: self._be.kernel(
                 'tflux', tplargs=tplargs, dims=[self.nqpts, r[c]],
-                u=s(self._scal_qpts, c), grad=s(self._vect_qpts_cpy, c),
-                f=s(self._vect_qpts, c), artvisc=s(av, c), 
-                smats=self.curved_smat_at('qpts')
+                u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
+                artvisc=s(av, c), smats=self.curved_smat_at('qpts')
             )
 
         if l in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_linear'] = lambda uin: kernel(
+            self.kernels['tdisf_linear'] = lambda uin: self._be.kernel(
                 'tfluxlin', tplargs=tplargs, dims=[self.nupts, r[l]],
-                u=s(self.scal_upts[uin], l), grad=s(self._vect_upts_cpy, l),
-                f=s(self._vect_upts, l), artvisc=s(av, l), 
-                verts=self.ploc_at('linspts', l), upts=self.upts
+                u=s(self.scal_upts[uin], l), f=s(self._vect_upts, l),
+                artvisc=s(av, l), verts=self.ploc_at('linspts', l),
+                upts=self.upts
             )
         elif l in r:
-            self.kernels['tdisf_linear'] = lambda: kernel(
+            self.kernels['tdisf_linear'] = lambda: self._be.kernel(
                 'tfluxlin', tplargs=tplargs, dims=[self.nqpts, r[l]],
-                u=s(self._scal_qpts, l), grad=s(self._vect_qpts_cpy, l),
-                f=s(self._vect_qpts, l), artvisc=s(av, l), 
-                verts=self.ploc_at('linspts', l), upts=self.qpts
+                u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
+                artvisc=s(av, l), verts=self.ploc_at('linspts', l),
+                upts=self.qpts
             )
-
-        # What the source term expressions (if any) are a function of
-        plocsrc = self._ploc_in_src_exprs
-
-        # Source term kernel arguments
-        srctplargs = {
-            'ndims': self.ndims,
-            'nvars': self.nvars,
-            'nspec': self.nspec,
-            'srcex': self._src_exprs
-        }
-
-        # Transformed to physical divergence kernel + source term
-        plocupts = self.ploc_at('upts') if plocsrc else None
-
-        self.kernels['copy_soln'] = lambda uin: kernel(
-            'copy', self._scal_upts_cpy, self.scal_upts[uin]
-        )
-
-        if 'fraction' in self.antialias:
-            self._fraction_aa_kernels(nonce, srctplargs)
-            self.kernels['negdivconf_mp'] = lambda fout: kernel(
-                'negdivconf_mp_aa', tplargs=srctplargs, 
-                dims=[self.nupts, self.neles], tdivtconf=self.scal_upts[fout], 
-                rcpdjac=self.rcpdjac_at('upts'), mat=self._scal_upts_ugrad,
-                ploc=plocupts, u=self._scal_upts_cpy
-            )
-        else:
-            self.kernels['negdivconf_mp'] = lambda fout: kernel(
-                'negdivconf_mp', tplargs=srctplargs, 
-                dims=[self.nupts, self.neles], tdivtconf=self.scal_upts[fout], 
-                rcpdjac=self.rcpdjac_at('upts'), ploc=plocupts, 
-                u=self._scal_upts_cpy, grad=self._vect_upts_cpy,
-            )
-
-        # Re-register kernels for gradient calcs
-        if self.basis.order > 0:
-            self.kernels['tgradpcoru_upts'] = lambda uin: kernel(
-                'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin],
-                out=self._vect_upts_cpy
-            )
-
-        self.kernels['tgradcoru_upts'] = lambda: kernel(
-            'mul', self.opmat('M6'), self._vect_fpts.slice(0, self.nfpts),
-            out=self._vect_upts_cpy, beta=float(self.basis.order > 0)
-        )
-
-        if c in r:
-            self.kernels['gradcoru_upts_curved'] = lambda: kernel(
-                'gradcoru', tplargs=tplargs, dims=[self.nupts, r[c]],
-                gradu=s(self._vect_upts_cpy, c), 
-                smats=self.curved_smat_at('upts'),
-                rcpdjac=self.rcpdjac_at('upts', c)
-            )
-
-        if l in r:
-            self.kernels['gradcoru_upts_linear'] = lambda: kernel(
-                'gradcorulin', tplargs=tplargs, dims=[self.nupts, r[l]],
-                gradu=s(self._vect_upts_cpy, l),
-                upts=self.upts, verts=self.ploc_at('linspts', l)
-            )
-
-        def gradcoru_fpts():
-            nupts, nfpts = self.nupts, self.nfpts
-            vupts, vfpts = self._vect_upts_cpy, self._vect_fpts
-
-            # Exploit the block-diagonal form of the operator
-            muls = [kernel('mul', self.opmat('M0'),
-                           vupts.slice(i*nupts, (i + 1)*nupts),
-                           vfpts.slice(i*nfpts, (i + 1)*nfpts))
-                    for i in range(self.ndims)]
-
-            return self._be.unordered_meta_kernel(muls)
-
-        self.kernels['gradcoru_fpts'] = gradcoru_fpts
-
-        if 'flux' in self.antialias and self.basis.order > 0:
-            def gradcoru_qpts():
-                nupts, nqpts = self.nupts, self.nqpts
-                vupts, vqpts = self._vect_upts_cpy, self._vect_qpts_cpy
-
-                # Exploit the block-diagonal form of the operator
-                muls = [self._be.kernel('mul', self.opmat('M7'),
-                                        vupts.slice(i*nupts, (i + 1)*nupts),
-                                        vqpts.slice(i*nqpts, (i + 1)*nqpts))
-                        for i in range(self.ndims)]
-
-                return self._be.unordered_meta_kernel(muls)
-
-            self.kernels['gradcoru_qpts'] = gradcoru_qpts
-
-    def _fraction_aa_kernels(self, nonce, tplargs):
-        kern_path = 'pyfr.solvers.mpnavstokes.kernels.'
-        self._be.pointwise.register(kern_path + 'negdivconf_mp_aa')
-        self._be.pointwise.register(kern_path + 'ugrad_copy')
-        self._be.pointwise.register(kern_path + 'frac_matdiv')
-
-        kernel = self._be.kernel
-        # Allocate extra memory for fraction material derivative
-        tags = {'align'}
-        ext = nonce + 'vect_upts_ugrad'
-        self._vect_upts_ugrad = self._be.matrix((self.ndims, self.nupts, 
-                                                 self.nspec + self.ndims, 
-                                                 self.neles),
-                                                 tags=tags, extent=ext)
-        ext = nonce + 'vect_qpts_ugrad'
-        self._vect_qpts_ugrad = self._be.matrix((self.ndims, self.nqpts, 
-                                                 self.nspec + self.ndims,
-                                                 self.neles),
-                                                 tags=tags, extent=ext)
-        ext = nonce + 'scal_upts_ugrad'
-        self._scal_upts_ugrad = self._be.matrix((self.nupts, self.nspec - 1, 
-                                                 self.neles),                          
-                                                 tags=tags, extent=ext)
-        ext = nonce + 'scal_qpts_ugrad'
-        self._scal_qpts_ugrad = self._be.matrix((self.nqpts, self.nspec - 1,
-                                                 self.neles),
-                                                 tags=tags, extent=ext)
-
-        self.kernels['ugrad_copy'] = lambda uin: kernel(
-            'ugrad_copy', tplargs=tplargs, dims=[self.nupts, self.neles],
-            grad=self._vect_upts_cpy, ugrad=self._vect_upts_ugrad
-        )
-
-        def ugradcoru_qpts():
-            nupts, nqpts = self.nupts, self.nqpts
-            vupts, vqpts = self._vect_upts_ugrad, self._vect_qpts_ugrad
-
-            # Exploit the block-diagonal form of the operator
-            muls = [self._be.kernel('mul', self.opmat('M7'),
-                                    vupts.slice(i*nupts, (i + 1)*nupts),
-                                    vqpts.slice(i*nqpts, (i + 1)*nqpts))
-                    for i in range(self.ndims)]
-
-            return self._be.unordered_meta_kernel(muls)
-        self.kernels['ugradcoru_qpts'] = ugradcoru_qpts
-
-        self.kernels['frac_matdiv'] = lambda uin: kernel(
-            'frac_matdiv', tplargs=tplargs, dims=[self.nqpts, self.neles],
-            ugrad=self._vect_qpts_ugrad, u=self._scal_qpts, 
-            mat=self._scal_qpts_ugrad
-        )
-
-        self.kernels['matd_proj'] =  lambda uin: kernel(
-            'mul', self.opmat('M8'), self._scal_qpts_ugrad,
-            out=self._scal_upts_ugrad
-        )

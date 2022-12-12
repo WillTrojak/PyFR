@@ -26,7 +26,7 @@
 % if i <= nspec + ndims:
     tdivtconf[${i}] = -rcpdjac*tdivtconf[${i}] + ${ex};
 % else:
-    tdivtconf[${i}] = -(rcpdjac*tdivtconf[${i}] - inv_rho*u[${i}]*divu) + ${ex};
+    // tdivtconf[${i}] = -(rcpdjac*tdivtconf[${i}] - inv_rho*u[${i}]*divu) + ${ex};
 % endif
 % endfor
 </%pyfr:kernel>

@@ -33,9 +33,4 @@
     f[${i}][${ndims + nspec}] = (E + p)*v[${i}];
 % endfor
 
-    // Species flux (zeroed as set in negdivconf)
-% for i, j in pyfr.ndrange(ndims, nspec-1):
-    f[${i}][${j + nspec + ndims + 1}] = s[${j + nspec + ndims + 1}]*v[${i}];
-% endfor
-
 </%pyfr:macro>

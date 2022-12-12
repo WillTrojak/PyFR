@@ -16,10 +16,8 @@ class BaseMPFluidElements:
     def privarmap(cls, cfg, ndims):
         ns = cfg.getint('solver', 'species')
         m = defaultdict(lambda: None)
-        m |= {2: ([f'rho{i}' for i in range(ns)] + ['u', 'v', 'p'] +
-                  [f'alpha{i}' for i in range(ns - 1)]),
-              3: ([f'rho{i}' for i in range(ns)] + ['u', 'v', 'w', 'p'] +
-                  [f'alpha{i}' for i in range(ns - 1)]),
+        m |= {2: ([f'a{i}rho{i}' for i in range(ns)] + ['u', 'v', 'p']),
+              3: ([f'a{i}rho{i}' for i in range(ns)] + ['u', 'v', 'w', 'p']),
              }
         return m[ndims]
 
@@ -28,11 +26,9 @@ class BaseMPFluidElements:
         ns = cfg.getint('solver', 'species')
         m = defaultdict(lambda: None)
         m |= {2: ([f'a{i}rho{i}' for i in range(ns)] + 
-                  ['rhou', 'rhov', 'E'] +
-                  [f'alpha{i}' for i in range(ns - 1)]),
+                  ['rhou', 'rhov', 'E']),
               3: ([f'a{i}rho{i}' for i in range(ns)] + 
-                  ['rhou', 'rhov', 'rhow', 'E'] +  
-                  [f'alpha{i}' for i in range(ns - 1)]),
+                  ['rhou', 'rhov', 'rhow', 'E']),
              }
         return m[ndims]
 
@@ -44,12 +40,10 @@ class BaseMPFluidElements:
     def visvarmap(cls, cfg, ndims):
         ns = cfg.getint('solver', 'species')
         m = defaultdict(lambda: None)
-        m |= {2: [(f'fdensity_{i}', [f'rho{i}']) for i in range(ns)] +
-                 [(f'fraction_{i}', [f'alpha{i}']) for i in range(ns-1)] +
+        m |= {2: [(f'density_{i}', [f'a{i}rho{i}']) for i in range(ns)] +
                  [('velocity', ['u', 'v']),
                   ('pressure', ['p'])],
-              3: [(f'fdensity_{i}', [f'rho{i}']) for i in range(ns)] + 
-                 [(f'fraction_{i}', [f'alpha{i}']) for i in range(ns-1)] + 
+              3: [(f'density_{i}', [f'a{i}rho{i}']) for i in range(ns)] + 
                  [('velocity', ['u', 'v', 'w']),
                   ('pressure', ['p'])],
              }
@@ -58,40 +52,31 @@ class BaseMPFluidElements:
     @staticmethod
     def pri_to_con(pris, cfg):
         ns = cfg.getint('solver', 'species')
-
-        alpha = np.vstack((pris[1-ns:], [1 - sum(pris[1-ns:])]))
-        if alpha.ndim == 2:
-            alpha = [a*np.ones_like(pris[0]) for a in alpha]
-        
-        p = pris[-ns]
-        arho = [alpha[i]*pris[i] for i in range(ns)]
+        p = pris[-1]
+        arho = pris[:ns]
         rho = sum(arho)
 
         # Multiply velocity components by rho
-        rhovs = [rho*c for c in pris[ns:-ns]]
+        rhovs = [rho*c for c in pris[ns:-1]]
 
         # Compute the energy
         cp = sum(arho[i]*cfg.getfloat('constants', f'cp{i}') for i in range(ns))
         cv = sum(arho[i]*cfg.getfloat('constants', f'cv{i}') for i in range(ns))
         gamma = cp / cv
 
-        E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[ns:-ns])
+        E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[ns:-1])
 
-
-        return np.vstack((arho, rhovs, [E], alpha[:ns-1]))
+        return np.vstack((arho, rhovs, [E]))
 
     @staticmethod
     def con_to_pri(cons, cfg):
         ns = cfg.getint('solver', 'species')
-        E = cons[-ns]
-        alpha = np.vstack((cons[1-ns:], [1 - sum(cons[1-ns:])]))
+        E = cons[-1]
         arho = cons[:ns]
         rho = sum(arho)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            Rho = np.where(alpha != 0, arho/alpha, 0)
 
         # Divide momentum components by rho
-        vs = [rhov/rho for rhov in cons[ns:-ns]]
+        vs = [rhov/rho for rhov in cons[ns:-1]]
 
         # Compute the pressure
         cp = sum(arho[i]*cfg.getfloat('constants', f'cp{i}') for i in range(ns))
@@ -99,28 +84,7 @@ class BaseMPFluidElements:
         gamma = cp / cv
         p = (E - 0.5*rho*sum(v*v for v in vs))*(gamma - 1)
 
-        return np.vstack((Rho, vs, [p], alpha[:ns-1]))
-
-    @staticmethod
-    def con_to_plot(cons, cfg):
-        ns = cfg.getint('solver', 'species')
-        E = cons[-ns]
-        alpha = np.vstack((cons[1-ns:], [1 - sum(cons[1-ns:])]))
-        arho = cons[:ns]
-        rho = sum(arho)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            Rho = np.where(alpha != 0, arho/alpha, 0)
-
-        # Divide momentum components by rho
-        vs = [rhov/rho for rhov in cons[ns:-ns]]
-
-        # Compute the pressure
-        cp = sum(arho[i]*cfg.getfloat('constants', f'cp{i}') for i in range(ns))
-        cv = sum(arho[i]*cfg.getfloat('constants', f'cv{i}') for i in range(ns))
-        gamma = cp / cv
-        p = (E - 0.5*rho*sum(v*v for v in vs))*(gamma - 1)
-
-        return np.vstack((arho, vs, [p], alpha[:ns-1]))
+        return np.vstack((arho, vs, [p]))
 
     @staticmethod
     def validate_formulation(ctrl):
