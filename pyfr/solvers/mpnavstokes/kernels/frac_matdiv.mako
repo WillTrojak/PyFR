@@ -2,7 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <%pyfr:kernel name='frac_matdiv' ndim='2'
-              ugrad='in fpdtype_t[${str(ndims)}][${str(nspec+ndims)}]'
+              ugrad='in fpdtype_t[${str(ndims)}][${str(nspec + ndims)}]'
               u='in fpdtype_t[${str(nvars)}]'
               mat='out fpdtype_t[${str(nspec-1)}]'>
     fpdtype_t inv_rho = 1/(${' + '.join('u[{i}]'.format(i=i) 
@@ -18,7 +18,7 @@
     ugradrho *= inv_rho;
     fpdtype_t divu = (divrhou - ugradrho)*inv_rho;
 
-% for i in range(nspec-1):
-    mat[${nspec - 1 - i}] = u[${nvars - i}]*divu;
+% for i in range(nspec - 1):
+    mat[${i}] = u[${nspec + ndims + 1 + i}]*divu;
 % endfor
 </%pyfr:kernel>
