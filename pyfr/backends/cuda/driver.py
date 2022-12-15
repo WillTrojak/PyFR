@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
-
-from ctypes import (POINTER, Structure, addressof, byref, c_char, c_char_p,
-                    c_float, c_int, c_size_t, c_uint, c_ulonglong, c_void_p)
+from ctypes import (POINTER, Structure, addressof, byref, create_string_buffer,
+                    c_char, c_char_p, c_float, c_int, c_size_t, c_uint,
+                    c_ulonglong, c_void_p)
+from uuid import UUID
 
 import numpy as np
 
@@ -135,7 +135,7 @@ class CUDAWrappers(LibWrapper):
     _functions = [
         (c_int, 'cuInit', c_int),
         (c_int, 'cuDeviceGet', POINTER(c_int), c_int),
-        (c_int, 'cuDeviceGetCount',  POINTER(c_int)),
+        (c_int, 'cuDeviceGetCount', POINTER(c_int)),
         (c_int, 'cuDeviceGetAttribute', POINTER(c_int), c_int, c_int),
         (c_int, 'cuDevicePrimaryCtxRetain', POINTER(c_void_p), c_int),
         (c_int, 'cuDevicePrimaryCtxRelease', c_int),
@@ -171,16 +171,14 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuGraphDestroy', c_void_p),
         (c_int, 'cuGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t),
-        (c_int, 'cuGraphAddEventRecordNode', POINTER(c_void_p), c_void_p,
-          POINTER(c_void_p), c_size_t, c_void_p),
         (c_int, 'cuGraphAddKernelNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, POINTER(CUDAKernelNodeParams)),
         (c_int, 'cuGraphAddChildGraphNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, c_void_p),
         (c_int, 'cuGraphAddMemcpyNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, POINTER(CUDAMemcpy3D), c_void_p),
-        (c_int, 'cuGraphInstantiateWithFlags', POINTER(c_void_p), c_void_p,
-         c_ulonglong),
+        (c_int, 'cuGraphInstantiate', POINTER(c_void_p), c_void_p, 
+         POINTER(c_void_p), c_void_p, c_size_t),
         (c_int, 'cuGraphExecKernelNodeSetParams', c_void_p, c_void_p,
          POINTER(CUDAKernelNodeParams)),
         (c_int, 'cuGraphExecDestroy', c_void_p),
@@ -188,7 +186,7 @@ class CUDAWrappers(LibWrapper):
     ]
 
     def _transname(self, name):
-        return name[:-3] if name.endswith('_v2') else name
+        return name.removesuffix('_v2')
 
 
 class _CUDABase:
@@ -364,13 +362,6 @@ class CUDAGraph(_CUDABase):
 
         return ptr.value
 
-    def add_event_record(self, event, deps=None):
-        ptr = c_void_p()
-        self.cuda.lib.cuGraphAddEventRecordNode(ptr, self,
-                                                *self._make_deps(deps), event)
-
-        return ptr.value
-
     def add_kernel(self, kparams, deps=None):
         ptr = c_void_p()
         self.cuda.lib.cuGraphAddKernelNode(ptr, self, *self._make_deps(deps),
@@ -420,7 +411,8 @@ class CUDAExecGraph(_CUDABase):
 
     def __init__(self, cuda, graph):
         ptr = c_void_p()
-        cuda.lib.cuGraphInstantiateWithFlags(ptr, graph, 0)
+        ptr_rtn = c_void_p()
+        cuda.lib.cuGraphInstantiate(ptr, graph, ptr_rtn, None, 0)
 
         super().__init__(cuda, ptr)
 

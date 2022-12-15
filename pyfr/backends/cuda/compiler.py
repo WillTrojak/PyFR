@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ctypes import (POINTER, create_string_buffer, c_char_p, c_int, c_size_t,
                     c_void_p)
 import shlex
@@ -43,9 +41,7 @@ class NVRTCWrappers(LibWrapper):
         (c_int, 'nvrtcGetPTXSize', c_void_p, POINTER(c_size_t)),
         (c_int, 'nvrtcGetPTX', c_void_p, c_char_p),
         (c_int, 'nvrtcGetProgramLogSize', c_void_p, POINTER(c_size_t)),
-        (c_int, 'nvrtcGetProgramLog', c_void_p, c_char_p),
-        (c_int, 'nvrtcGetCUBINSize', c_void_p, POINTER(c_size_t)),
-        (c_int, 'nvrtcGetCUBIN', c_void_p, c_char_p)
+        (c_int, 'nvrtcGetProgramLog', c_void_p, c_char_p)
     ]
 
 
@@ -83,18 +79,12 @@ class NVRTC:
 
             # Query the CUBIN code size
             codesz = c_size_t()
-            self.lib.nvrtcGetCUBINSize(prog, codesz)
 
-            # If that worked, fetch the CUBIN itself
-            if codesz.value > 0:
-                cucode = create_string_buffer(codesz.value)
-                self.lib.nvrtcGetCUBIN(prog, cucode)
-            # Else, assume the compiled code is PTX
-            else:
-                self.lib.nvrtcGetPTXSize(prog, codesz)
+            # For CUDA 10 assume the compiled code is PTX
+            self.lib.nvrtcGetPTXSize(prog, codesz)
 
-                cucode = create_string_buffer(codesz.value)
-                self.lib.nvrtcGetPTX(prog, cucode)
+            cucode = create_string_buffer(codesz.value)
+            self.lib.nvrtcGetPTX(prog, cucode)
         finally:
             # Destroy the program
             self.lib.nvrtcDestroyProgram(prog)
@@ -112,7 +102,7 @@ class SourceModule:
 
         # Compiler flags
         flags = [
-            f'--gpu-architecture=sm_{cmajor}{cminor}',
+            f'--gpu-architecture=compute_{cmajor}{cminor}',
             '--ftz=true',
             '--fmad=true'
         ]

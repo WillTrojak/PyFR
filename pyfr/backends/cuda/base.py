@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 from pyfr.backends.base import BaseBackend
@@ -22,7 +20,8 @@ class CUDABackend(BaseBackend):
 
         # Get the desired CUDA device
         devid = cfg.get('backend-cuda', 'device-id', 'local-rank')
-        if not re.match(r'(round-robin|local-rank|\d+)$', devid):
+
+        if not re.match(rf'(round-robin|local-rank)$', devid):
             raise ValueError('Invalid device-id')
 
         # For round-robin try each device until we find one that works
