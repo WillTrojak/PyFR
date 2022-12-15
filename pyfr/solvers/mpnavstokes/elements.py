@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import numpy as np
 
 from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionElements
@@ -11,57 +9,41 @@ class MPNavierStokesElements(BaseMPFluidElements,
     # Use the density field for shock sensing
     shockvar = 'rho'
 
-    @property
-    def _scratch_bufs(self):
-
-        bufs = {'scal_fpts', 'vect_fpts', 'vect_upts', 'vect_upts_cpy',
-                'scal_upts_cpy'}
-
-        if 'flux' in self.antialias:
-            bufs |= {'vect_qpts_cpy', 'scal_qpts', 'vect_qpts'}
-        elif 'fraction' in self.antialias:
-            bufs |= {'scal_qpts'}
-
-        return bufs
-
     @staticmethod
     def grad_con_to_pri(cons, grad_cons, cfg):
         ns = cfg.getint('solver', 'species')
 
         arho, grad_arho = cons[:ns], grad_cons[:ns]
-        rhouvw, grad_rhouvw = cons[ns:-ns], grad_cons[ns:-ns]
-        rho, grad_rho = sum(arho), sum(grad_arho)
+        rhouvw, grad_rhouvw = cons[ns:-1], grad_cons[ns:-1]
+        rho, grad_rho = np.sum(arho, axis=0), np.sum(grad_arho, axis=0)
 
-        E, grad_E = cons[-ns], grad_cons[-ns]
-
-        alpha = np.vstack((cons[1-ns:], [1 - sum(cons[1-ns:])]))
-        grad_a = np.vstack((grad_cons[1-ns:], [-sum(grad_cons[1-ns:])]))
+        E, grad_E = cons[-1], grad_cons[-1]
 
         # Divide momentum components by ρ
         uvw = [rhov/rho for rhov in rhouvw]
 
-        # Compute the specific energy
-        gamma = [cfg.getfloat('constants', f'gamma{i}') for i in range(ns)]
+        # Compute the gamma and its gradient
+        cp = sum(arho[i]*cfg.getfloat('constants', f'cp{i}') for i in range(ns))
+        cv = sum(arho[i]*cfg.getfloat('constants', f'cv{i}') for i in range(ns))
+        grad_cp = np.sum([grad_arho[i]*cfg.getfloat('constants', f'cp{i}') for i in range(ns)], axis=0)
+        grad_cv = np.sum([grad_arho[i]*cfg.getfloat('constants', f'cv{i}') for i in range(ns)], axis=0)
+        gamma = cp / cv
+        grad_gamma = (grad_cp*cv - cp*grad_cv)/(cv*cv)
+
+        # Compute internal energy
         rhoe = (E - 0.5*rho*sum(v*v for v in uvw))
 
-        # Velocity gradients: ∇u⃗ = 1/ρ·[∇(ρu⃗) - u⃗ ⊗ ∇ρ]
+        # Velocity gradients: ∇u = 1/ρ·[∇(ρu) - u ⊗ ∇ρ]
         grad_uvw = [(grad_rhov - v*grad_rho) / rho
                     for grad_rhov, v in zip(grad_rhouvw, uvw)]
 
-        # Phase density gradients: grad_Rho = (grad_arho - rho*grad_a)/a
-        with np.errstate(divide='ignore', invalid='ignore'):
-            grad_Rho = np.where(alpha[:,None,...] != 0, 
-                (grad_arho - rho*grad_a)/alpha[:,None,...], 0)
-
+        # Compute gradient of pressure
         grad_p = grad_E - 0.5*(np.einsum('ijk,iljk->ljk', uvw, grad_rhouvw) +
                                np.einsum('ijk,iljk->ljk', rhouvw, grad_uvw))
-        inv_agm = 1/sum(alpha[i]/(gamma[i] - 1) for i in range(ns))
-        agm_grad = sum(grad_a[i]/(gamma[i] - 1) for i in range(ns))
-        agm_grad *= inv_agm
-        grad_p += rhoe*agm_grad
-        grad_p *= inv_agm
+        grad_p *= (gamma - 1)
+        grad_p += rhoe*grad_gamma
 
-        return np.vstack((grad_Rho, grad_uvw, [grad_p], grad_a[:ns-1]))
+        return np.vstack((grad_arho, grad_uvw, [grad_p]))
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
         super().set_backend(backend, nscalupts, nonce, linoff)

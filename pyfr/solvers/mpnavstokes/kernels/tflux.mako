@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
@@ -8,14 +7,13 @@
 <%pyfr:kernel name='tflux' ndim='2'
               u='in fpdtype_t[${str(nvars)}]'
               artvisc='in broadcast-col fpdtype_t'
-              grad='in fpdtype_t[${str(ndims)}][${str(nvars)}]'
-              f='out fpdtype_t[${str(ndims)}][${str(nvars)}]'
+              f='inout fpdtype_t[${str(ndims)}][${str(nvars)}]'
               smats='in fpdtype_t[${str(ndims)}][${str(ndims)}]'>
     // Compute the flux (F = Fi + Fv)
     fpdtype_t ftemp[${ndims}][${nvars}];
-    fpdtype_t a[${nspec}], d, p, v[${ndims}], g;
+    fpdtype_t d, p, v[${ndims}], g;
     ${pyfr.expand('inviscid_flux', 'u', 'ftemp', 'd', 'p', 'v', 'g')};
-    ${pyfr.expand('viscous_flux_add', 'u', 'grad', 'ftemp')};
+    ${pyfr.expand('viscous_flux_add', 'u', 'f', 'ftemp')};
 
     // Transform the fluxes
 % for i, j in pyfr.ndrange(ndims, nvars):

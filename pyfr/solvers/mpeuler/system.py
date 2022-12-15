@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.solvers.baseadvec import BaseAdvectionSystem
 from pyfr.solvers.mpeuler.elements import MPEulerElements
 from pyfr.solvers.mpeuler.inters import (MPEulerIntInters, MPEulerMPIInters,

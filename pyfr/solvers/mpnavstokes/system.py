@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionSystem
 from pyfr.solvers.mpnavstokes.elements import MPNavierStokesElements
 from pyfr.solvers.mpnavstokes.inters import (MPNavierStokesBaseBCInters,

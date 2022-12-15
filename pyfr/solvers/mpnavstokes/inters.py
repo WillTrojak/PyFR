@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import numpy as np
 
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
@@ -16,8 +14,10 @@ class TplargsMixin:
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
-        self._tplargs = dict(ndims=self.ndims, nvars=self.nvars, nspec=self.nspec,
-                             rsolver=rsolver, visc_corr=visc_corr,
+        nspec = self.cfg.getint('solver', 'species')
+        self._tplargs = dict(ndims=self.ndims, nvars=self.nvars, 
+                             nspec=nspec, rsolver=rsolver, 
+                             visc_corr=visc_corr,
                              shock_capturing=shock_capturing, c=self.c)
 
 
@@ -102,3 +102,7 @@ class MPNavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
                 extrns=self._external_args, entmin_lhs=self._entmin_lhs,
                 nl=self._pnorm_lhs, ul=self._scal_lhs, **self._external_vals
             )
+
+class MPNavierStokesSlpAdiaWallBCInters(MPNavierStokesBaseBCInters):
+    type = 'slp-adia-wall'
+    cflux_state = None
