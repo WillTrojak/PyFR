@@ -46,7 +46,7 @@ class BaseElements:
         self.antialias = basis.antialias
 
         # If we need quadrature points or not
-        haveqpts = set(self.antialias) in {'flux', 'surf-flux', 'fraction'}
+        haveqpts = 'flux' in self.antialias
 
         # Sizes
         self.nupts = basis.nupts
