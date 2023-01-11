@@ -44,7 +44,7 @@ class BaseElements:
         self.antialias = basis.antialias
 
         # If we need quadrature points or not
-        haveqpts = set(self.antialias) in {'flux', 'surf-flux', 'fraction'}
+        haveqpts = 'flux' in self.antialias
 
         # Sizes
         self.nupts = basis.nupts
@@ -84,7 +84,7 @@ class BaseElements:
 
         # Allocate
         self.scal_upts = np.empty((self.nupts, self.nvars, self.neles))
-        
+
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
             self.scal_upts[:, i, :] = v
