@@ -97,7 +97,7 @@ class BaseAdvectionSystem(BaseSystem):
         g1.commit()
 
         g2 = self.backend.graph()
-        g2.add_mpi_reqs(m['ent_fpts_send'])
+        g2.add_mpi_reqs(m['ent_fpts_send'] + m['ent_fpts_recv'])
 
         # Compute common entropy minima at internal/boundary interfaces
         g2.add_all(k['iint/comm_entropy'])
