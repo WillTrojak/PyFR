@@ -32,6 +32,11 @@
     f[${i}][${ndims + nspec}] = (E + p)*v[${i}];
 % endfor
 
+    // Fraction
+% for i, j in pyfr.ndrange(ndims, nspec-1):
+    f[${i}][${j + nspec + ndims + 1}] = v[${i}]*s[${j + nspec + ndims + 1}];
+% endfor
+
 </%pyfr:macro>
 
 <%pyfr:macro name='inviscid_flux_1d' params='s, f, d, p, v, g'>
@@ -64,5 +69,10 @@
 
     // Energy fluxes
     f[${ndims + nspec}] = (E + p)*v[0];
+
+    // Fraction flux
+% for i in range(nspec - 1):
+    f[${i + nspec + ndims + 1}] = v[0]*s[${i + nspec + ndims + 1}];
+% endfor
 
 </%pyfr:macro>

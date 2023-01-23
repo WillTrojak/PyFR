@@ -4,7 +4,7 @@ from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionElements
 from pyfr.solvers.mpeuler.elements import BaseMPFluidElements
 
 
-class MPNavierStokesElements(BaseMPFluidElements, 
+class MPNavierStokesElements(BaseMPFluidElements,
                              BaseAdvectionDiffusionElements):
     # Use the density field for shock sensing
     shockvar = 'rho'
@@ -55,6 +55,7 @@ class MPNavierStokesElements(BaseMPFluidElements,
         # Register our flux kernels
         self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tflux')
         self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tfluxlin')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.frac_matdiv')
 
         # Handle shock capturing and Sutherland's law
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
@@ -105,4 +106,17 @@ class MPNavierStokesElements(BaseMPFluidElements,
                 u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
                 artvisc=s(av, l), verts=self.ploc_at('linspts', l),
                 upts=self.qpts
+            )
+
+        tags = {'align'}
+        ext = nonce + 'adivu_upts'
+        self.adivu_upts = self._be.matrix((self.nupts, self.ndims, self.neles),
+                                          tags=tags, extent=ext)
+
+        self.kernels['adivu_upts'] = lambda: self._be.kernel(
+                'frac_matdiv', tplargs=tplargs,
+                dims=[self.nupts, self.neles],
+                gradu=self._vect_upts,
+                u=self.scal_upts,
+                mat=self.adivu_upts,
             )
