@@ -15,8 +15,8 @@
     ${pyfr.expand('bc_rsolve_state', 'ul', 'norm_nl', 'ur')};
 
     // Compute entropy for boundary state
-    fpdtype_t p, ad, entmin_rhs;
-    ${pyfr.expand('compute_entropy', 'ur', 'ad', 'p', 'entmin_rhs')};
+    fpdtype_t p, d, ad, entmin_rhs;
+    ${pyfr.expand('compute_entropy', 'ur', 'd', 'ad', 'p', 'entmin_rhs')};
 
     // Compute face minima (reduce with atomics)
     entmin_lhs = entmin_rhs;

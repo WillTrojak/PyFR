@@ -6,7 +6,7 @@
               u='in fpdtype_t[${str(nupts)}][${str(nvars)}]'
               entmin_int='out fpdtype_t[${str(nfaces)}]'>
     // Compute minimum entropy across element
-    fpdtype_t ui[${nvars}], ad, p, e;
+    fpdtype_t ui[${nvars}], d, ad, p, e;
 
     fpdtype_t entmin = ${inf};
     for (int i = 0; i < ${nupts}; i++)
@@ -15,7 +15,7 @@
         ui[${j}] = u[i][${j}];
         % endfor
 
-        ${pyfr.expand('compute_entropy', 'ui', 'ad', 'p', 'e')};
+        ${pyfr.expand('compute_entropy', 'ui', 'd', 'ad', 'p', 'e')};
 
         entmin = fmin(entmin, e);
     }

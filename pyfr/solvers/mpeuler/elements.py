@@ -7,7 +7,7 @@ class BaseMPFluidElements:
 
     def __init__(self, basiscls, eles, cfg):
         super().__init__(basiscls, eles, cfg)
-        
+
         self.nspec = self.cfg.getint('solver', 'species')
 
     @classmethod
@@ -23,9 +23,9 @@ class BaseMPFluidElements:
     def convarmap(cls, cfg, ndims):
         ns = cfg.getint('solver', 'species')
         m = defaultdict(lambda: None)
-        m |= {2: ([f'a{i}rho{i}' for i in range(ns)] + 
+        m |= {2: ([f'a{i}rho{i}' for i in range(ns)] +
                   ['rhou', 'rhov', 'E']),
-              3: ([f'a{i}rho{i}' for i in range(ns)] + 
+              3: ([f'a{i}rho{i}' for i in range(ns)] +
                   ['rhou', 'rhov', 'rhow', 'E']),
              }
         return m[ndims]
@@ -41,7 +41,7 @@ class BaseMPFluidElements:
         m |= {2: [(f'density_{i}', [f'a{i}rho{i}']) for i in range(ns)] +
                  [('velocity', ['u', 'v']),
                   ('pressure', ['p'])],
-              3: [(f'density_{i}', [f'a{i}rho{i}']) for i in range(ns)] + 
+              3: [(f'density_{i}', [f'a{i}rho{i}']) for i in range(ns)] +
                  [('velocity', ['u', 'v', 'w']),
                   ('pressure', ['p'])],
              }
@@ -134,7 +134,7 @@ class BaseMPFluidElements:
                                  'combination thereof.')
 
             # Minimum density/pressure constraints
-            eftplargs['ad_min'] = self.cfg.getfloat('solver-entropy-filter',
+            eftplargs['d_min'] = self.cfg.getfloat('solver-entropy-filter',
                                                     'ad-min', 1e-6)
             eftplargs['p_min'] = self.cfg.getfloat('solver-entropy-filter',
                                                    'p-min', 1e-6)
