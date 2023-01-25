@@ -71,7 +71,7 @@ class MPEulerBaseBCInters(BaseAdvectionBCInters):
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, nspec=self.nspec,
-                       rsolver=rsolver, c=self.c, bctype=self.type, 
+                       rsolver=rsolver, c=self.c, bctype=self.type,
                        ninters=self.ninters)
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
@@ -96,10 +96,9 @@ class MPEulerSupInflowBCInters(MPEulerBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        rho = [f'rho{i}' for i in range(self.nspec)]
-        alpha = [f'alpha{i}' for i in range(self.nspec - 1)]
+        arho = [f'a{i}rho{i}' for i in range(self.nspec)]
         self.c |= self._exp_opts(
-            (rho + alpha + ['p', 'u', 'v', 'w'])[:self.ndims + 2*self.nspec],
+            (arho + ['p', 'u', 'v', 'w'])[:self.ndims + 1 + self.nspec],
             lhs)
 
 
@@ -114,10 +113,9 @@ class MPEulerCharRiemInvBCInters(MPEulerBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        rho = [f'rho{i}' for i in range(self.nspec)]
-        alpha = [f'alpha{i}' for i in range(self.nspec - 1)]
+        arho = [f'a{i}rho{i}' for i in range(self.nspec)]
         self.c |= self._exp_opts(
-            (rho + alpha + ['p', 'u', 'v', 'w'])[:self.ndims + 2*self.nspec],
+            (arho + ['p', 'u', 'v', 'w'])[:self.ndims + 1 + self.nspec],
             lhs)
 
 
