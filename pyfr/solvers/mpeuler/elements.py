@@ -5,19 +5,31 @@ import numpy as np
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
-class BaseFluidElements:
+class BaseMPFluidElements:
+
+    def __init__(self, basiscls, eles, cfg):
+        super().__init__(basiscls, eles, cfg)
+
+        self.nspec = self.cfg.getint('solver', 'species')
+
     @classmethod
     def privarmap(cls, cfg, ndims):
+        ns = cfg.getint('solver', 'species')
         m = defaultdict(lambda: None)
-        m |= {2: ['rho', 'u', 'v', 'p'],
-              3: ['rho', 'u', 'v', 'w', 'p']}
+        m |= {2: ([f'a{i}rho{i}' for i in range(ns)] + ['u', 'v', 'p']),
+              3: ([f'a{i}rho{i}' for i in range(ns)] + ['u', 'v', 'w', 'p']),
+             }
         return m[ndims]
 
     @classmethod
     def convarmap(cls, cfg, ndims):
+        ns = cfg.getint('solver', 'species')
         m = defaultdict(lambda: None)
-        m |= {2: ['rho', 'rhou', 'rhov', 'E'],
-              3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
+        m |= {2: ([f'a{i}rho{i}' for i in range(ns)] +
+                  ['rhou', 'rhov', 'E']),
+              3: ([f'a{i}rho{i}' for i in range(ns)] +
+                  ['rhou', 'rhov', 'rhow', 'E']),
+             }
         return m[ndims]
 
     @classmethod
@@ -26,13 +38,14 @@ class BaseFluidElements:
 
     @classmethod
     def visvarmap(cls, cfg, ndims):
+        ns = cfg.getint('solver', 'species')
         m = defaultdict(lambda: None)
-        m |= {2: [('density', ['rho']),
-                  ('velocity', ['u', 'v']),
+        m |= {2: [(f'density_{i}', [f'a{i}rho{i}']) for i in range(ns)] +
+                 [('velocity', ['u', 'v']),
                   ('pressure', ['p'])],
-              3: [('density', ['rho']),
-                  ('velocity', ['u', 'v', 'w']),
-                  ('pressure', ['p'])]
+              3: [(f'density_{i}', [f'a{i}rho{i}']) for i in range(ns)] +
+                 [('velocity', ['u', 'v', 'w']),
+                  ('pressure', ['p'])],
              }
         return m[ndims]
 
@@ -147,7 +160,7 @@ class BaseFluidElements:
             )
 
 
-class EulerElements(BaseFluidElements, BaseAdvectionElements):
+class MPEulerElements(BaseMPFluidElements, BaseAdvectionElements):
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
 
@@ -156,8 +169,8 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
             return
 
         # Register our flux kernels
-        self._be.pointwise.register('pyfr.solvers.euler.kernels.tflux')
-        self._be.pointwise.register('pyfr.solvers.euler.kernels.tfluxlin')
+        self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.tflux')
+        self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.tfluxlin')
 
         # Template parameters for the flux kernels
         tplargs = {

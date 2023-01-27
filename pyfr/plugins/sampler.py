@@ -166,9 +166,9 @@ class SamplerPlugin(BasePlugin):
         colnames = ['t', 'x', 'y', 'z'][:self.ndims + 1]
 
         if self.fmt == 'primitive':
-            colnames += self.elementscls.privarmap[self.ndims]
+            colnames += self.elementscls.privarmap(self.cfg, self.ndims)
         else:
-            colnames += self.elementscls.convarmap[self.ndims]
+            colnames += self.elementscls.convarmap(self.cfg, self.ndims)
 
         return ','.join(colnames)
 

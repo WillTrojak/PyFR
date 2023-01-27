@@ -19,7 +19,8 @@ class ResidualPlugin(BasePlugin):
 
         # The root rank needs to open the output file
         if rank == root:
-            header = ['t'] + intg.system.elementscls.convarmap[self.ndims]
+            header = ['t'] + intg.system.elementscls.convarmap(self.cfg,
+                                                               self.ndims)
 
             # Open
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))

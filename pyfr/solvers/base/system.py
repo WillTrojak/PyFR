@@ -96,7 +96,7 @@ class BaseSystem:
 
             # Get the names of the conserved variables (fields)
             solnfields = solnsts.get('data', 'fields', '')
-            currfields = ','.join(eles[0].convarmap[eles[0].ndims])
+            currfields = ','.join(eles[0].convarmap(self.cfg, eles[0].ndims))
 
             # Ensure they match up
             if solnfields and solnfields != currfields:

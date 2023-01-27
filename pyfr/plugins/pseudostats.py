@@ -16,7 +16,8 @@ class PseudoStatsPlugin(BasePlugin):
         self.stats = []
         self.tprev = intg.tcurr
 
-        fvars = ','.join(intg.system.elementscls.convarmap[self.ndims])
+        fvars = ','.join(intg.system.elementscls.convarmap(self.cfg,
+                                                           self.ndims))
 
         # MPI info
         comm, rank, root = get_comm_rank_root()
