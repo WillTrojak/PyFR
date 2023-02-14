@@ -1,8 +1,8 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%include file='pyfr.solvers.euler.kernels.rsolvers.${rsolver}'/>
-<%include file='pyfr.solvers.euler.kernels.bcs.${bctype}'/>
+<%include file='pyfr.solvers.mpeuler.kernels.rsolvers.${rsolver}'/>
+<%include file='pyfr.solvers.mpeuler.kernels.bcs.${bctype}'/>
 
 <%pyfr:kernel name='bccflux' ndim='1'
               ul='inout view fpdtype_t[${str(nvars)}]'

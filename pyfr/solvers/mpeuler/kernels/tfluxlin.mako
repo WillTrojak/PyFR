@@ -1,7 +1,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.baseadvec.kernels.smats'/>
-<%include file='pyfr.solvers.euler.kernels.flux'/>
+<%include file='pyfr.solvers.mpeuler.kernels.flux'/>
 
 <%pyfr:kernel name='tfluxlin' ndim='2'
               u='in fpdtype_t[${str(nvars)}]'

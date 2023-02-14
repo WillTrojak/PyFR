@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%include file='pyfr.solvers.euler.kernels.bcs.${bctype}'/>
-<%include file='pyfr.solvers.euler.kernels.entropy'/>
+<%include file='pyfr.solvers.mpeuler.kernels.bcs.${bctype}'/>
+<%include file='pyfr.solvers.mpeuler.kernels.entropy'/>
 
 <%pyfr:kernel name='bccent' ndim='1'
               ul='in view fpdtype_t[${str(nvars)}]'

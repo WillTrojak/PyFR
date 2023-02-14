@@ -31,7 +31,7 @@ class BaseElements:
         self.kernels = {}
 
         # Check the dimensionality of the problem
-        if ndims != basiscls.ndims or ndims not in self.privarmap:
+        if ndims != basiscls.ndims:
             raise ValueError('Invalid element matrix dimensions')
 
         # Determine the number of dynamical variables

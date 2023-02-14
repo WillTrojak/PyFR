@@ -1,10 +1,8 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%pyfr:macro name='enthalpy' params='q, T, h'>
+<% t_kmax = 3 %>
 
-</%pyfr:macro>
-
-<%pyfr:macro name='temperature' params='q, rho, rhoe, T, p, t_kmax'>
+<%pyfr:macro name='temperature' params='q, rho, rhoe, T, p'>
     fpdtype_t rhoe_dash, rhoh, de;
 
     p = ${s['Rconst']}*T*(${' + '.join(f'q[{ndims + 1 + i}]' for i in range(nspec))});
@@ -14,9 +12,9 @@
 
     rhoh = ${s['R0']*s['M0']}*q[${ndims + 1}]*${pyfr.polyval(s['Hr0'], 'T')};
 % for i in range(1, nspec):
-    rhoh += ${s[f'R{i}']*s[f'M{i}']}*q[{ndims + 1 + i}]*${pyfr.polyval(s[f'Hr{i}'], 'T')};
+    rhoh += ${s[f'R{i}']*s[f'M{i}']}*q[${ndims + 1 + i}]*${pyfr.polyval(s[f'Hr{i}'], 'T')};
 % endfor
-    rhoe_dash = rhoh - p
+    rhoe_dash = rhoh - p;
 
     de = ${s[f'R0']*s[f'M0']}*q[${ndims + 1}]*${pyfr.polyval(s[f'Cv0'], 'T')};
 % for i in range(1, nspec):
@@ -26,23 +24,23 @@
     T += (rhoe - rhoe_dash) / de;
     p = ${s['Rconst']}*T*(${' + '.join(f'q[{ndims + 1 + i}]' for i in range(nspec))});
 % endfor
+
 </%pyfr:macro>
 
-<%pyfr:macro name='inviscid_flux' params='s, f, p, T, rho, v'>
-    rho = ${' + '.join(f"({s[f'M{i}']}*s[{ndims + 1 + i}])" for i in range(nspec))};
-    fpdtype_t invrho = 1.0/rho, E = s[${nvars - 1}];
+<%pyfr:macro name='inviscid_flux' params='q, f, p, T, rho, v'>
+    rho = ${' + '.join(f"({s[f'M{i}']}*q[{ndims + 1 + i}])" for i in range(nspec))};
+    fpdtype_t invrho = 1/rho, E = q[${ndims}];
 
-    fpdtype_t rhoe = E - 0.5*invrho*${pyfr.dot('s[{i}]', i=ndims)};
+    fpdtype_t rhoe = E - 0.5*invrho*${pyfr.dot('q[{i}]', i=ndims)};
 
     // Linear initial guess for temperature based T = e / cv(298.15K)
-    T = rhoe / (${' + '.join(f"{s[f'Cv{i}_ref']*s[f'M{i}']}*s[{ndims + 1 + i}]") for i in range(nspec)});
-
-    ${pyfr.expand('temperature', 'rho', 'rhoe', 'T', 'p', t_kmax=3)};
+    T = rhoe / (${' + '.join(f"{s[f'Cv_ref{i}']*s[f'M{i}']}*q[{ndims + 1 + i}]" for i in range(nspec))});
+    ${pyfr.expand('temperature', 'q', 'rho', 'rhoe', 'T', 'p')};
 
     // Compute the velocities
     fpdtype_t rhov[${ndims}];
 % for i in range(ndims):
-    rhov[${i}] = s[${i + 1}];
+    rhov[${i}] = q[${i}];
     v[${i}] = invrho*rhov[${i}];
 % endfor
 
@@ -58,31 +56,30 @@
 
     // Concentration flux
 % for i, j in pyfr.ndrange(ndims, nspec):
-    f[${i}][${ndims + 1 + j}] = v[${i}]*s[${ndims + 1 + j}];
+    f[${i}][${ndims + 1 + j}] = v[${i}]*q[${ndims + 1 + j}];
 % endfor
-
 </%pyfr:macro>
 
-<%pyfr:macro name='inviscid_flux_1d' params='s, f, p, T, rho, v'>
-    rho = ${' + '.join(f"({s[f'M{i}']}*s[{ndims + 1 + i}])" for i in range(nspec))};
-    fpdtype_t invrho = 1.0/rho, E = s[${nvars - 1}];
+<%pyfr:macro name='inviscid_flux_1d' params='q, f, p, T, rho, v'>
+    rho = ${' + '.join(f"({s[f'M{i}']}*q[{ndims + 1 + i}])" for i in range(nspec))};
+    fpdtype_t invrho = 1/rho, E = q[${ndims}];
 
-    fpdtype_t rhoe = E - 0.5*invrho*${pyfr.dot('s[{i}]', i=ndims)};
+    fpdtype_t rhoe = E - 0.5*invrho*${pyfr.dot('q[{i}]', i=ndims)};
 
     // Linear initial guess for temperature based T = e / cv(298.15K)
-    T = rhoe / (${' + '.join(f"{s[f'Cv{i}_ref']*s[f'M{i}']}*s[{ndims + 1 + i}]") for i in range(nspec)});
+    T = rhoe / (${' + '.join(f"{s[f'Cv_ref{i}']*s[f'M{i}']}*q[{ndims + 1 + i}]" for i in range(nspec))});
 
-    ${pyfr.expand('temperature', 'rho', 'rhoe', 'T', 'p', t_kmax=3)};
+    ${pyfr.expand('temperature', 'q', 'rho', 'rhoe', 'T', 'p')};
 
     // Compute the velocities
 % for i in range(ndims):
-    v[${i}] = invrho*s[${i}];
+    v[${i}] = invrho*q[${i}];
 % endfor
 
     // Momentum fluxes
-    f[0] = s[0]*v[0] + p;
+    f[0] = q[0]*v[0] + p;
 % for i in range(1, ndims):
-    f[${i}] = s[0]*v[${i}];
+    f[${i}] = q[0]*v[${i}];
 % endfor
 
     // Energy flux
@@ -90,7 +87,6 @@
 
     // Concentration flux
 % for i in range(ndims + 1, ndims + 1 + nspec):
-    f[${i}] = v[0]*s[${i}];
+    f[${i}] = v[0]*q[${i}];
 % endfor
-
 </%pyfr:macro>

@@ -45,20 +45,18 @@ class BaseMPFluidElements:
             spec.append(get_species(species, Tref))
 
         arho, p = pris[-ns:], pris[-(ns + 1)]
-        M = np.array([[s.m_weight] for s in spec])
-        rho = sum(arho)
-        c = (1/M)*arho
+        rho = np.sum(arho, axis=0)
+        C = [ar / s.m_weight for ar, s in zip(arho, spec)]
 
         # Multiply velocity components by rho
         rhovs = [rho*v for v in pris[:-(ns + 1)]]
 
         # Compute the energy
-        R_inv = np.array([[1/s.R] for s in spec])
-        T = R_inv * c * p
+        T = p / np.sum([c*s.R0 for c, s in zip(C, spec)], axis=0)
         rhoh = sum(r*s.R*np.polyval(s.Hr, T) for r, s in zip(arho, spec))
-        E = rhoh - p + 0.5*rho*sum(v*v for v in pris[:-(ns + 1)])
+        E = np.array([rhoh - p + 0.5*rho*sum(v*v for v in pris[:-(ns + 1)])])
 
-        return rhovs + [E] + c
+        return rhovs + [E] + C
 
     @staticmethod
     def con_to_pri(cons, cfg):
@@ -73,8 +71,8 @@ class BaseMPFluidElements:
 
         C, E = cons[-ns:], cons[-(ns + 1)]
         M = np.array([[s.m_weight] for s in spec])
-        arho = M*C
-        rho = sum(arho)
+        arho = [c * s.m_weight for c, s in zip(C, spec)]
+        rho = np.sum(arho, axis=0)
 
         # Divide momentum components by rho
         vs = [rhov/rho for rhov in cons[:-(ns + 1)]]
@@ -83,7 +81,7 @@ class BaseMPFluidElements:
         rhoe = E - 0.5*rho*sum(v*v for v in vs)
 
         # Initial linear guess for temperature
-        Cv_ref = sum(s.Cv_ref*s.m_weight*c for c, s in zip(C, spec))
+        Cv_ref = np.sum([s.Cv_ref*s.m_weight*c for c, s in zip(C, spec)], axis=0)
         T = rhoe / Cv_ref
 
         # Newton solve for temperature
@@ -99,7 +97,7 @@ class BaseMPFluidElements:
         p = (sum(s.m_weight*s.R*c*np.polyval(s.Hr, T) for c, s in zip(C, spec))
              - rhoe)
 
-        return vs + [p] + arho
+        return np.vstack((vs, [p], arho))
 
     @staticmethod
     def temperature(rhoe, spec, C, kmax=5):
@@ -217,7 +215,7 @@ class MPEulerElements(BaseMPFluidElements, BaseAdvectionElements):
         Tref = self.cfg.getfloat('species', 'Tref')
         spec = []
         for k in self.cfg.items('species', prefix='spec-'):
-            species = self.cfg.getliteral('species', k)
+            species = self.cfg.get('species', k)
             spec.append(get_species(species, Tref))
 
         s_dict = {'Rconst': BaseStoredNASAPoly.R0}
@@ -229,6 +227,7 @@ class MPEulerElements(BaseMPFluidElements, BaseAdvectionElements):
             'ndims': self.ndims,
             'nvars': self.nvars,
             'nverts': len(self.basis.linspts),
+            'nspec': self.nspec,
             'c': self.cfg.items_as('constants', float),
             's': s_dict,
             'jac_exprs': self.basis.jac_exprs

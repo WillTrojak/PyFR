@@ -1,9 +1,8 @@
+from functools import cache
 from math import comb, cos, log, pi
 from pkg_resources import resource_listdir, resource_string
 
 import numpy as np
-
-from pyfr.util import memoize
 
 
 def bernstein(x, i, n):
@@ -70,7 +69,7 @@ class BaseStoredNASAPoly:
         self.reinterpolate(coeff, deg, ptype='poly')
 
         # Reference cp, cv and gamma
-        self.Cp_ref = np.polyval(self.Cp, self.T_ref_nasa)
+        self.Cp_ref = self.R*np.polyval(self.Cp, self.T_ref_nasa)
         self.Cv_ref = self.Cp_ref - self.R
         self.gamma_ref = self.Cp_ref / self.Cv_ref
 
@@ -83,12 +82,13 @@ class BaseStoredNASAPoly:
         self.Cv = np.hstack((self.Cp[:-1], self.Cp[-1] - 1))
 
     def as_dict(self, suffix=None):
+        s_str = str(suffix) if suffix is not None else ''
         params = [('Cp', self.Cp), ('Cv', self.Cv), ('Hr', self.Hr),
                   ('M', self.m_weight), ('R', self.R), ('Trange', self.Trange),
                   ('sepcies', self.species),
                   ('Cv_ref', self.Cv_ref), ('Cp_ref', self.Cv_ref),
                   ('gamma_ref', self.gamma_ref)]
-        return {f"{k}{suffix or ''}": v for k, v in params}
+        return {f"{k}{s_str}": v for k, v in params}
 
     @staticmethod
     def _base_poly_eval(p, x):
@@ -112,8 +112,8 @@ class BaseStoredNASAPoly:
 
         match ptype.lower():
             case 'bern':
-                Ts_ref = chebyshev_points(deg + 1, 0, 1)
-                Ts = chebyshev_points(deg + 1, coeff['T0'], coeff['T1'])
+                Ts_ref = cheblobatto_points(deg + 1, 0, 1)
+                Ts = cheblobatto_points(deg + 1, coeff['T0'], coeff['T1'])
                 Tb = np.linspace(coeff['T0'], coeff['T1'], deg + 1)
 
                 Cp_b = self._base_poly_eval(coeff['C'], Tb)
@@ -129,6 +129,6 @@ class BaseStoredNASAPoly:
 
         self.Cp = np.polyfit(Ts, Cp_s, deg)
 
-@memoize
+@cache
 def get_species(species, Trange):
     return BaseStoredNASAPoly(species, Trange)

@@ -1,6 +1,25 @@
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
+from pyfr.solvers.mpeuler.polynomials import BaseStoredNASAPoly, get_species
+
+
+class MPFluidSpecMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.nspec = self.cfg.getint('solver', 'nspecies')
+
+        # Load species
+        Tref = self.cfg.getfloat('species', 'Tref')
+        spec = []
+        for k in self.cfg.items('species', prefix='spec-'):
+            species = self.cfg.get('species', k)
+            spec.append(get_species(species, Tref))
+
+        self.s = {'Rconst': BaseStoredNASAPoly.R0}
+        for i, s in enumerate(spec):
+            self.s |= s.as_dict(suffix=i)
 
 
 class FluidIntIntersMixin:
@@ -29,15 +48,16 @@ class FluidMPIIntersMixin:
             )
 
 
-class MPEulerIntInters(FluidIntIntersMixin, BaseAdvectionIntInters):
+class MPEulerIntInters(MPFluidSpecMixin, FluidIntIntersMixin,
+                       BaseAdvectionIntInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.intcflux')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
-        tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self.c)
+        tplargs = dict(ndims=self.ndims, nvars=self.nvars, nspec=self.nspec,
+                       rsolver=rsolver, c=self.c, s=self.s)
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=tplargs, dims=[self.ninterfpts],
@@ -45,15 +65,16 @@ class MPEulerIntInters(FluidIntIntersMixin, BaseAdvectionIntInters):
         )
 
 
-class MPEulerMPIInters(FluidMPIIntersMixin, BaseAdvectionMPIInters):
+class MPEulerMPIInters(MPFluidSpecMixin, FluidMPIIntersMixin,
+                       BaseAdvectionMPIInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.mpicflux')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
-        tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self.c)
+        tplargs = dict(ndims=self.ndims, nvars=self.nvars, nspec=self.nspec,
+                       rsolver=rsolver, c=self.c, s=self.s)
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', tplargs, dims=[self.ninterfpts],
@@ -61,15 +82,16 @@ class MPEulerMPIInters(FluidMPIIntersMixin, BaseAdvectionMPIInters):
         )
 
 
-class MPEulerBaseBCInters(BaseAdvectionBCInters):
+class MPEulerBaseBCInters(MPFluidSpecMixin, BaseAdvectionBCInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.bccflux')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
-        tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self.c, bctype=self.type, ninters=self.ninters)
+        tplargs = dict(ndims=self.ndims, nvars=self.nvars, nspec=self.nspec,
+                       rsolver=rsolver, c=self.c, s=self.s, bctype=self.type,
+                       ninters=self.ninters)
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=tplargs, dims=[self.ninterfpts],

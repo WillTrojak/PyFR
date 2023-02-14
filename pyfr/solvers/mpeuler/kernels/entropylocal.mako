@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.euler.kernels.entropy'/>
+<%include file='pyfr.solvers.mpeuler.kernels.entropy'/>
 
 <% inf = 1e20 %>
 <%pyfr:kernel name='entropylocal' ndim='1'
