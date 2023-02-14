@@ -31,6 +31,21 @@ def dot(context, a_, b_=None, **kwargs):
     return '(' + ' + '.join(ab.format(**{ix: i}) for i in range(*nd)) + ')'
 
 
+def polyval(context, p, x):
+    src = f'({p[0]})'
+    for c in p[1:]:
+        src = f'(({c}) + ({x})*{src})'
+    return src
+
+
+def polyint(context, p, x, k=None):
+    pi = np.polyint(p, m=1)
+    src = f'({pi[0]})'
+    for c in pi[1:-1]:
+        src = f'(({c}) + ({x})*{src})'
+    return f'(({k or 0}) + {src})'
+
+
 def array(context, expr_, vals_={}, /, **kwargs):
     ix = next(iter(kwargs))
     ni = kwargs.pop(ix)

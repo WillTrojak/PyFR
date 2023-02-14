@@ -1,8 +1,7 @@
-from collections import defaultdict
-
 import numpy as np
 
 from pyfr.solvers.baseadvec import BaseAdvectionElements
+from pyfr.solvers.mpeuler.polynomials import BaseStoredNASAPoly, get_species
 
 
 class BaseMPFluidElements:
@@ -10,27 +9,19 @@ class BaseMPFluidElements:
     def __init__(self, basiscls, eles, cfg):
         super().__init__(basiscls, eles, cfg)
 
-        self.nspec = self.cfg.getint('solver', 'species')
+        self.nspec = self.cfg.getint('solver', 'nspecies')
 
     @classmethod
     def privarmap(cls, cfg, ndims):
-        ns = cfg.getint('solver', 'species')
-        m = defaultdict(lambda: None)
-        m |= {2: ([f'a{i}rho{i}' for i in range(ns)] + ['u', 'v', 'p']),
-              3: ([f'a{i}rho{i}' for i in range(ns)] + ['u', 'v', 'w', 'p']),
-             }
-        return m[ndims]
+        ns = cfg.getint('solver', 'nspecies')
+        return (['u', 'v', 'w'][:ndims] + ['p'] +
+                [f'a{i}rho{i}' for i in range(ns)])
 
     @classmethod
     def convarmap(cls, cfg, ndims):
-        ns = cfg.getint('solver', 'species')
-        m = defaultdict(lambda: None)
-        m |= {2: ([f'a{i}rho{i}' for i in range(ns)] +
-                  ['rhou', 'rhov', 'E']),
-              3: ([f'a{i}rho{i}' for i in range(ns)] +
-                  ['rhou', 'rhov', 'rhow', 'E']),
-             }
-        return m[ndims]
+        ns = cfg.getint('solver', 'nspecies')
+        return (['rhou', 'rhov', 'rhow'][:ndims] + ['E'] +
+                [f'C{i}' for i in range(ns)])
 
     @classmethod
     def dualcoeffs(cls, cfg, ndims):
@@ -38,42 +29,92 @@ class BaseMPFluidElements:
 
     @classmethod
     def visvarmap(cls, cfg, ndims):
-        ns = cfg.getint('solver', 'species')
-        m = defaultdict(lambda: None)
-        m |= {2: [(f'density_{i}', [f'a{i}rho{i}']) for i in range(ns)] +
-                 [('velocity', ['u', 'v']),
-                  ('pressure', ['p'])],
-              3: [(f'density_{i}', [f'a{i}rho{i}']) for i in range(ns)] +
-                 [('velocity', ['u', 'v', 'w']),
-                  ('pressure', ['p'])],
-             }
-        return m[ndims]
+        ns = cfg.getint('solver', 'nspecies')
+        return ([(f'density_{i}', [f'a{i}rho{i}']) for i in range(ns)] +
+                [('velocity', ['u', 'v', 'w'][:ndims]), ('pressure', ['p'])])
 
     @staticmethod
     def pri_to_con(pris, cfg):
-        rho, p = pris[0], pris[-1]
+        ns = cfg.getint('solver', 'nspecies')
+        Tref = cfg.getfloat('species', 'Tref')
+
+        # Read in species
+        spec = []
+        for key in cfg.items('species', prefix='spec-'):
+            species = cfg.get('species', key)
+            spec.append(get_species(species, Tref))
+
+        arho, p = pris[-ns:], pris[-(ns + 1)]
+        M = np.array([[s.m_weight] for s in spec])
+        rho = sum(arho)
+        c = (1/M)*arho
 
         # Multiply velocity components by rho
-        rhovs = [rho*c for c in pris[1:-1]]
+        rhovs = [rho*v for v in pris[:-(ns + 1)]]
 
         # Compute the energy
-        gamma = cfg.getfloat('constants', 'gamma')
-        E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[1:-1])
+        R_inv = np.array([[1/s.R] for s in spec])
+        T = R_inv * c * p
+        rhoh = sum(r*s.R*np.polyval(s.Hr, T) for r, s in zip(arho, spec))
+        E = rhoh - p + 0.5*rho*sum(v*v for v in pris[:-(ns + 1)])
 
-        return [rho] + rhovs + [E]
+        return rhovs + [E] + c
 
     @staticmethod
     def con_to_pri(cons, cfg):
-        rho, E = cons[0], cons[-1]
+        ns = cfg.getint('solver', 'nspecies')
+        Tref = cfg.getfloat('species', 'Tref')
+
+        # Read in species
+        spec = []
+        for key in cfg.items('species', prefix='spec-'):
+            species = cfg.get('species', key)
+            spec.append(get_species(species, Tref))
+
+        C, E = cons[-ns:], cons[-(ns + 1)]
+        M = np.array([[s.m_weight] for s in spec])
+        arho = M*C
+        rho = sum(arho)
 
         # Divide momentum components by rho
-        vs = [rhov/rho for rhov in cons[1:-1]]
+        vs = [rhov/rho for rhov in cons[:-(ns + 1)]]
 
-        # Compute the pressure
-        gamma = cfg.getfloat('constants', 'gamma')
-        p = (gamma - 1)*(E - 0.5*rho*sum(v*v for v in vs))
+        # Compute internal energy
+        rhoe = E - 0.5*rho*sum(v*v for v in vs)
 
-        return [rho] + vs + [p]
+        # Initial linear guess for temperature
+        Cv_ref = sum(s.Cv_ref*s.m_weight*c for c, s in zip(C, spec))
+        T = rhoe / Cv_ref
+
+        # Newton solve for temperature
+        k_max = 5
+        for _ in range(k_max):
+            rhoe_dash = sum(s.m_weight*s.R*c*(np.polyval(s.Hr, T) - T)
+                            for c, s in zip(C, spec))
+
+            drhoedt = sum(s.m_weight*s.R*c*np.polyval(s.Cv, T)
+                          for c, s in zip(C, spec))
+            dT = (rhoe - rhoe_dash) / drhoedt
+            T += dT
+        p = (sum(s.m_weight*s.R*c*np.polyval(s.Hr, T) for c, s in zip(C, spec))
+             - rhoe)
+
+        return vs + [p] + arho
+
+    @staticmethod
+    def temperature(rhoe, spec, C, kmax=5):
+        Cv_ref = sum(s.Cv_ref*s.m_weight*c for c, s in zip(C, spec))
+        T = rhoe / Cv_ref
+
+        for k in range(kmax):
+            rhoe_dash = sum(s.m_weight*s.R*c*(np.polyval(s.Hr, T) - T)
+                            for c, s in zip(C, spec))
+
+            drhoedt = sum(s.m_weight*s.R*c*np.polyval(s.Cv, T)
+                          for c, s in zip(C, spec))
+            dT = (rhoe - rhoe_dash) / drhoedt
+            T += dT
+        return T
 
     @staticmethod
     def validate_formulation(ctrl):
@@ -172,12 +213,24 @@ class MPEulerElements(BaseMPFluidElements, BaseAdvectionElements):
         self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.tflux')
         self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.tfluxlin')
 
+        # Load in species
+        Tref = self.cfg.getfloat('species', 'Tref')
+        spec = []
+        for k in self.cfg.items('species', prefix='spec-'):
+            species = self.cfg.getliteral('species', k)
+            spec.append(get_species(species, Tref))
+
+        s_dict = {'Rconst': BaseStoredNASAPoly.R0}
+        for i, s in enumerate(spec):
+            s_dict |= s.as_dict(suffix=i)
+
         # Template parameters for the flux kernels
         tplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
             'nverts': len(self.basis.linspts),
             'c': self.cfg.items_as('constants', float),
+            's': s_dict,
             'jac_exprs': self.basis.jac_exprs
         }
 
