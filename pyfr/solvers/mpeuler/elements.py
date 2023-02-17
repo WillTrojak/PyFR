@@ -177,6 +177,17 @@ class BaseMPFluidElements:
 
 
 class MPEulerElements(BaseMPFluidElements, BaseAdvectionElements):
+    @property
+    def _scratch_bufs(self):
+        if 'flux' in self.antialias:
+            bufs = {'scal_fpts', 'scal_qpts', 'vect_qpts'}
+        else:
+            bufs = {'scal_fpts', 'vect_upts'}
+
+        bufs |= {'scal_upts_cpy'}
+
+        return bufs
+
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
 
@@ -230,7 +241,11 @@ class MPEulerElements(BaseMPFluidElements, BaseAdvectionElements):
                 verts=self.ploc_at('linspts', l), upts=self.qpts
             )
 
-        self.kernels['eflux'] = lambda fin: self._be.kernel(
+        self.kernels['copy_soln'] = lambda uin: self._be.kernel(
+            'copy', self._scal_upts_cpy, self.scal_upts[uin]
+        )
+
+        self.kernels['eflux'] = lambda uin: self._be.kernel(
             'eflux', tplargs=tplargs, dims=[self.nupts, self.neles],
-            u=self.scal_upts[fin], f=self._vect_upts[fin]
+            u=self._scal_upts_cpy, f=self.scal_upts[uin]
         )

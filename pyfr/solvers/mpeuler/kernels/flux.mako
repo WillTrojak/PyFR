@@ -23,10 +23,11 @@
 % endfor
 
     // Compute the pressure
-    fpdtype_t rhoe = E - 0.5*invrho*${pyfr.dot('rhov[{i}]', i=ndims)};
+    fpdtype_t ek = 0.5*invrho*${pyfr.dot('rhov[{i}]', i=ndims)};
+    //fpdtype_t rhoe = E - ek;
     g = (${' + '.join('{cp}*s[{i}]'.format(i=i, cp=c[f'cp{i}']) for i in range(nspec))}) /
         (${' + '.join('{cv}*s[{i}]'.format(i=i, cv=c[f'cv{i}']) for i in range(nspec))});
-    p = rhoe*(g - 1);
+    p = (E - ek)*(g - 1);
 
     // Mass flux
 % for i, j in pyfr.ndrange(ndims, nspec):
@@ -40,8 +41,7 @@
 
     // Energy fluxes
 % for i in range(ndims):
-    f[${i}][${ndims + nspec}] = (0.5*invrho*${pyfr.dot('rhov[{i}]', i=ndims)} +
-                                 p*(1 + ${' + '.join(f'dgdar[{j}]*s[{j}]' for j in range(nspec))}))*v[${i}];
+    f[${i}][${nvars - 1}] = (ek + p)*v[${i}];
 % endfor
 
 </%pyfr:macro>
@@ -58,10 +58,10 @@
 % endfor
 
     // Compute the pressure
-    fpdtype_t rhoe = E - 0.5*invrho*${pyfr.dot('rhov[{i}]', i=ndims)};
+    fpdtype_t ek = 0.5*invrho*${pyfr.dot('rhov[{i}]', i=ndims)};
     g = (${' + '.join('{cp}*s[{i}]'.format(i=i, cp=c[f'cp{i}']) for i in range(nspec))}) /
         (${' + '.join('{cv}*s[{i}]'.format(i=i, cv=c[f'cv{i}']) for i in range(nspec))});
-    p = rhoe*(g - 1);
+    p = (E - ek)*(g - 1);
 
     // Mass flux
 % for j in range(nspec):
@@ -75,6 +75,5 @@
 % endfor
 
     // Energy fluxes
-    f[${ndims + nspec}] = (E + p)*v[0];
-
+    f[${nvars - 1}] = (ek + p)*v[0];
 </%pyfr:macro>
