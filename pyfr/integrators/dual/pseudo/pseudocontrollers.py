@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import numpy as np
 
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
@@ -10,6 +8,9 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     
+        # Ensure the system is compatible with our formulation
+        self.system.elementscls.validate_formulation(self)
+
         # Ensure the system is compatible with our formulation
         self.system.elementscls.validate_formulation(self)
 

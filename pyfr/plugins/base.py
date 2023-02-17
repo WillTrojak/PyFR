@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-import os
 import re
 import shlex
 
@@ -23,7 +20,7 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
     outf = open(fname, 'a')
 
     # Output a header if required
-    if os.path.getsize(fname) == 0 and cfg.getbool(cfgsect, headerkey, True):
+    if outf.tell() == 0 and cfg.getbool(cfgsect, headerkey, True):
         print(header, file=outf)
 
     # Return the file
@@ -94,13 +91,10 @@ class PostactionMixin:
                 prefork.wait(self.postactaid)
 
             # Prepare the command line
-            cmdline = shlex.split(self.postact.format(**kwargs))
+            cmdline = shlex.split(self.postact.format_map(kwargs))
 
             # Invoke
             if self.postactmode == 'blocking':
-                # Store returning code of the post-action
-                # If it is different from zero
-                # request intg to abort the computation
                 intg.abort |= bool(prefork.call(cmdline))
             else:
                 self.postactaid = prefork.call_async(cmdline)
@@ -135,8 +129,6 @@ class RegionMixin:
         self._ele_region_data = {}
 
     def _prepare_region_data_eset(self, intg, eset):
-        elemap = intg.system.ele_map
-
         self._ele_regions, self._ele_region_data = [], {}
         for etype, eidxs in sorted(eset.items()):
             doff = intg.system.ele_types.index(etype)

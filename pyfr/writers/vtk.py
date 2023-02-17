@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from collections import defaultdict
 import os
 import re
@@ -226,7 +224,7 @@ class VTKWriter(BaseWriter):
         ('tet', 35): [34, 0, 4, 14, 31, 25, 15, 1, 2, 3, 18, 27, 32, 33, 30,
                       24, 5, 9, 12, 8, 11, 13, 28, 19, 22, 7, 10, 6, 29, 23,
                       21, 26, 17, 16, 20],
-        ('tet', 56): [ 55, 0, 5, 20, 52, 46, 36, 21, 1, 2, 3, 4, 25, 39, 48,
+        ('tet', 56): [55, 0, 5, 20, 52, 46, 36, 21, 1, 2, 3, 4, 25, 39, 48,
                       53, 54, 51, 45, 35, 6, 11, 15, 18, 10, 14, 17, 19, 49,
                       26, 33, 40, 30, 43, 9, 16, 7, 13, 12, 8, 50, 34, 29, 44,
                       32, 42, 47, 24, 22, 38, 23, 37, 41, 27, 28, 31],
@@ -394,21 +392,28 @@ class VTKWriter(BaseWriter):
             self._vtk_vars = [(k, [k]) for k in self._soln_fields]
             self.tcurr = None
 
-    def _pre_proc_fields_soln(self, name, mesh, soln):
+        # Handle field subsetting
+        if args.fields:
+            self._vtk_vars = [(f, v) for f, v in self._vtk_vars
+                              if f in args.fields]
+
+            if len(self._vtk_vars) != len(args.fields):
+                raise RuntimeError('Invalid field specification')
+
+    def _pre_proc_fields_soln(self, soln):
         # Convert from conservative to primitive variables
         return np.array(self.elementscls.con_to_pri(soln, self.cfg))
 
-    def _pre_proc_fields_scal(self, name, mesh, soln):
+    def _pre_proc_fields_scal(self, soln):
         return soln
 
     def _post_proc_fields_soln(self, vsoln):
         # Primitive and visualisation variable maps
         privarmap = self.elementscls.privarmap(self.cfg, self.ndims)
-        visvarmap = self.elementscls.visvarmap(self.cfg, self.ndims)
 
         # Prepare the fields
         fields = []
-        for fnames, vnames in visvarmap:
+        for fnames, vnames in self._vtk_vars:
             ix = [privarmap.index(vn) for vn in vnames]
 
             fields.append(vsoln[ix])
@@ -656,7 +661,7 @@ class VTKWriter(BaseWriter):
         vpts = vpts.reshape(nsvpts, -1, self.ndims)
 
         # Pre-process the solution
-        soln = self._pre_proc_fields(name, mesh, soln).swapaxes(0, 1)
+        soln = self._pre_proc_fields(soln).swapaxes(0, 1)
 
         # Interpolate the solution to the vis points
         vsoln = soln_vtu_op @ soln.reshape(len(soln), -1)
@@ -738,7 +743,7 @@ class TensorProdShapeSubDiv(BaseShapeSubDiv):
             conbase = np.hstack((conbase, conbase + (1 + n)**2))
 
         # Calculate offset of each subdivided element's nodes
-        nodeoff = np.zeros((n,)*cls.ndim, dtype=np.int)
+        nodeoff = np.zeros((n,)*cls.ndim, dtype=np.int32)
         for dim, off in enumerate(np.ix_(*(range(n),)*cls.ndim)):
             nodeoff += off*(n + 1)**dim
 

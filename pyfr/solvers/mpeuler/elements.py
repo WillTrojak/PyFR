@@ -230,7 +230,6 @@ class MPEulerElements(BaseMPFluidElements, BaseAdvectionElements):
                 verts=self.ploc_at('linspts', l), upts=self.qpts
             )
 
-
         self.kernels['eflux'] = lambda fin: self._be.kernel(
             'eflux', tplargs=tplargs, dims=[self.nupts, self.neles],
             u=self.scal_upts[fin], f=self._vect_upts[fin]

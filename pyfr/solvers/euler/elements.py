@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+import numpy as np
 
 from collections import defaultdict
 import numpy as np
@@ -121,12 +121,12 @@ class BaseFluidElements:
                                                    'e-tol', 1e-6)
 
             # Hidden kernel parameters
-            eftplargs['f_tol']   = self.cfg.getfloat('solver-entropy-filter',
-                                                     'f-tol', 1e-4)
+            eftplargs['f_tol'] = self.cfg.getfloat('solver-entropy-filter',
+                                                   'f-tol', 1e-4)
             eftplargs['ill_tol'] = self.cfg.getfloat('solver-entropy-filter',
                                                      'ill-tol', 1e-6)
-            eftplargs['niters']  = self.cfg.getfloat('solver-entropy-filter',
-                                                     'niters', 20)
+            eftplargs['niters'] = self.cfg.getfloat('solver-entropy-filter',
+                                                    'niters', 20)
 
             # Precompute basis orders for filter
             ubdegs = self.basis.ubasis.degrees

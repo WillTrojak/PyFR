@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ast import literal_eval
 from collections import defaultdict
 import re
@@ -170,7 +168,7 @@ class BoxRegion(BaseGeometricRegion):
     def pts_in_region(self, pts):
         pts = np.moveaxis(pts, -1, 0)
 
-        inside = np.ones(pts.shape[1:], dtype=np.bool)
+        inside = np.ones(pts.shape[1:], dtype=bool)
         for l, p, u in zip(self.x0, pts, self.x1):
             inside &= (l <= p) & (p <= u)
 

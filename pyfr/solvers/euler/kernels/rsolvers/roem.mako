@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.euler.kernels.flux'/>
 
@@ -66,9 +65,9 @@
     fpdtype_t g = f/(1.0 + abs_ma);
 
     // Difference of U, du
-%for i in range(nvars - 1):
+% for i in range(nvars - 1):
     du[${i}] = ur[${i}] - ul[${i}];
-%endfor
+% endfor
     du[${nvars - 1}] = ur[0]*hr - ul[0]*hl;
 
     // BdQ
@@ -80,8 +79,8 @@
 
     // Flux
 % for i in range(nvars):
-    nf[${i}] = ${' + '.join('n[{j}]*(b1*fl[{j}][{i}] - b2*fr[{j}][{i}])'
-                .format(i=i, j=j) for j in range(ndims))}
+    nf[${i}] = ${' + '.join(f'n[{j}]*(b1*fl[{j}][{i}] - b2*fr[{j}][{i}])'
+                            for j in range(ndims))}
                 + b1b2*(du[${i}] - g*bdq[${i}]);
 % endfor
 </%pyfr:macro>
