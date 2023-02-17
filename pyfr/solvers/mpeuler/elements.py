@@ -187,6 +187,7 @@ class MPEulerElements(BaseMPFluidElements, BaseAdvectionElements):
         # Register our flux kernels
         self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.tflux')
         self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.tfluxlin')
+        self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.eflux')
 
         # Template parameters for the flux kernels
         tplargs = {
@@ -228,3 +229,9 @@ class MPEulerElements(BaseMPFluidElements, BaseAdvectionElements):
                 u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
                 verts=self.ploc_at('linspts', l), upts=self.qpts
             )
+
+
+        self.kernels['eflux'] = lambda fin: self._be.kernel(
+            'eflux', tplargs=tplargs, dims=[self.nupts, self.neles],
+            u=self.scal_upts[fin], f=self._vect_upts[fin]
+        )

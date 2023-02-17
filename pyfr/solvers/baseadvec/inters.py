@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import itertools as it
 import math
 
@@ -97,7 +95,7 @@ class BaseAdvectionMPIInters(BaseInters):
         else:
             self._entmin_lhs = self._entmin_rhs = None
 
-            
+
 class BaseAdvectionBCInters(BaseInters):
     type = None
 
