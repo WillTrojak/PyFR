@@ -28,5 +28,5 @@
     e = e*rcpd;
 
     // Compute specific physical entropy
-    e = ((T > 0) && (ad > 0) && (d > 0)) ? e : ${inf};
+    e = ((T > 0) && (d > 0)) ? e : ${inf};
 </%pyfr:macro>

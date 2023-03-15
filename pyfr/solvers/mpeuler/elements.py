@@ -135,6 +135,8 @@ class BaseMPFluidElements:
 
             # Minimum density/pressure constraints
             eftplargs['d_min'] = self.cfg.getfloat('solver-entropy-filter',
+                                                   'd-min', 1e-6)
+            eftplargs['ad_min'] = self.cfg.getfloat('solver-entropy-filter',
                                                     'ad-min', 1e-6)
             eftplargs['p_min'] = self.cfg.getfloat('solver-entropy-filter',
                                                    'p-min', 1e-6)

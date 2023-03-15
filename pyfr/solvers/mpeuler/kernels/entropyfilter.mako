@@ -87,7 +87,7 @@
     ${pyfr.expand('get_minima', 'u', 'dmin', 'admin', 'pmin', 'emin')};
 
     // Filter if out of bounds
-    if (dmin < ${d_min} || admin < 0 || pmin < ${p_min} || emin < entmin - ${e_tol})
+    if (dmin < ${d_min} || admin < ${ad_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
     {
         // Compute modal basis
         fpdtype_t umodes[${nupts}][${nvars}];
@@ -122,7 +122,7 @@
             ${pyfr.expand('apply_filter_single', 'up', 'f', 'd', 'ad', 'p', 'e')};
 
             // Update f if constraints aren't satisfied
-            if (d < ${d_min} || ad < 0 || p < ${p_min} || e < entmin - ${e_tol})
+            if (d < ${d_min} || ad < ${ad_min} || p < ${p_min} || e < entmin - ${e_tol})
             {
                 // Set root-finding interval
                 f_high = f;
@@ -133,7 +133,7 @@
                 ${pyfr.expand('apply_filter_single', 'up', 'f_low', 'd_low', 'ad_low', 'p_low', 'e_low')};
 
                 // Regularize constraints to be around zero
-                ad_low -= ${d_min}; ad_high -= ${d_min};
+                ad_low -= ${ad_min}; ad_high -= ${ad_min};
                 d_low -= ${d_min}; d_high -= ${d_min};
                 p_low -= ${p_min}; p_high -= ${p_min};
                 e_low -= entmin - ${e_tol}; e_high -= entmin - ${e_tol};
@@ -157,11 +157,11 @@
                     ${pyfr.expand('apply_filter_single', 'up', 'fnew', 'd', 'ad', 'p', 'e')};
 
                     // Update brackets
-                    if (d < ${d_min} || ad < 0 || p < ${p_min} || e < entmin - ${e_tol})
+                    if (d < ${d_min} || ad < ${ad_min} || p < ${p_min} || e < entmin - ${e_tol})
                     {
                         f_high = fnew;
                         d_high = d - ${d_min};
-                        ad_high = ad - ${d_min};
+                        ad_high = ad - ${ad_min};
                         p_high = p - ${p_min};
                         e_high = e - (entmin - ${e_tol});
                     }
@@ -169,7 +169,7 @@
                     {
                         f_low = fnew;
                         d_low = d - ${d_min};
-                        ad_low = ad - ${d_min};
+                        ad_low = ad - ${ad_min};
                         p_low = p - ${p_min};
                         e_low = e - (entmin - ${e_tol});
                     }
