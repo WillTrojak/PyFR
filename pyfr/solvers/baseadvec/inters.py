@@ -22,8 +22,11 @@ class BaseAdvectionIntInters(BaseInters):
         if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._entmin_lhs = self._view(lhs, 'get_entmin_int_fpts_for_inter')
             self._entmin_rhs = self._view(rhs, 'get_entmin_int_fpts_for_inter')
+            self._jump_lhs = self._view(lhs, 'get_jump_int_fpts_for_inter')
+            self._jump_rhs = self._view(rhs, 'get_jump_int_fpts_for_inter')
         else:
             self._entmin_lhs = self._entmin_rhs = None
+            self._jump_lhs = self._jump_rhs = None
 
         # Generate the constant matrices
         self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inter')
@@ -97,7 +100,7 @@ class BaseAdvectionMPIInters(BaseInters):
         else:
             self._entmin_lhs = self._entmin_rhs = None
 
-            
+
 class BaseAdvectionBCInters(BaseInters):
     type = None
 

@@ -110,12 +110,18 @@ class BaseAdvectionElements(BaseElements):
             ext = nonce + 'entmin_int'
             self.entmin_int = self._be.matrix((self.nfaces, self.neles),
                                               tags=tags, extent=ext)
-   
+
+            # Allocate interface pressure jumps
+            ext = nonce + 'jump'
+            self.jump_int = self._be.matrix((self.nfpts, self.neles),
+                                            tags=tags, extent=ext)
+
             # Setup nodal/modal operator matrices
             self.vdm = self._be.const_matrix(self.basis.ubasis.vdm.T)
             self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)
         else:
             self.entmin_int = None
+            self.jump_int = None
 
     def get_entmin_int_fpts_for_inter(self, eidx, fidx):
         return (self.entmin_int.mid,), (fidx,), (eidx,)
