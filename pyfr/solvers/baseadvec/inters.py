@@ -83,11 +83,23 @@ class BaseAdvectionMPIInters(BaseInters):
             )
             self._entmin_rhs = be.xchg_matrix_for_view(self._entmin_lhs)
 
+            self._jump_lhs = self._xchg_view(
+                lhs, 'get_jump_int_fpts_for_inter'
+            )
+            self._jump_rhs = be.xchg_matrix_for_view(self._jump_lhs)
+
             self.kernels['ent_fpts_pack'] = lambda: be.kernel(
                 'pack', self._entmin_lhs
             )
             self.kernels['ent_fpts_unpack'] = lambda: be.kernel(
                 'unpack', self._entmin_rhs
+            )
+
+            self.kernels['jump_fpts_pack'] = lambda: be.kernel(
+                'pack', self._jump_lhs
+            )
+            self.kernels['jump_fpts_unpack'] = lambda: be.kernel(
+                'unpack', self._jump_rhs
             )
 
             ent_fpts_tag = next(self._mpi_tag_counter)
@@ -97,8 +109,17 @@ class BaseAdvectionMPIInters(BaseInters):
             self.mpireqs['ent_fpts_recv'] = lambda: self._entmin_rhs.recvreq(
                 self._rhsrank, ent_fpts_tag
             )
+
+            jump_fpts_tag = next(self._mpi_tag_counter)
+            self.mpireqs['jump_fpts_send'] = lambda: self._jump_lhs.sendreq(
+                self._rhsrank, jump_fpts_tag
+            )
+            self.mpireqs['jump_fpts_recv'] = lambda: self._jump_rhs.recvreq(
+                self._rhsrank, jump_fpts_tag
+            )
         else:
             self._entmin_lhs = self._entmin_rhs = None
+            self._jump_lhs = self._jump_rhs = None
 
 
 class BaseAdvectionBCInters(BaseInters):
@@ -122,8 +143,10 @@ class BaseAdvectionBCInters(BaseInters):
 
         if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter')
+            self._jump_lhs = self._view(lhs, 'get_jump_int_fpts_for_inter')
         else:
             self._entmin_lhs = None
+            self._jump_lhs = None
 
     def _eval_opts(self, opts, default=None):
         # Boundary conditions, much like initial conditions, can be

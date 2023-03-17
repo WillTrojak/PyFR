@@ -113,8 +113,14 @@ class BaseAdvectionElements(BaseElements):
 
             # Allocate interface pressure jumps
             ext = nonce + 'jump'
-            self.jump_int = self._be.matrix((self.nfpts, self.neles),
+            self.jump_int = self._be.matrix((self.nfpts, 3, self.neles),
                                             tags=tags, extent=ext)
+            self.jump_mass = self._be.matrix((1, 3, self.neles),
+                                            tags=tags, extent=ext)
+
+            kernels['jumpmass'] = lambda: self._be.kernel(
+                'mul', self.opmat('M11'), self.jump_int,
+                out=self.jump_mass)
 
             # Setup nodal/modal operator matrices
             self.vdm = self._be.const_matrix(self.basis.ubasis.vdm.T)
@@ -129,3 +135,11 @@ class BaseAdvectionElements(BaseElements):
     def get_entmin_bc_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
         return (self.entmin_int.mid,)*nfp, (fidx,)*nfp, (eidx,)*nfp
+
+    def get_jump_int_fpts_for_inter(self, eidx, fidx):
+        nfp = self.nfacefpts[fidx]
+
+        rmap = self._srtd_face_fpts[fidx][eidx]
+        cmap = (eidx,)*nfp
+
+        return (self.jump_int.mid,)*nfp, rmap, cmap

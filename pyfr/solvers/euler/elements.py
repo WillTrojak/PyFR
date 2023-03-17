@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
-
 from collections import defaultdict
+import math
+
 import numpy as np
 
 from pyfr.solvers.baseadvec import BaseAdvectionElements
@@ -90,6 +90,9 @@ class BaseFluidElements:
             self._be.pointwise.register(
                 'pyfr.solvers.euler.kernels.entropyfilter'
             )
+            self._be.pointwise.register(
+                'pyfr.solvers.euler.kernels.kxrcf'
+            )
 
             # Template arguments
             eftplargs = {
@@ -99,7 +102,8 @@ class BaseFluidElements:
                 'nvars': self.nvars,
                 'nfaces': self.nfaces,
                 'c': self.cfg.items_as('constants', float),
-                'order': self.basis.order
+                'order': self.basis.order,
+                'pi': math.pi,
             }
 
             # Check to see if running collocated solution/flux points
@@ -144,6 +148,11 @@ class BaseFluidElements:
                 'entropyfilter', tplargs=eftplargs, dims=[self.neles],
                 u=self.scal_upts[uin], entmin_int=self.entmin_int,
                 vdm=self.vdm, invvdm=self.invvdm
+            )
+
+            self.kernels['kxrcf'] = lambda: self._be.kernel(
+                'kxrcf', tplargs=eftplargs, dims=[self.neles],
+                sensor=self.jump_mass
             )
 
 
