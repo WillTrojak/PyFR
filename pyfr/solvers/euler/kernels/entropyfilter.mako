@@ -75,8 +75,10 @@
               u='inout fpdtype_t[${str(nupts)}][${str(nvars)}]'
               entmin_int='inout fpdtype_t[${str(nfaces)}]'
               vdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
-              invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'>
+              invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
+              sensor='in fpdtype_t[1][3]'>
     fpdtype_t dmin, pmin, emin;
+    fpdtype_t kxrcf = sensor[0][0];
 
     // Compute minimum entropy from current and adjacent elements
     fpdtype_t entmin = ${inf};
@@ -86,7 +88,7 @@
     ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
 
     // Filter if out of bounds
-    if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
+    if (kxrcf > ${s_switch} && (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol}))
     {
         // Compute modal basis
         fpdtype_t umodes[${nupts}][${nvars}];
