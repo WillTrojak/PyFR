@@ -83,12 +83,13 @@
     // Compute minimum entropy from current and adjacent elements
     fpdtype_t entmin = ${inf};
     for (int fidx = 0; fidx < ${nfaces}; fidx++) entmin = fmin(entmin, entmin_int[fidx]);
+    entmin = (kxrcf >= ${s_switch}) ? entmin : ${-inf};
 
     // Check if solution is within bounds
     ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
 
     // Filter if out of bounds
-    if (kxrcf > ${s_switch} && (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol}))
+    if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
     {
         // Compute modal basis
         fpdtype_t umodes[${nupts}][${nvars}];
