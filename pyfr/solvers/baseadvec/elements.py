@@ -116,11 +116,10 @@ class BaseAdvectionElements(BaseElements):
             self.jump_int = self._be.matrix((self.nfpts, 3, self.neles),
                                             tags=tags, extent=ext)
             self.jump_mass = self._be.matrix((1, 3, self.neles),
-                                            tags=tags, extent=ext)
+                                             tags=tags, extent=ext)
 
-            kernels['jumpmass'] = lambda: self._be.kernel(
-                'mul', self.opmat('M11'), self.jump_int,
-                out=self.jump_mass)
+            # Setup interface mass matrix
+            self.intmass = self._be.const_matrix(self.basis.interface_mass)
 
             # Setup nodal/modal operator matrices
             self.vdm = self._be.const_matrix(self.basis.ubasis.vdm.T)

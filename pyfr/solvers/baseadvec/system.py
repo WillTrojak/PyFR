@@ -88,9 +88,7 @@ class BaseAdvectionSystem(BaseSystem):
         for l in k['mpiint/comm_jump']:
             g2.add(l, deps=deps(l, 'mpiint/jump_fpts_unpack'))
 
-        g2.add_all(k['eles/jumpmass'], deps=k['mpiint/comm_jump'])
-
-        g2.add_all(k['eles/kxrcf'], deps=k['eles/jumpmass'])
+        g2.add_all(k['eles/kxrcf'], deps=k['mpiint/comm_jump'])
 
         # Compute the transformed divergence of the corrected flux
         g2.add_all(k['eles/tdivtconf'], deps=k['mpiint/comm_flux'])

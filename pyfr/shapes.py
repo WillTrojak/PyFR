@@ -155,7 +155,7 @@ class BaseShape:
         return np.linalg.solve(ub.vdm, A[:, None]*ub.vdm).T
 
     @cached_property
-    def m11(self):
+    def interface_mass(self):
         return self.fpts_wts[None, :]
 
     @cached_property

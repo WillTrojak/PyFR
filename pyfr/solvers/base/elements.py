@@ -86,7 +86,7 @@ class BaseElements:
 
         # Allocate
         self.scal_upts = np.empty((self.nupts, self.nvars, self.neles))
-        
+
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
             self.scal_upts[:, i, :] = v

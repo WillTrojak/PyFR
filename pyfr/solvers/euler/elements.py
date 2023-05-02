@@ -134,7 +134,7 @@ class BaseFluidElements:
 
             # KXRCF sensor switch
             eftplargs['s_switch'] = self.cfg.getfloat('solver-entropy-filter',
-                                                      'kxrcf-switch', 0.25)
+                                                      'kxrcf-switch', 1)
 
             # Precompute basis orders for filter
             ubdegs = self.basis.ubasis.degrees
@@ -157,7 +157,7 @@ class BaseFluidElements:
             # KXRCF shock sensor
             self.kernels['kxrcf'] = lambda: self._be.kernel(
                 'kxrcf', tplargs=eftplargs, dims=[self.neles],
-                sensor=self.jump_mass
+                jump=self.jump_int, sensor=self.jump_mass, mass=self.intmass
             )
 
 
