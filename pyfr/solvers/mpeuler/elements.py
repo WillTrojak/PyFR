@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 from collections import defaultdict
 
@@ -112,6 +114,9 @@ class BaseMPFluidElements:
             self._be.pointwise.register(
                 'pyfr.solvers.mpeuler.kernels.entropyfilter'
             )
+            self._be.pointwise.register(
+                'pyfr.solvers.mpeuler.kernels.kxrcf'
+            )
 
             # Template arguments
             eftplargs = {
@@ -122,7 +127,8 @@ class BaseMPFluidElements:
                 'nspec': self.nspec,
                 'nfaces': self.nfaces,
                 'c': self.cfg.items_as('constants', float),
-                'order': self.basis.order
+                'order': self.basis.order,
+                'pi': math.pi,
             }
 
             # Check to see if running collocated solution/flux points
@@ -153,6 +159,10 @@ class BaseMPFluidElements:
             eftplargs['niters']  = self.cfg.getfloat('solver-entropy-filter',
                                                      'niters', 20)
 
+            # KXRCF sensor switch
+            eftplargs['s_switch'] = self.cfg.getfloat('solver-entropy-filter',
+                                                      'kxrcf-switch', 1)
+
             # Precompute basis orders for filter
             ubdegs = self.basis.ubasis.degrees
             eftplargs['ubdegs'] = [int(max(dd)) for dd in ubdegs]
@@ -169,6 +179,12 @@ class BaseMPFluidElements:
                 'entropyfilter', tplargs=eftplargs, dims=[self.neles],
                 u=self.scal_upts[uin], entmin_int=self.entmin_int,
                 vdm=self.vdm, invvdm=self.invvdm
+            )
+
+            # KXRCF shock sensor
+            self.kernels['kxrcf'] = lambda: self._be.kernel(
+                'kxrcf', tplargs=eftplargs, dims=[self.neles],
+                jump=self.jump_int, sensor=self.jump_mass, mass=self.intmass
             )
 
 

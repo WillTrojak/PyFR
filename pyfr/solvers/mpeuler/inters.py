@@ -9,10 +9,19 @@ class MPFluidIntIntersMixin:
 
         if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.intcent')
+            self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.intcjump')
 
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
                 'intcent', tplargs={}, dims=[self.ninters],
                 entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
+            )
+
+            tplargs = dict(ndims=self.ndims, nvars=self.nvars,
+                           nspec=self.nspec, c=self.c)
+            self.kernels['comm_jump'] = lambda: self._be.kernel(
+                'intcjump', tplargs=tplargs, dims=[self.ninterfpts],
+                ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs,
+                jumpl=self._jump_lhs, jumpr=self._jump_rhs
             )
 
 
@@ -23,10 +32,19 @@ class MPFluidMPIIntersMixin:
 
         if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.mpicent')
+            self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.mpicjump')
 
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
                 'mpicent', tplargs={}, dims=[self.ninters],
                 entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
+            )
+
+            tplargs = dict(ndims=self.ndims, nvars=self.nvars,
+                           nspec=self.nspec, c=self.c)
+            self.kernels['comm_jump'] = lambda: self._be.kernel(
+                'mpicjump', tplargs=tplargs, dims=[self.ninterfpts],
+                ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs,
+                jumpl=self._jump_lhs
             )
 
 
@@ -82,11 +100,18 @@ class MPEulerBaseBCInters(BaseAdvectionBCInters):
 
         if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.bccent')
+            self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.bccjump')
 
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
                 'bccent', tplargs=tplargs, dims=[self.ninterfpts],
                 extrns=self._external_args, entmin_lhs=self._entmin_lhs,
                 nl=self._pnorm_lhs, ul=self._scal_lhs, **self._external_vals
+            )
+
+            self.kernels['comm_jump'] = lambda: self._be.kernel(
+                'bccjump', tplargs=tplargs, dims=[self.ninterfpts],
+                extrns=self._external_args, ul=self._scal_lhs,
+                nl=self._pnorm_lhs, jumpl=self._jump_lhs, **self._external_vals
             )
 
 
