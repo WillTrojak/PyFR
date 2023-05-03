@@ -53,6 +53,9 @@ class BaseSystem:
         if hasattr(eles[0], 'entmin_int'):
             self.eles_entmin_int = [e.entmin_int for e in eles]
 
+        if hasattr(eles[0], 'jump_int'):
+            self.eles_jump_int = [e.jump_int for e in eles]
+
         # Save the number of dimensions and field variables
         self.ndims = eles[0].ndims
         self.nvars = eles[0].nvars
@@ -320,3 +323,6 @@ class BaseSystem:
     def set_ele_entmin_int(self, entmin_int):
         for (e, em) in zip(self.eles_entmin_int, entmin_int):
             e.set(em)
+
+    def get_ele_jump_int(self):
+        return [e.get() for e in self.eles_jump_int]
