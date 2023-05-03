@@ -178,7 +178,7 @@ class BaseMPFluidElements:
             self.kernels['entropy_filter'] = lambda uin: self._be.kernel(
                 'entropyfilter', tplargs=eftplargs, dims=[self.neles],
                 u=self.scal_upts[uin], entmin_int=self.entmin_int,
-                vdm=self.vdm, invvdm=self.invvdm
+                vdm=self.vdm, invvdm=self.invvdm, sensor=self.jump_mass
             )
 
             # KXRCF shock sensor

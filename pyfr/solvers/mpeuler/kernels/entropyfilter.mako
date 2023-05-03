@@ -76,12 +76,15 @@
               u='inout fpdtype_t[${str(nupts)}][${str(nvars)}]'
               entmin_int='inout fpdtype_t[${str(nfaces)}]'
               vdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
-              invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'>
+              invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
+              sensor='in fpdtype_t[1][3]'>
     fpdtype_t dmin, admin, pmin, emin;
+    fpdtype_t kxrcf = sensor[0][0];
 
     // Compute minimum entropy from current and adjacent elements
     fpdtype_t entmin = ${inf};
     for (int fidx = 0; fidx < ${nfaces}; fidx++) entmin = fmin(entmin, entmin_int[fidx]);
+    entmin = (kxrcf >= ${s_switch}) ? entmin : ${-inf};
 
     // Check if solution is within bounds
     ${pyfr.expand('get_minima', 'u', 'dmin', 'admin', 'pmin', 'emin')};
