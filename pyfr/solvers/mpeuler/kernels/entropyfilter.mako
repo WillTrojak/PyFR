@@ -84,13 +84,12 @@
     // Compute minimum entropy from current and adjacent elements
     fpdtype_t entmin = ${fpdtype_max};
     for (int fidx = 0; fidx < ${nfaces}; fidx++) entmin = fmin(entmin, entmin_int[fidx]);
-    entmin = (kxrcf >= ${s_switch}) ? entmin : ${-fpdtype_max};
 
     // Check if solution is within bounds
     ${pyfr.expand('get_minima', 'u', 'dmin', 'admin', 'pmin', 'emin')};
 
     // Filter if out of bounds
-    if (dmin < ${d_min} || admin < ${ad_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
+    if (dmin < ${d_min} || admin < ${ad_min} || pmin < ${p_min} || (e < entmin - ${e_tol} && kxrcf >= ${s_switch}))
     {
         // Compute modal basis
         fpdtype_t umodes[${nupts}][${nvars}];
@@ -125,7 +124,7 @@
             ${pyfr.expand('apply_filter_single', 'up', 'f', 'd', 'ad', 'p', 'e')};
 
             // Update f if constraints aren't satisfied
-            if (d < ${d_min} || ad < ${ad_min} || p < ${p_min} || e < entmin - ${e_tol})
+            if (d < ${d_min} || ad < ${ad_min} || p < ${p_min} || (e < entmin - ${e_tol} && kxrcf >= ${s_switch}))
             {
                 // Set root-finding interval
                 f_high = f;
@@ -154,7 +153,7 @@
                     fnew = fmin(fmin(f1, f2), f3);
 
                     // Avoid using entropy constraint to guess new bracket if entropy is not well-defined
-                    fnew = (fmax(e_low, e_high) < ${0.9*fpdtype_max}) ? fmin(f4, fnew) : fnew;
+                    fnew = (fmax(e_low, e_high) < ${0.9*fpdtype_max} && kxrcf >= ${s_switch}) ? fmin(f4, fnew) : fnew;
 
                     // In case of bracketing failure (due to roundoff errors), revert to bisection
                     fnew = ((fnew > f_high) || (fnew < f_low)) ? 0.5*(f_low + f_high) : fnew;
@@ -163,7 +162,7 @@
                     ${pyfr.expand('apply_filter_single', 'up', 'fnew', 'd', 'ad', 'p', 'e')};
 
                     // Update brackets
-                    if (d < ${d_min} || ad < ${ad_min} || p < ${p_min} || e < entmin - ${e_tol})
+                    if (d < ${d_min} || ad < ${ad_min} || p < ${p_min} || (e < entmin - ${e_tol} && kxrcf >= ${s_switch}))
                     {
                         f_high = fnew;
                         d_high = d - ${d_min};
