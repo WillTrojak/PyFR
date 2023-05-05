@@ -89,7 +89,7 @@
     ${pyfr.expand('get_minima', 'u', 'dmin', 'admin', 'pmin', 'emin')};
 
     // Filter if out of bounds
-    if (dmin < ${d_min} || admin < ${ad_min} || pmin < ${p_min} || (e < entmin - ${e_tol} && kxrcf >= ${s_switch}))
+    if (dmin < ${d_min} || admin < ${ad_min} || pmin < ${p_min} || (emin < entmin - ${e_tol} && kxrcf >= ${s_switch}))
     {
         // Compute modal basis
         fpdtype_t umodes[${nupts}][${nvars}];
