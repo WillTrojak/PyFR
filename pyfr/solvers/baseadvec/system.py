@@ -16,7 +16,7 @@ class BaseAdvectionSystem(BaseSystem):
         # Perform post-processing of the previous solution stage
         g1.add_all(k['eles/entropy_filter'])
 
-        # # Interpolate the solution to the flux points
+        # Interpolate the solution to the flux points
         for l in k['eles/disu']:
             g1.add(l, deps=deps(l, 'eles/entropy_filter'))
 
@@ -30,17 +30,28 @@ class BaseAdvectionSystem(BaseSystem):
         for send, pack in zip(m['ent_fpts_send'], k['mpiint/ent_fpts_pack']):
             g1.add_mpi_req(send, deps=[pack])
 
+        # If shock sensor, pack and send the jump values to neighbours
+        g1.add_mpi_reqs(m['jump_fpts_recv'])
+        g1.add_all(k['mpiint/jump_fpts_pack'], deps=k['eles/disu'])
+        for send, pack in zip(m['jump_fpts_send'], k['mpiint/jump_fpts_pack']):
+            g1.add_mpi_req(send, deps=[pack])
+
         # Compute common entropy minima at internal/boundary interfaces
         g1.add_all(k['iint/comm_entropy'],
                    deps=k['eles/entropy_filter'] + k['mpiint/ent_fpts_pack'])
         g1.add_all(k['bcint/comm_entropy'],
                    deps=k['eles/disu'])
 
+        # Compute sensor interface jump terms at internal/boundary interfaces
+        g1.add_all(k['iint/comm_jump'], deps=k['mpiint/jump_fpts_pack'] +
+                                             k['eles/disu'])
+        g1.add_all(k['bcint/comm_jump'], deps=k['eles/disu'])
+
         # Compute the common normal flux at our internal/boundary interfaces
         g1.add_all(k['iint/comm_flux'],
-                   deps=k['eles/disu'] + k['mpiint/scal_fpts_pack'])
+                   deps=k['eles/disu'] + k['mpiint/scal_fpts_pack'] + k['iint/comm_jump'])
         g1.add_all(k['bcint/comm_flux'],
-                   deps=k['eles/disu'] + k['bcint/comm_entropy'])
+                   deps=k['eles/disu'] + k['bcint/comm_entropy'] + k['bcint/comm_jump'])
 
         # Make a copy of the solution (if used by source terms)
         g1.add_all(k['eles/copy_soln'], deps=k['eles/entropy_filter'])
@@ -71,6 +82,14 @@ class BaseAdvectionSystem(BaseSystem):
         g2.add_all(k['mpiint/ent_fpts_unpack'])
         for l in k['mpiint/comm_entropy']:
             g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
+
+        # Compute sensor jumps at MPI interfaces
+        g2.add_all(k['mpiint/jump_fpts_unpack'])
+        for l in k['mpiint/comm_jump']:
+            g2.add(l, deps=deps(l, 'mpiint/jump_fpts_unpack'))
+
+        # Compute sensor values at elements
+        g2.add_all(k['eles/kxrcf'], deps=k['mpiint/comm_jump'])
 
         # Compute the transformed divergence of the corrected flux
         g2.add_all(k['eles/tdivtconf'], deps=k['mpiint/comm_flux'])
@@ -104,19 +123,39 @@ class BaseAdvectionSystem(BaseSystem):
         for send, pack in zip(m['ent_fpts_send'], k['mpiint/ent_fpts_pack']):
             g1.add_mpi_req(send, deps=[pack])
 
+        # Pack and send jump terms to neighbours
+        g1.add_mpi_reqs(m['jump_fpts_recv'])
+        g1.add_all(k['mpiint/jump_fpts_pack'], deps=k['eles/disu'])
+        for send, pack in zip(m['jump_fpts_send'], k['mpiint/jump_fpts_pack']):
+            g1.add_mpi_req(send, deps=[pack])
+
         # Compute common entropy minima at internal/boundary interfaces
         g1.add_all(k['iint/comm_entropy'], deps=k['eles/local_entropy'])
         g1.add_all(k['bcint/comm_entropy'],
                    deps=k['eles/local_entropy'] + k['eles/disu'])
+
+        # Compute sensor jump terms at internal/boundary interfaces
+        g1.add_all(k['iint/comm_jump'], deps=k['mpiint/jump_fpts_pack'] +
+                                             k['eles/disu'])
+        g1.add_all(k['bcint/comm_jump'], deps=k['eles/disu'])
         g1.commit()
 
         if 'mpiint/comm_entropy' in k:
-            # Compute common entropy minima at MPI interfaces
             g2 = self.backend.graph()
 
+            # Compute common entropy minima at MPI interfaces
             g2.add_all(k['mpiint/ent_fpts_unpack'])
             for l in k['mpiint/comm_entropy']:
                 g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
+
+            # Compute sensor jump terms at MPI interfaces
+            g2.add_all(k['mpiint/jump_fpts_unpack'])
+            for l in k['mpiint/comm_jump']:
+                g2.add(l, deps=deps(l, 'mpiint/jump_fpts_unpack'))
+
+            # Compute sensor values at elements
+            g2.add_all(k['eles/kxrcf'], deps=k['mpiint/comm_jump'])
+
             g2.commit()
 
             return g1, g2

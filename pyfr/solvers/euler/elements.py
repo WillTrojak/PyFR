@@ -1,25 +1,40 @@
+import math
+
 import numpy as np
 
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseFluidElements:
-    privarmap = {2: ['rho', 'u', 'v', 'p'],
-                 3: ['rho', 'u', 'v', 'w', 'p']}
+    @classmethod
+    def privarmap(cls, cfg, ndims):
+        m = defaultdict(lambda: None)
+        m |= {2: ['rho', 'u', 'v', 'p'],
+              3: ['rho', 'u', 'v', 'w', 'p']}
+        return m[ndims]
 
-    convarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
-                 3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
+    @classmethod
+    def convarmap(cls, cfg, ndims):
+        m = defaultdict(lambda: None)
+        m |= {2: ['rho', 'rhou', 'rhov', 'E'],
+              3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
+        return m[ndims]
 
-    dualcoeffs = convarmap
+    @classmethod
+    def dualcoeffs(cls, cfg, ndims):
+        return cls.convarmap(cfg, ndims)
 
-    visvarmap = {
-        2: [('density', ['rho']),
-            ('velocity', ['u', 'v']),
-            ('pressure', ['p'])],
-        3: [('density', ['rho']),
-            ('velocity', ['u', 'v', 'w']),
-            ('pressure', ['p'])]
-    }
+    @classmethod
+    def visvarmap(cls, cfg, ndims):
+        m = defaultdict(lambda: None)
+        m |= {2: [('density', ['rho']),
+                  ('velocity', ['u', 'v']),
+                  ('pressure', ['p'])],
+              3: [('density', ['rho']),
+                  ('velocity', ['u', 'v', 'w']),
+                  ('pressure', ['p'])]
+             }
+        return m[ndims]
 
     @staticmethod
     def pri_to_con(pris, cfg):
@@ -74,6 +89,9 @@ class BaseFluidElements:
             self._be.pointwise.register(
                 'pyfr.solvers.euler.kernels.entropyfilter'
             )
+            self._be.pointwise.register(
+                'pyfr.solvers.euler.kernels.kxrcf'
+            )
 
             # Template arguments
             eftplargs = {
@@ -83,7 +101,8 @@ class BaseFluidElements:
                 'nvars': self.nvars,
                 'nfaces': self.nfaces,
                 'c': self.cfg.items_as('constants', float),
-                'order': self.basis.order
+                'order': self.basis.order,
+                'pi': math.pi
             }
 
             # Check to see if running anti-aliasing
@@ -117,6 +136,10 @@ class BaseFluidElements:
             eftplargs['niters'] = self.cfg.getfloat('solver-entropy-filter',
                                                     'niters', 20)
 
+            # KXRCF sensor switch
+            eftplargs['s_switch'] = self.cfg.getfloat('solver-entropy-filter',
+                                                      'kxrcf-switch', 1)
+
             # Precompute basis orders for filter
             ubdegs = self.basis.ubasis.degrees
             eftplargs['ubdegs'] = [int(max(dd)) for dd in ubdegs]
@@ -132,7 +155,13 @@ class BaseFluidElements:
             self.kernels['entropy_filter'] = lambda uin: self._be.kernel(
                 'entropyfilter', tplargs=eftplargs, dims=[self.neles],
                 u=self.scal_upts[uin], entmin_int=self.entmin_int,
-                vdm=self.vdm, invvdm=self.invvdm
+                vdm=self.vdm, invvdm=self.invvdm, sensor=self.jump_mass
+            )
+
+            # KXRCF shock sensor
+            self.kernels['kxrcf'] = lambda: self._be.kernel(
+                'kxrcf', tplargs=eftplargs, dims=[self.neles],
+                jump=self.jump_int, sensor=self.jump_mass, mass=self.intmass
             )
 
 

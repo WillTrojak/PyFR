@@ -24,7 +24,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         self.tout_last = intg.tcurr
 
         # Output field names
-        self.fields = intg.system.elementscls.convarmap[self.ndims]
+        self.fields = intg.system.elementscls.convarmap(self.cfg, self.ndims)
 
         # Output data type
         self.fpdtype = intg.backend.fpdtype

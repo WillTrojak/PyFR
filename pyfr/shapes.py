@@ -153,6 +153,10 @@ class BaseShape:
         return np.linalg.solve(ub.vdm, A[:, None]*ub.vdm).T
 
     @cached_property
+    def interface_mass(self):
+        return self.fpts_wts[None, :]
+
+    @cached_property
     def nupts(self):
         n = self.order + 1
         return int(np.polyval(self.npts_coeffs, n)) // self.npts_cdenom

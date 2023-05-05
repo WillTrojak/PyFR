@@ -211,7 +211,7 @@ class AscentPlugin(RegionMixin, BaseSolnPlugin):
 
     def _eval_exprs(self, intg):
         # Get the primitive variable names
-        pnames = self.elementscls.privarmap[self.ndims]
+        pnames = self.elementscls.privarmap(self.cfg, self.ndims)
 
         # Compute the gradients
         if self._gradpinfo:
@@ -298,7 +298,7 @@ class AscentPlugin(RegionMixin, BaseSolnPlugin):
         for field, path, expr in self._exprs:
             g_pnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', expr))
 
-        privarmap = self.elementscls.privarmap[self.ndims]
+        privarmap = self.elementscls.privarmap(self.cfg, self.ndims)
         self._gradpinfo = [(pname, privarmap.index(pname))
                            for pname in g_pnames]
 

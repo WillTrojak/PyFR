@@ -9,8 +9,13 @@ from pyfr.util import memoize
 
 
 class BaseElements:
-    privarmap = None
-    convarmap = None
+    @classmethod
+    def privarmap(cls, cfg, ndims):
+        return None
+
+    @classmethod
+    def convarmap(cls, cfg, ndims):
+        return None
 
     def __init__(self, basiscls, eles, cfg):
         self._be = None
@@ -26,11 +31,11 @@ class BaseElements:
         self.kernels = {}
 
         # Check the dimensionality of the problem
-        if ndims != basiscls.ndims or ndims not in self.privarmap:
+        if ndims != basiscls.ndims or self.privarmap(cfg, ndims) is None:
             raise ValueError('Invalid element matrix dimensions')
 
         # Determine the number of dynamical variables
-        self.nvars = len(self.privarmap[ndims])
+        self.nvars = len(self.privarmap(cfg, ndims))
 
         # Instantiate the basis class
         self.basis = basis = basiscls(nspts, cfg)
@@ -71,7 +76,7 @@ class BaseElements:
 
         # Evaluate the ICs from the config file
         ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
-               for dv in self.privarmap[self.ndims]]
+               for dv in self.privarmap(self.cfg, self.ndims)]
 
         # Allocate
         self.scal_upts = np.empty((self.nupts, self.nvars, self.neles))
@@ -150,7 +155,7 @@ class BaseElements:
 
     @cached_property
     def _src_exprs(self):
-        convars = self.convarmap[self.ndims]
+        convars = self.convarmap(self.cfg, self.ndims)
 
         # Variable and function substitutions
         subs = self.cfg.items('constants')

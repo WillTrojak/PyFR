@@ -112,7 +112,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         for ex in self.aexprs:
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
 
-        privarmap = self.elementscls.privarmap[self.ndims]
+        privarmap = self.elementscls.privarmap(self.cfg, self.ndims)
         self._gradpinfo = [(pname, privarmap.index(pname))
                            for pname in gradpnames]
 
@@ -126,7 +126,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         exprs = []
 
         # Get the primitive variable names
-        pnames = self.elementscls.privarmap[self.ndims]
+        pnames = self.elementscls.privarmap(self.cfg, self.ndims)
 
         # Compute the gradients
         if self._gradpinfo:

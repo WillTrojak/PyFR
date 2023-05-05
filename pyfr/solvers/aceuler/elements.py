@@ -1,22 +1,39 @@
+from collections import defaultdict
+
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseACFluidElements:
-    privarmap = {2: ['p', 'u', 'v'],
-                 3: ['p', 'u', 'v', 'w']}
+    @classmethod
+    def privarmap(cls, cfg, ndims):
+        m = defaultdict(lambda: None)
+        m |= {2: ['p', 'u', 'v'],
+              3: ['p', 'u', 'v', 'w']}
+        return m[ndims]
 
-    convarmap = {2: ['p', 'u', 'v'],
-                 3: ['p', 'u', 'v', 'w']}
+    @classmethod
+    def convarmap(cls, cfg, ndims):
+        m = defaultdict(lambda: None)
+        m |= {2: ['p', 'u', 'v'],
+              3: ['p', 'u', 'v', 'w']}
+        return m[ndims]
 
-    dualcoeffs = {2: ['u', 'v'],
-                  3: ['u', 'v', 'w']}
+    @classmethod
+    def dualcoeffs(cls, cfg, ndims):
+        m = defaultdict(lambda: None)
+        m |= {2: ['u', 'v'],
+              3: ['u', 'v', 'w']}
+        return m[ndims]
 
-    visvarmap = {
-        2: [('velocity', ['u', 'v']),
-            ('pressure', ['p'])],
-        3: [('velocity', ['u', 'v', 'w']),
-            ('pressure', ['p'])]
-    }
+    @classmethod
+    def visvarmap(cls, cfg, ndims):
+        m = defaultdict(lambda: None)
+        m |= {2: [('velocity', ['u', 'v']),
+                  ('pressure', ['p'])],
+              3: [('velocity', ['u', 'v', 'w']),
+                  ('pressure', ['p'])]
+             }
+        return m[ndims]
 
     @staticmethod
     def pri_to_con(pris, cfg):
