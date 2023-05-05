@@ -35,6 +35,9 @@ class MPFluidMPIIntersMixin:
             self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.mpicent')
             self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.mpicjump')
 
+            d_min = self.cfg.getfloat('solver-entropy-filter', 'd-min', 1e-6)
+            tplargs |= {'d_min': d_min}
+
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
                 'mpicent', tplargs={}, dims=[self.ninters],
                 entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
@@ -95,12 +98,15 @@ class MPEulerBaseBCInters(BaseAdvectionBCInters):
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ul=self._scal_lhs, nl=self._pnorm_lhs,
-            **self._external_vals
+            **self._external_vals,
         )
 
         if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.bccent')
             self._be.pointwise.register('pyfr.solvers.mpeuler.kernels.bccjump')
+
+            d_min = self.cfg.getfloat('solver-entropy-filter', 'd-min', 1e-6)
+            tplargs |= {'d_min': d_min}
 
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
                 'bccent', tplargs=tplargs, dims=[self.ninterfpts],

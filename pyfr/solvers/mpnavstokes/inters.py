@@ -96,8 +96,11 @@ class MPNavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
                 'pyfr.solvers.mpnavstokes.kernels.bccent'
             )
 
+            d_min = self.cfg.getfloat('solver-entropy-filter', 'd-min', 1e-6)
+            tplargs = {'d_min': d_min} | self._tplargs
+
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
-                'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],
+                'bccent', tplargs=tplargs, dims=[self.ninterfpts],
                 extrns=self._external_args, entmin_lhs=self._entmin_lhs,
                 nl=self._pnorm_lhs, ul=self._scal_lhs, **self._external_vals
             )

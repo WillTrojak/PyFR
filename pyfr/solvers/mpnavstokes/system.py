@@ -5,7 +5,7 @@ from pyfr.solvers.mpnavstokes.inters import (MPNavierStokesBaseBCInters,
                                              MPNavierStokesMPIInters)
 
 
-class NavierStokesSystem(BaseAdvectionDiffusionSystem):
+class MPNavierStokesSystem(BaseAdvectionDiffusionSystem):
     name = 'mp-navier-stokes'
 
     elementscls = MPNavierStokesElements
