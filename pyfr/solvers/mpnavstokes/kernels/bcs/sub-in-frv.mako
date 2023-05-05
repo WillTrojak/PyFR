@@ -6,7 +6,7 @@
     ur[${i}] = ${c[f'a{i}rho{i}']};
 % endfor
 
-    fpdtype_t rho_r = ${sum(c[f'a{i}rho{i}'] for i in range(nspec))};
+    fpdtype_t rho_r = ${'+'.join(f"{c[f'a{i}rho{i}']}" for i in range(nspec))};
 % for i, v in enumerate('uvw'[:ndims]):
     ur[${i + nspec}] = rho_r * (${c[v]});
 % endfor
