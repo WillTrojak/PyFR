@@ -14,9 +14,9 @@
     fpdtype_t sarea = sensor[0][2];
     fpdtype_t s_norm = sqrt(sensor[0][1]);
 % if ndims == 2:
-    fpdtype_t h = sensor[0][2]*${0.5/pi};
+    fpdtype_t h = sensor[0][2]*${1/pi};
 % elif ndims == 3:
-    fpdtype_t h = sqrt(sensor[0][2]*${0.25/pi});
+    fpdtype_t h = sqrt(sensor[0][2]*${1/pi});
 % endif
 
     sensor[0][0] = fabs(sensor[0][0])/(pow(h, ${0.5*(order + 1)})*sarea*s_norm);
