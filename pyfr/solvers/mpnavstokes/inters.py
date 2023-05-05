@@ -20,7 +20,7 @@ class TplargsMixin:
                              shock_capturing=shock_capturing)
 
 
-class NavierStokesIntInters(TplargsMixin,
+class MPNavierStokesIntInters(TplargsMixin,
                             MPFluidIntIntersMixin,
                             BaseAdvectionDiffusionIntInters):
     def __init__(self, *args, **kwargs):
@@ -103,17 +103,17 @@ class MPNavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
             )
 
 
-class NavierStokesNoSlpAdiaWallBCInters(NavierStokesBaseBCInters):
+class MPNavierStokesNoSlpAdiaWallBCInters(MPNavierStokesBaseBCInters):
     type = 'no-slp-adia-wall'
     cflux_state = 'ghost'
 
 
-class NavierStokesSlpAdiaWallBCInters(NavierStokesBaseBCInters):
+class NavierStokesSlpAdiaWallBCInters(MPNavierStokesBaseBCInters):
     type = 'slp-adia-wall'
     cflux_state = None
 
 
-class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
+class MPNavierStokesSupInflowBCInters(MPNavierStokesBaseBCInters):
     type = 'sup-in-fa'
     cflux_state = 'ghost'
 
@@ -126,12 +126,12 @@ class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
             lhs, default={'u': 0, 'v': 0, 'w': 0})
 
 
-class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
+class MPNavierStokesSupOutflowBCInters(MPNavierStokesBaseBCInters):
     type = 'sup-out-fn'
     cflux_state = 'ghost'
 
 
-class NavierStokesSubInflowFrvBCInters(NavierStokesBaseBCInters):
+class MPNavierStokesSubInflowFrvBCInters(MPNavierStokesBaseBCInters):
     type = 'sub-in-frv'
     cflux_state = 'ghost'
 
@@ -144,7 +144,7 @@ class NavierStokesSubInflowFrvBCInters(NavierStokesBaseBCInters):
             default={'u': 0, 'v': 0, 'w': 0})
 
 
-class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
+class MPNavierStokesSubOutflowBCInters(MPNavierStokesBaseBCInters):
     type = 'sub-out-fp'
     cflux_state = 'ghost'
 

@@ -9,7 +9,7 @@ class MPNavierStokesElements(BaseMPFluidElements,
     # Use the density field for shock sensing
     shockvar = 'rho'
 
-@staticmethod
+    @staticmethod
     def grad_con_to_pri(cons, grad_cons, cfg):
         ns = cfg.getint('solver', 'species')
 
