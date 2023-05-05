@@ -25,10 +25,10 @@ class BaseAdvectionIntInters(BaseInters):
                 rhs, 'get_entmin_int_fpts_for_inter', with_perm=False
             )
             self._jump_lhs = self._view(
-                lhs, 'get_jump_int_fpts_for_inter', (3,), with_perm=False
+                lhs, 'get_jump_int_fpts_for_inter', (3,)
             )
             self._jump_rhs = self._view(
-                rhs, 'get_jump_int_fpts_for_inter', (3,), with_perm=False
+                rhs, 'get_jump_int_fpts_for_inter', (3,)
             )
         else:
             self._entmin_lhs = self._entmin_rhs = None
