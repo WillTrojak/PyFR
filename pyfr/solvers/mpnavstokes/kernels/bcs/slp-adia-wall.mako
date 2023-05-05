@@ -5,7 +5,7 @@
 <%include file='pyfr.solvers.mpnavstokes.kernels.flux'/>
 
 <%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur'>
-    fpdtype_t nor = ${' + '.join(f'ul[{i}]*nl[{i}]' for i in range(nspec,ndims+nspec))};
+    fpdtype_t nor = ${' + '.join(f'ul[{i + nspec}]*nl[{i}]' for i in range(ndims))};
 % for i in range(nspec):
     ur[${i}] = ul[${i}];
 % endfor
