@@ -18,6 +18,6 @@
 
     // Write out the jumps
     jumpl[0] = 0;
-    jumpl[1] = mag_nl*pl*pl;
+    jumpl[1] = abs(pl);
     jumpl[2] = mag_nl;
 </%pyfr:kernel>
