@@ -22,5 +22,5 @@
     fpdtype_t h = sqrt(sensor[0][2]*${1/pi});
 % endif
 
-    sensor[0][0] = fabs(sensor[0][0])/(pow(h, ${order + 1})*sarea*s_norm);
+    sensor[0][0] = fabs(sensor[0][0])/(pow(h, ${order + 1.0})*sarea*s_norm);
 </%pyfr:kernel>
