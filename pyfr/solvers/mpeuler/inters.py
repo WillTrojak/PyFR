@@ -130,6 +130,27 @@ class MPEulerSupInflowBCInters(MPEulerBaseBCInters):
             lhs)
 
 
+class MPEulerSubOutflowBCInters(MPEulerBaseBCInters):
+    type = 'sub-out-fp'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
+
+        self.c |= self._exp_opts(['p'], lhs)
+
+
+class MPEulerSudInflowFrvBCInters(MPEulerBaseBCInters):
+    type = 'sub-in-frv'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
+
+        arho = [f'a{i}rho{i}' for i in range(self.nspec)]
+        self.c |= self._exp_opts(
+            (arho + ['u', 'v', 'w'])[:self.ndims + self.nspec],
+            lhs)
+
+
 class MPEulerSupOutflowBCInters(MPEulerBaseBCInters):
     type = 'sup-out-fn'
     cflux_state = 'ghost'
