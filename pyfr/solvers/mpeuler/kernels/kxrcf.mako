@@ -14,12 +14,12 @@
 % endfor
     sensor[0][2] = ${pyfr.dot('mass[0][{k}]', 'jump[{k}][2]', k=nfpts)};
 
-    fpdtype_t sarea = sensor[0][2];
     fpdtype_t s_norm = sensor[0][1];
+    fpdtype_t sarea = sensor[0][2];
 % if ndims == 2:
-    fpdtype_t h = sensor[0][2]*${1/pi};
+    fpdtype_t h = sarea*${1/pi};
 % elif ndims == 3:
-    fpdtype_t h = sqrt(sensor[0][2]*${1/pi});
+    fpdtype_t h = sqrt(sarea*${1/pi});
 % endif
 
     sensor[0][0] = fabs(sensor[0][0])/(pow(h, ${order + 1.0})*sarea*s_norm);

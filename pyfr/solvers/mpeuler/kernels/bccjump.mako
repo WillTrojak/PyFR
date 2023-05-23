@@ -10,7 +10,7 @@
     fpdtype_t mag_nl = sqrt(${pyfr.dot('nl[{i}]', i=ndims)});
 
     // Calculate pressure
-    fpdtype_t invdl = 1/${' + '.join('ul[{i}]'.format(i=i) for i in range(nspec))};
+    fpdtype_t invdl = 1/(${' + '.join('ul[{i}]'.format(i=i) for i in range(nspec))});
     fpdtype_t rhoel = ul[${ndims + nspec}] - 0.5*invdl*${pyfr.dot('ul[{i}]', i=(nspec, nspec + ndims))};
     fpdtype_t gl = (${' + '.join('{cp}*ul[{i}]'.format(i=i, cp=c[f'cp{i}']) for i in range(nspec))}) /
                    (${' + '.join('{cv}*ul[{i}]'.format(i=i, cv=c[f'cv{i}']) for i in range(nspec))});

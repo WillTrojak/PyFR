@@ -139,7 +139,7 @@ class MPEulerSubOutflowBCInters(MPEulerBaseBCInters):
         self.c |= self._exp_opts(['p'], lhs)
 
 
-class MPEulerSudInflowFrvBCInters(MPEulerBaseBCInters):
+class MPEulerSubInflowFrvBCInters(MPEulerBaseBCInters):
     type = 'sub-in-frv'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
