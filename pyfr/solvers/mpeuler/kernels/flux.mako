@@ -2,7 +2,7 @@
 
 <%pyfr:macro name='inviscid_flux' params='s, f, d, p, v, g'>
     d = ${' + '.join('s[{i}]'.format(i=i) for i in range(nspec))};
-    fpdtype_t invrho = 1/d, E = s[${ndims + nspec}];
+    fpdtype_t invrho = 1/d, E = s[${nvars - 1}];
 
     // Compute the velocities
     fpdtype_t rhov[${ndims}];
@@ -31,12 +31,11 @@
 % for i in range(ndims):
     f[${i}][${ndims + nspec}] = (E + p)*v[${i}];
 % endfor
-
 </%pyfr:macro>
 
 <%pyfr:macro name='inviscid_flux_1d' params='s, f, d, p, v, g'>
     d = ${' + '.join('s[{i}]'.format(i=i) for i in range(nspec))};
-    fpdtype_t invrho = 1/d, E = s[${ndims + nspec}];
+    fpdtype_t invrho = 1/d, E = s[${nvars - 1}];
 
     // Compute the velocities
     fpdtype_t rhov[${ndims}];
@@ -64,5 +63,4 @@
 
     // Energy fluxes
     f[${ndims + nspec}] = (E + p)*v[0];
-
 </%pyfr:macro>

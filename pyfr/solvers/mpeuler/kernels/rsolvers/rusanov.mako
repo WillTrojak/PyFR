@@ -10,16 +10,6 @@
     ${pyfr.expand('inviscid_flux', 'ul', 'fl', 'rhol', 'pl', 'vl', 'gl')};
     ${pyfr.expand('inviscid_flux', 'ur', 'fr', 'rhor', 'pr', 'vr', 'gr')};
 
-    // Sum the left and right velocities and take the normal
-    //fpdtype_t nvl = ${pyfr.dot('n[{i}]', 'vl[{i}]', i=ndims)};
-    //fpdtype_t nvr = ${pyfr.dot('n[{i}]', 'vr[{i}]', i=ndims)};
-
-    // wave speeds
-    //pdtype_t cl = sqrt(gl*pl/rhol);
-    //fpdtype_t cr = sqrt(gr*pr/rhor);
-    //fpdtype_t c = max(fabs(nvl) + cl, fabs(nvr) + cr);
-    // Sum the left and right velocities and take the normal
-
     fpdtype_t nv = ${pyfr.dot('n[{i}]', 'vl[{i}] + vr[{i}]', i=ndims)};
 
     // Estimate the maximum wave speed

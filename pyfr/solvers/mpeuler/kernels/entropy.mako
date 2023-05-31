@@ -2,20 +2,15 @@
 
 <%pyfr:macro name='compute_entropy' params='u, d, ad, p, e'>
     d = ${' + '.join('u[{i}]'.format(i=i) for i in range(nspec))};
-    fpdtype_t rcpd = 1.0/d, E = u[${nspec + ndims}];
-
-    fpdtype_t rhov[${ndims}];
-% for i in range(ndims):
-    rhov[${i}] = u[${nspec + i}];
-% endfor
+    fpdtype_t rcpd = 1/d, E = u[${nvars - 1}];
 
     ad = u[0];
 % for i in range(1, nspec):
     ad = fmin(ad, u[${i}]);
 % endfor
 
-    // Compute the pressure
-    fpdtype_t rhoe = E - 0.5*rcpd*${pyfr.dot('rhov[{i}]', i=ndims)};
+    // Compute the temperature/pressure
+    fpdtype_t rhoe = E - 0.5*rcpd*${pyfr.dot('u[{i}]', i=(nspec, nspec+ndims))};
     fpdtype_t cv_inv = 1/(${' + '.join('{cv}*u[{i}]'.format(i=i, cv=c[f'cv{i}'])
                             for i in range(nspec))});
     fpdtype_t cp = ${' + '.join('{cp}*u[{i}]'.format(i=i, cp=c[f'cp{i}'])
@@ -29,5 +24,5 @@
     e = e*rcpd;
 
     // Compute specific physical entropy
-    e = ((T > 0) && (d > 0)) ? e : ${fpdtype_max};
+    e = ((T > 0) && (p > 0) && (d > 0)) ? exp(e) : ${fpdtype_max};
 </%pyfr:macro>

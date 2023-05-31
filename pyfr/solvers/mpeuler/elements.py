@@ -53,7 +53,7 @@ class BaseMPFluidElements:
     def pri_to_con(pris, cfg):
         ns = cfg.getint('solver', 'species')
         p = pris[-1]
-        arho = pris[:ns]
+        arho = [pris[i] for i in range(ns)]
         rho = sum(arho)
 
         # Multiply velocity components by rho
@@ -63,16 +63,15 @@ class BaseMPFluidElements:
         cp = sum(arho[i]*cfg.getfloat('constants', f'cp{i}') for i in range(ns))
         cv = sum(arho[i]*cfg.getfloat('constants', f'cv{i}') for i in range(ns))
         gamma = cp / cv
-
         E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[ns:-1])
 
-        return np.vstack((arho, rhovs, [E]))
+        return arho + rhovs + [E]
 
     @staticmethod
     def con_to_pri(cons, cfg):
         ns = cfg.getint('solver', 'species')
         E = cons[-1]
-        arho = cons[:ns]
+        arho = [cons[i] for i in range(ns)]
         rho = sum(arho)
 
         # Divide momentum components by rho
@@ -84,7 +83,7 @@ class BaseMPFluidElements:
         gamma = cp / cv
         p = (E - 0.5*rho*sum(v*v for v in vs))*(gamma - 1)
 
-        return np.vstack((arho, vs, [p]))
+        return arho + vs + [p]
 
     @staticmethod
     def validate_formulation(ctrl):

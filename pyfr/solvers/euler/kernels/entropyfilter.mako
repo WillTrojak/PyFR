@@ -74,8 +74,10 @@
               u='inout fpdtype_t[${str(nupts)}][${str(nvars)}]'
               entmin_int='inout fpdtype_t[${str(nfaces)}]'
               vdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
-              invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'>
+              invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
+              sensor='in fpdtype_t[1][3]'>
     fpdtype_t dmin, pmin, emin;
+    fpdtype_t kxrcf = sensor[0][0];
 
     // Compute minimum entropy from current and adjacent elements
     fpdtype_t entmin = ${fpdtype_max};
@@ -85,7 +87,7 @@
     ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
 
     // Filter if out of bounds
-    if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
+    if (dmin < ${d_min} || pmin < ${p_min} || (emin < entmin - ${e_tol} && kxrcf >= ${s_switch}))
     {
         // Compute modal basis
         fpdtype_t umodes[${nupts}][${nvars}];
@@ -120,7 +122,7 @@
             ${pyfr.expand('apply_filter_single', 'up', 'f', 'd', 'p', 'e')};
 
             // Update f if constraints aren't satisfied
-            if (d < ${d_min} || p < ${p_min} || e < entmin - ${e_tol})
+            if (d < ${d_min} || p < ${p_min} || (e < entmin - ${e_tol} && kxrcf >= ${s_switch}))
             {
                 // Set root-finding interval
                 f_high = f;
@@ -147,7 +149,7 @@
                     fnew = fmin(f1, f2);
 
                     // Avoid using entropy constraint to guess new bracket if entropy is not well-defined
-                    fnew = (fmax(e_low, e_high) < ${0.9*fpdtype_max}) ? fmin(f3, fnew) : fnew;
+                    fnew = (fmax(e_low, e_high) < ${0.9*fpdtype_max} && kxrcf >= ${s_switch}) ? fmin(f3, fnew) : fnew;
 
                     // In case of bracketing failure (due to roundoff errors), revert to bisection
                     fnew = ((fnew > f_high) || (fnew < f_low)) ? 0.5*(f_low + f_high) : fnew;
@@ -156,7 +158,7 @@
                     ${pyfr.expand('apply_filter_single', 'up', 'fnew', 'd', 'p', 'e')};
 
                     // Update brackets
-                    if (d < ${d_min} || p < ${p_min} || e < entmin - ${e_tol})
+                    if (d < ${d_min} || p < ${p_min} || (e < entmin - ${e_tol} && kxrcf >= ${s_switch}))
                     {
                         f_high = fnew;
                         d_high = d - ${d_min};

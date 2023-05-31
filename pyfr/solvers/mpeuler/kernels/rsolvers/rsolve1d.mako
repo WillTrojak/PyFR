@@ -9,8 +9,8 @@
     utl[${i}] = ul[${i}];
     utr[${i}] = ur[${i}];
 % endfor
-    utl[${nspec + ndims}] = ul[${nspec + ndims}];
-    utr[${nspec + ndims}] = ur[${nspec + ndims}];
+    utl[${nvars - 1}] = ul[${nvars - 1}];
+    utr[${nvars - 1}] = ur[${nvars - 1}];
 
     ${pyfr.expand('transform_to', 'n', 'ul', 'utl', str(nspec))};
     ${pyfr.expand('transform_to', 'n', 'ur', 'utr', str(nspec))};
@@ -20,6 +20,6 @@
 % for i in range(nspec):
     nf[${i}] = ntf[${i}];
 % endfor
-    nf[${nspec + ndims}] = ntf[${nspec + ndims}];
+    nf[${nvars - 1}] = ntf[${nvars - 1}];
     ${pyfr.expand('transform_from', 'n', 'ntf', 'nf', str(nspec))};
 </%pyfr:macro>
