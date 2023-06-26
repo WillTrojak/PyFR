@@ -178,8 +178,18 @@ class BaseMPFluidElements:
             )
 
             # Apply entropy filter
+            eftplargs['enforce_entropy'] = True
             self.kernels['entropy_filter'] = lambda uin: self._be.kernel(
                 'entropyfilter', tplargs=eftplargs, dims=[self.neles],
+                u=self.scal_upts[uin], entmin_int=self.entmin_int,
+                vdm=self.vdm, invvdm=self.invvdm, sensor=self.jump_mass
+            )
+
+            eftplargs_copy = eftplargs.copy()
+            eftplargs_copy['enforce_entropy'] = False
+
+            self.kernels['entropy_filter_vis'] = lambda uin: self._be.kernel(
+                'entropyfilter', tplargs=eftplargs_copy, dims=[self.neles],
                 u=self.scal_upts[uin], entmin_int=self.entmin_int,
                 vdm=self.vdm, invvdm=self.invvdm, sensor=self.jump_mass
             )

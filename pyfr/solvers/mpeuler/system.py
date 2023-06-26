@@ -5,6 +5,7 @@ from pyfr.solvers.mpeuler.inters import (MPEulerIntInters, MPEulerMPIInters,
 
 
 class MPEulerSystem(BaseAdvectionSystem):
+    splitsystem = False
     name = 'mp-euler'
 
     elementscls = MPEulerElements

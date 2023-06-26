@@ -6,6 +6,7 @@ from pyfr.solvers.navstokes.inters import (NavierStokesBaseBCInters,
 
 
 class NavierStokesSystem(BaseAdvectionDiffusionSystem):
+    splitsystem = False
     name = 'navier-stokes'
 
     elementscls = NavierStokesElements

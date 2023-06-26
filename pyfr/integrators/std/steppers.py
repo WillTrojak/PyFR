@@ -33,7 +33,7 @@ class StdEulerStepper(BaseStdStepper):
 class StdTVDRK3Stepper(BaseStdStepper):
     stepper_name = 'tvd-rk3'
     stepper_has_errest = False
-    stepper_nregs = 3
+    stepper_nregs = 4
     stepper_order = 3
 
     @property
@@ -41,30 +41,72 @@ class StdTVDRK3Stepper(BaseStdStepper):
         return 3*self.nsteps
 
     def step(self, t, dt):
-        add, rhs_with_postproc = self._add, self.system.rhs
+        add = self._add
+        preproc, postproc = self.system.preproc, self.system.postproc
 
         # Get the bank indices for each register (n, n+1, rhs)
-        r0, r1, r2 = self._regidx
+        r0, r1, r2, r3 = self._regidx # r3 used for split systems
 
         # Ensure r0 references the bank containing u(t)
         if r0 != self._idxcurr:
             r0, r1 = r1, r0
 
-        # First stage; r2 = -∇·f(r0); r1 = r0 + dt*r2
-        rhs_with_postproc(t, r0, r2)
-        add(0.0, r1, 1.0, r0, dt, r2)
+        if self.system.splitsystem:
+            rhs_inv, rhs_vis = self.system.rhs_inv, self.system.rhs_vis
+            postproc_inv, postproc_vis = self.system.postproc_inv, self.system.postproc_vis
+            # Perform any necessary pre-processing
+            preproc(t, r0)
 
-        # Second stage; r2 = -∇·f(r1); r1 = 0.75*r0 + 0.25*r1 + 0.25*dt*r2
-        rhs_with_postproc(t + dt, r1, r2)
-        add(0.25, r1, 0.75, r0, 0.25*dt, r2)
+            # First stage; r2 = -∇·f(r0); r1 = r0 + dt*r2
+            rhs_inv(t, r0, r2)
+            rhs_vis(t, r0, r3)
+            add(1.0, r3, -1.0, r2) # Subtract out inviscid component from inv+vis component
+            add(0.0, r1, 1.0, r0, dt, r2)
+            postproc_inv(r1) # Entropy filter with inviscid component
+            add(1.0, r1, dt, r3) # Add viscous component
+            postproc_vis(r1) # Entropy filter with viscous component
 
-        # Third stage; r2 = -∇·f(r1);
-        #              r1 = 1.0/3.0*r0 + 2.0/3.0*r1 + 2.0/3.0*dt*r2
-        rhs_with_postproc(t + 0.5*dt, r1, r2)
-        add(2.0/3.0, r1, 1.0/3.0, r0, 2.0/3.0*dt, r2)
+            # Second stage; r2 = -∇·f(r1); r1 = 0.75*r0 + 0.25*r1 + 0.25*dt*r2
+            preproc(t, r1)
+            rhs_inv(t + dt, r1, r2)
+            rhs_vis(t + dt, r1, r3)
+            add(1.0, r3, -1.0, r2) # Subtract out inviscid component from full viscous component
+            add(0.25, r1, 0.75, r0, 0.25*dt, r2)
+            postproc_inv(r1) # Entropy filter with inviscid component
+            add(1.0, r1, 0.25*dt, r3) # Add viscous component
+            postproc_vis(r1) # Entropy filter with viscous component
 
-        # Return the index of the bank containing u(t + dt)
-        return r1
+            # Third stage; r2 = -∇·f(r1);
+            #              r1 = 1.0/3.0*r0 + 2.0/3.0*r1 + 2.0/3.0*dt*r2
+            preproc(t, r1)
+            rhs_inv(t + 0.5*dt, r1, r2)
+            rhs_vis(t + 0.5*dt, r1, r3)
+            add(1.0, r3, -1.0, r2) # Subtract out inviscid component from full viscous component
+            add(2.0/3.0, r1, 1.0/3.0, r0, 2.0/3.0*dt, r2)
+            postproc_inv(r1) # Entropy filter with inviscid component
+            add(1.0, r1, 2.0/3.0*dt, r3) # Add viscous component
+            postproc_vis(r1) # Entropy filter with viscous component
+
+            # Return the index of the bank containing u(t + dt)
+            return r1
+
+        else:
+            rhs_with_postproc = self.system.rhs
+            # First stage; r2 = -∇·f(r0); r1 = r0 + dt*r2
+            rhs_with_postproc(t, r0, r2)
+            add(0.0, r1, 1.0, r0, dt, r2)
+
+            # Second stage; r2 = -∇·f(r1); r1 = 0.75*r0 + 0.25*r1 + 0.25*dt*r2
+            rhs_with_postproc(t + dt, r1, r2)
+            add(0.25, r1, 0.75, r0, 0.25*dt, r2)
+
+            # Third stage; r2 = -∇·f(r1);
+            #              r1 = 1.0/3.0*r0 + 2.0/3.0*r1 + 2.0/3.0*dt*r2
+            rhs_with_postproc(t + 0.5*dt, r1, r2)
+            add(2.0/3.0, r1, 1.0/3.0, r0, 2.0/3.0*dt, r2)
+
+            # Return the index of the bank containing u(t + dt)
+            return r1
 
 
 class StdRK4Stepper(BaseStdStepper):

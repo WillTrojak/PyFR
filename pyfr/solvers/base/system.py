@@ -260,11 +260,31 @@ class BaseSystem:
     def _rhs_graphs(self, uinbank, foutbank):
         pass
 
+    def _rhs_inv_graphs(self, uinbank, foutbank):
+        pass
+
+    def _rhs_vis_graphs(self, uinbank, foutbank):
+        pass
+
     def rhs(self, t, uinbank, foutbank):
         self._rhs_uin_fout.add((uinbank, foutbank))
         self._prepare_kernels(t, uinbank, foutbank)
 
         for graph in self._rhs_graphs(uinbank, foutbank):
+            self.backend.run_graph(graph)
+
+    def rhs_inv(self, t, uinbank, foutbank):
+        self._rhs_uin_fout.add((uinbank, foutbank))
+        self._prepare_kernels(t, uinbank, foutbank)
+
+        for graph in self._rhs_inv_graphs(uinbank, foutbank):
+            self.backend.run_graph(graph)
+
+    def rhs_vis(self, t, uinbank, foutbank):
+        self._rhs_uin_fout.add((uinbank, foutbank))
+        self._prepare_kernels(t, uinbank, foutbank)
+
+        for graph in self._rhs_vis_graphs(uinbank, foutbank):
             self.backend.run_graph(graph)
 
     def _preproc_graphs(self, uinbank):
@@ -277,6 +297,12 @@ class BaseSystem:
             self.backend.run_graph(graph)
 
     def postproc(self, uinbank):
+        pass
+
+    def postproc_inv(self, uinbank):
+        pass
+
+    def postproc_vis(self, uinbank):
         pass
 
     def rhs_wait_times(self):

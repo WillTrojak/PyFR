@@ -53,8 +53,10 @@ class MPNavierStokesElements(BaseMPFluidElements,
             return
 
         # Register our flux kernels
-        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tflux')
-        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tfluxlin')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tflux_inv')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tfluxlin_inv')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tflux_vis')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.tfluxlin_vis')
 
         # Handle shock capturing and Sutherland's law
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
@@ -80,28 +82,56 @@ class MPNavierStokesElements(BaseMPFluidElements,
         av = self.artvisc
 
         if c in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[self.nupts, r[c]],
+            self.kernels['tdisf_inv_curved'] = lambda uin: self._be.kernel(
+                'tflux_inv', tplargs=tplargs, dims=[self.nupts, r[c]],
                 u=s(self.scal_upts[uin], c), f=s(self._vect_upts, c),
                 artvisc=s(av, c), smats=self.curved_smat_at('upts')
             )
         elif c in r:
-            self.kernels['tdisf_curved'] = lambda: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[self.nqpts, r[c]],
+            self.kernels['tdisf_inv_curved'] = lambda: self._be.kernel(
+                'tflux_inv', tplargs=tplargs, dims=[self.nqpts, r[c]],
                 u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
                 artvisc=s(av, c), smats=self.curved_smat_at('qpts')
             )
 
         if l in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_linear'] = lambda uin: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[self.nupts, r[l]],
+            self.kernels['tdisf_inv_linear'] = lambda uin: self._be.kernel(
+                'tfluxlin_inv', tplargs=tplargs, dims=[self.nupts, r[l]],
                 u=s(self.scal_upts[uin], l), f=s(self._vect_upts, l),
                 artvisc=s(av, l), verts=self.ploc_at('linspts', l),
                 upts=self.upts
             )
         elif l in r:
-            self.kernels['tdisf_linear'] = lambda: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[self.nqpts, r[l]],
+            self.kernels['tdisf_inv_linear'] = lambda: self._be.kernel(
+                'tfluxlin_inv', tplargs=tplargs, dims=[self.nqpts, r[l]],
+                u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
+                artvisc=s(av, l), verts=self.ploc_at('linspts', l),
+                upts=self.qpts
+            )
+
+        if c in r and 'flux' not in self.antialias:
+            self.kernels['tdisf_vis_curved'] = lambda uin: self._be.kernel(
+                'tflux_vis', tplargs=tplargs, dims=[self.nupts, r[c]],
+                u=s(self.scal_upts[uin], c), f=s(self._vect_upts, c),
+                artvisc=s(av, c), smats=self.curved_smat_at('upts')
+            )
+        elif c in r:
+            self.kernels['tdisf_vis_curved'] = lambda: self._be.kernel(
+                'tflux_vis', tplargs=tplargs, dims=[self.nqpts, r[c]],
+                u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
+                artvisc=s(av, c), smats=self.curved_smat_at('qpts')
+            )
+
+        if l in r and 'flux' not in self.antialias:
+            self.kernels['tdisf_vis_linear'] = lambda uin: self._be.kernel(
+                'tfluxlin_vis', tplargs=tplargs, dims=[self.nupts, r[l]],
+                u=s(self.scal_upts[uin], l), f=s(self._vect_upts, l),
+                artvisc=s(av, l), verts=self.ploc_at('linspts', l),
+                upts=self.upts
+            )
+        elif l in r:
+            self.kernels['tdisf_vis_linear'] = lambda: self._be.kernel(
+                'tfluxlin_vis', tplargs=tplargs, dims=[self.nqpts, r[l]],
                 u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
                 artvisc=s(av, l), verts=self.ploc_at('linspts', l),
                 upts=self.qpts

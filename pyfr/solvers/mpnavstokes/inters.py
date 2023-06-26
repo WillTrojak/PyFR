@@ -27,15 +27,20 @@ class MPNavierStokesIntInters(TplargsMixin,
         super().__init__(*args, **kwargs)
 
         self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.intconu')
-        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.intcflux')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.intcflux_inv')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.intcflux_vis')
 
         self.kernels['con_u'] = lambda: self._be.kernel(
             'intconu', tplargs=self._tplargs, dims=[self.ninterfpts],
             ulin=self._scal_lhs, urin=self._scal_rhs,
             ulout=self._vect_lhs, urout=self._vect_rhs
         )
-        self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
+        self.kernels['comm_flux_inv'] = lambda: self._be.kernel(
+            'intcflux_inv', tplargs=self._tplargs, dims=[self.ninterfpts],
+            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs
+        )
+        self.kernels['comm_flux_vis'] = lambda: self._be.kernel(
+            'intcflux_vis', tplargs=self._tplargs, dims=[self.ninterfpts],
             ul=self._scal_lhs, ur=self._scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
             artviscl=self._artvisc_lhs, artviscr=self._artvisc_rhs,
@@ -50,14 +55,19 @@ class MPNavierStokesMPIInters(TplargsMixin,
         super().__init__(*args, **kwargs)
 
         self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.mpiconu')
-        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.mpicflux')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.mpicflux_inv')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.mpicflux_vis')
 
         self.kernels['con_u'] = lambda: self._be.kernel(
             'mpiconu', tplargs=self._tplargs, dims=[self.ninterfpts],
             ulin=self._scal_lhs, urin=self._scal_rhs, ulout=self._vect_lhs
         )
-        self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'mpicflux', tplargs=self._tplargs, dims=[self.ninterfpts],
+        self.kernels['comm_flux_inv'] = lambda: self._be.kernel(
+            'mpicflux_inv', self._tplargs, dims=[self.ninterfpts],
+            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs
+        )
+        self.kernels['comm_flux_vis'] = lambda: self._be.kernel(
+            'mpicflux_vis', tplargs=self._tplargs, dims=[self.ninterfpts],
             ul=self._scal_lhs, ur=self._scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
             artviscl=self._artvisc_lhs, artviscr=self._artvisc_rhs,
@@ -76,7 +86,8 @@ class MPNavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
         self._tplargs['bccfluxstate'] = self.cflux_state
 
         self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.bcconu')
-        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.bccflux')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.bccflux_inv')
+        self._be.pointwise.register('pyfr.solvers.mpnavstokes.kernels.bccflux_vis')
 
         self.kernels['con_u'] = lambda: self._be.kernel(
             'bcconu', tplargs=self._tplargs, dims=[self.ninterfpts],
@@ -84,8 +95,13 @@ class MPNavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
             ulout=self._vect_lhs, nlin=self._pnorm_lhs,
             **self._external_vals
         )
-        self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'bccflux', tplargs=self._tplargs, dims=[self.ninterfpts],
+        self.kernels['comm_flux_inv'] = lambda: self._be.kernel(
+            'bccflux_inv', tplargs=self._tplargs, dims=[self.ninterfpts],
+            extrns=self._external_args, ul=self._scal_lhs, nl=self._pnorm_lhs,
+            **self._external_vals,
+        )
+        self.kernels['comm_flux_vis'] = lambda: self._be.kernel(
+            'bccflux_vis', tplargs=self._tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ul=self._scal_lhs,
             gradul=self._vect_lhs, nl=self._pnorm_lhs,
             artviscl=self._artvisc_lhs, **self._external_vals

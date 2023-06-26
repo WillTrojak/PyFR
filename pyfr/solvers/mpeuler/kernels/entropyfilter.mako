@@ -89,7 +89,11 @@
     ${pyfr.expand('get_minima', 'u', 'dmin', 'admin', 'pmin', 'emin')};
 
     // Filter if out of bounds
+    % if enforce_entropy:
     if (dmin < ${d_min} || admin < ${ad_min} || pmin < ${p_min} || (emin < entmin - ${e_tol} && kxrcf >= ${s_switch}))
+    % else:
+    if (dmin < ${d_min} || admin < ${ad_min} || pmin < ${p_min})
+    % endif
     {
         // Compute modal basis
         fpdtype_t umodes[${nupts}][${nvars}];
@@ -124,7 +128,11 @@
             ${pyfr.expand('apply_filter_single', 'up', 'f', 'd', 'ad', 'p', 'e')};
 
             // Update f if constraints aren't satisfied
+            % if enforce_entropy:
             if (d < ${d_min} || ad < ${ad_min} || p < ${p_min} || (e < entmin - ${e_tol} && kxrcf >= ${s_switch}))
+            % else:
+            if (d < ${d_min} || ad < ${ad_min} || p < ${p_min})
+            % endif
             {
                 // Set root-finding interval
                 f_high = f;
@@ -153,7 +161,9 @@
                     fnew = fmin(fmin(f1, f2), f3);
 
                     // Avoid using entropy constraint to guess new bracket if entropy is not well-defined
+                    % if enforce_entropy:
                     fnew = (fmax(e_low, e_high) < ${0.9*fpdtype_max} && kxrcf >= ${s_switch}) ? fmin(f4, fnew) : fnew;
+                    % endif
 
                     // In case of bracketing failure (due to roundoff errors), revert to bisection
                     fnew = ((fnew > f_high) || (fnew < f_low)) ? 0.5*(f_low + f_high) : fnew;
@@ -162,7 +172,11 @@
                     ${pyfr.expand('apply_filter_single', 'up', 'fnew', 'd', 'ad', 'p', 'e')};
 
                     // Update brackets
+                    % if enforce_entropy:
                     if (d < ${d_min} || ad < ${ad_min} || p < ${p_min} || (e < entmin - ${e_tol} && kxrcf >= ${s_switch}))
+                    % else:
+                    if (d < ${d_min} || ad < ${ad_min} || p < ${p_min})
+                    % endif
                     {
                         f_high = fnew;
                         d_high = d - ${d_min};

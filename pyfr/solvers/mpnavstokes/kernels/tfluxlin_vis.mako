@@ -6,7 +6,7 @@
 <%include file='pyfr.solvers.mpeuler.kernels.flux'/>
 <%include file='pyfr.solvers.mpnavstokes.kernels.flux'/>
 
-<%pyfr:kernel name='tfluxlin' ndim='2'
+<%pyfr:kernel name='tfluxlin_vis' ndim='2'
               u='in fpdtype_t[${str(nvars)}]'
               artvisc='in broadcast-col fpdtype_t'
               f='inout fpdtype_t[${str(ndims)}][${str(nvars)}]'

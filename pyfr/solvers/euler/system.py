@@ -5,6 +5,7 @@ from pyfr.solvers.euler.inters import (EulerIntInters, EulerMPIInters,
 
 
 class EulerSystem(BaseAdvectionSystem):
+    splitsystem = False
     name = 'euler'
 
     elementscls = EulerElements
