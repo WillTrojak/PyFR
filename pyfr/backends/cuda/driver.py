@@ -179,7 +179,9 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuGraphExecKernelNodeSetParams', c_void_p, c_void_p,
          POINTER(CUDAKernelNodeParams)),
         (c_int, 'cuGraphExecDestroy', c_void_p),
-        (c_int, 'cuGraphLaunch', c_void_p, c_void_p)
+        (c_int, 'cuGraphLaunch', c_void_p, c_void_p),
+        (c_int, 'cuProfilerStart', c_void_p),
+        (c_int, 'cuProfilerStop', c_void_p)
     ]
 
     def _transname(self, name):

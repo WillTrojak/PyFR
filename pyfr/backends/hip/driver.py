@@ -506,3 +506,12 @@ class HIP:
 
     def create_graph(self):
         return HIPGraph(self)
+
+
+class RocTracerWrappers(LibWrapper):
+    _libname = 'roctracer64'
+
+    _functions = [
+        (None, 'roctracer_start',  c_void_p),
+        (None, 'roctracer_stop',  c_void_p),
+    ]

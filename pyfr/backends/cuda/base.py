@@ -112,3 +112,9 @@ class CUDABackend(BaseBackend):
         self.cuda.memset(data, 0, nbytes)
 
         return data
+
+    def start_profile_trace(self):
+        self.CUDA.cuProfilerStart(None)
+
+    def start_profile_trace(self):
+        self.CUDA.cuProfilerStop(None)

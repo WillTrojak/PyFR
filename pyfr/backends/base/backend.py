@@ -196,3 +196,9 @@ class BaseBackend:
 
     def graph(self):
         return self.graph_cls(self)
+
+    def start_profile_trace(self):
+        pass
+
+    def stop_profile_trace(self):
+        pass
