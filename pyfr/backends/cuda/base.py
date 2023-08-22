@@ -113,8 +113,8 @@ class CUDABackend(BaseBackend):
 
         return data
 
-    def start_profile_trace(self):
+    def start_profile(self):
         self.CUDA.cuProfilerStart(None)
 
-    def start_profile_trace(self):
+    def start_profile(self):
         self.CUDA.cuProfilerStop(None)

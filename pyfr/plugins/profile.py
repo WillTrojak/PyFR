@@ -14,7 +14,7 @@ class ProfilePlugin(BaseSolnPlugin):
 
     def __call__(self, intg):
         if intg.nacptsteps == self.n_start:
-            intg.system.backend.start_profile_trace()
+            intg.system.backend.start_profile()
 
         if intg.nacptsteps == self.n_stop:
-            intg.system.backend.stop_profile_trace()
+            intg.system.backend.stop_profile()
