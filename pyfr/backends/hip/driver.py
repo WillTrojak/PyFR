@@ -509,7 +509,7 @@ class HIP:
 
 
 class RocTracerWrappers(LibWrapper):
-    _libname = 'roctracer'
+    _libname = 'roctracer64'
 
     _functions = [
         (None, 'roctracer_start',  c_void_p),
