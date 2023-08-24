@@ -209,9 +209,7 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipGraphExecKernelNodeSetParams', c_void_p, c_void_p,
          POINTER(HIPKernelNodeParams)),
         (c_int, 'hipGraphExecDestroy', c_void_p),
-        (c_int, 'hipGraphLaunch', c_void_p, c_void_p),
-        (c_int, 'hipProfilerStart', c_void_p),
-        (c_int, 'hipProfilerStop', c_void_p)
+        (c_int, 'hipGraphLaunch', c_void_p, c_void_p)
     ]
 
 
@@ -508,3 +506,12 @@ class HIP:
 
     def create_graph(self):
         return HIPGraph(self)
+
+
+class RocTracerWrappers(LibWrapper):
+    _libname = 'roctracer'
+
+    _functions = [
+        (None, 'roctracer_start',  c_void_p),
+        (None, 'roctracer_stop',  c_void_p),
+    ]

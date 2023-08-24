@@ -18,6 +18,12 @@ class HIPBackend(BaseBackend):
         self.hip = HIP()
         self.hiprtc = HIPRTC()
 
+        # When when profiling enable decluttering
+        if any(re.search(r'soln-plugin-profile(-[\w]+)?\Z', s)
+               for s in cfg.sections()):
+            from pyfr.backends.hip.driver import RocTracerWrappers
+            self.roctracer = RocTracerWrappers()
+
         # Get the desired HIP device
         devid = cfg.get('backend-hip', 'device-id', 'local-rank')
 
@@ -109,8 +115,8 @@ class HIPBackend(BaseBackend):
 
         return data
 
-    def start_profile(self):
-        self.hip.hipProfilerStart(None)
+    def start_profile_trace(self):
+        self.roctracer.roctracer_start(None)
 
-    def stop_profile(self):
-        self.roctracer.hipProfilerStop(None)
+    def stop_profile_trace(self):
+        self.roctracer.roctracer_stop(None)
