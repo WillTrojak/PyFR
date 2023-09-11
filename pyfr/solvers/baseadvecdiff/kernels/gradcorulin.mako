@@ -2,6 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <%include file='pyfr.solvers.baseadvec.kernels.smats'/>
+<%include file='pyfr.solvers.baseadvecdiff.kernels.transform_grad'/>
 
 <%pyfr:kernel name='gradcorulin' ndim='2'
               gradu='inout fpdtype_t[${str(ndims)}][${str(nvars)}]'
@@ -12,10 +13,6 @@
     ${pyfr.expand('calc_smats_detj', 'verts', 'upts', 'smats', 'djac')};
 
     fpdtype_t rcpdjac = 1 / djac;
-    fpdtype_t tmpgradu[][${nvars}] = ${pyfr.array('gradu[{i}][{j}]', i=ndims, j=nvars)};
 
-% for i, j in pyfr.ndrange(ndims, nvars):
-    gradu[${i}][${j}] = rcpdjac*(${' + '.join(f'smats[{k}][{i}]*tmpgradu[{k}][{j}]'
-                                              for k in range(ndims))});
-% endfor
+    ${pyfr.expand('transform_grad', 'gradu', 'smats', 'rcpdjac')};
 </%pyfr:kernel>
