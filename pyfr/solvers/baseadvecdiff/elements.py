@@ -9,6 +9,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         if 'flux' in self.antialias:
             bufs |= {'scal_qpts', 'vect_qpts'}
+        else:
+            bufs |= {'grad_upts'}
 
         return bufs
 
@@ -19,10 +21,6 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         kprefix = 'pyfr.solvers.baseadvecdiff.kernels'
         slicem = self._slice_mat
 
-        # Register our pointwise kernels
-        self._be.pointwise.register(f'{kprefix}.gradcoru')
-        self._be.pointwise.register(f'{kprefix}.gradcorulin')
-
         # Mesh regions
         regions = self._mesh_regions
 
@@ -31,54 +29,59 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 'copy', self._vect_fpts.slice(0, self.nfpts), self._scal_fpts
             )
 
+        g = self._vect_upts if 'flux' in self.antialias else self._grad_upts
         if self.basis.order > 0:
             self.kernels['tgradpcoru_upts'] = lambda uin: kernel(
-                'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin],
-                out=self._vect_upts
+                'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin], out=g
             )
         self.kernels['tgradcoru_upts'] = lambda: kernel(
             'mul', self.opmat('M6'), self._vect_fpts.slice(0, self.nfpts),
-            out=self._vect_upts, beta=float(self.basis.order > 0)
+            out=g, beta=float(self.basis.order > 0)
         )
-
-        # Template arguments for the physical gradient kernel
-        tplargs = {
-            'ndims': self.ndims,
-            'nvars': self.nvars,
-            'nverts': len(self.basis.linspts),
-            'jac_exprs': self.basis.jac_exprs
-        }
-
-        if 'curved' in regions:
-            self.kernels['gradcoru_upts_curved'] = lambda: kernel(
-                'gradcoru', tplargs=tplargs,
-                dims=[self.nupts, regions['curved']],
-                gradu=slicem(self._vect_upts, 'curved'),
-                smats=self.curved_smat_at('upts'),
-                rcpdjac=self.rcpdjac_at('upts', 'curved')
-            )
-
-        if 'linear' in regions:
-            self.kernels['gradcoru_upts_linear'] = lambda: kernel(
-                'gradcorulin', tplargs=tplargs,
-                dims=[self.nupts, regions['linear']],
-                gradu=slicem(self._vect_upts, 'linear'),
-                upts=self.upts, verts=self.ploc_at('linspts', 'linear')
-            )
 
         def gradcoru_fpts():
             nupts, nfpts = self.nupts, self.nfpts
-            vupts, vfpts = self._vect_upts, self._vect_fpts
+            vupts, vfpts = g, self._vect_fpts
 
             # Exploit the block-diagonal form of the operator
             muls = [kernel('mul', self.opmat('M0'),
-                           vupts.slice(i*nupts, (i + 1)*nupts),
-                           vfpts.slice(i*nfpts, (i + 1)*nfpts))
+                        vupts.slice(i*nupts, (i + 1)*nupts),
+                        vfpts.slice(i*nfpts, (i + 1)*nfpts))
                     for i in range(self.ndims)]
 
             return self._be.unordered_meta_kernel(muls)
 
         self.kernels['gradcoru_fpts'] = gradcoru_fpts
+
+        if 'flux' in self.antialias:
+            # Register our pointwise kernels
+            self._be.pointwise.register(f'{kprefix}.gradcoru')
+            self._be.pointwise.register(f'{kprefix}.gradcorulin')
+
+            # Template arguments for the physical gradient kernel
+            tplargs = {
+                'ndims': self.ndims,
+                'nvars': self.nvars,
+                'nverts': len(self.basis.linspts),
+                'jac_exprs': self.basis.jac_exprs
+            }
+
+            if 'curved' in regions:
+                self.kernels['gradcoru_upts_curved'] = lambda: kernel(
+                    'gradcoru', tplargs=tplargs,
+                    dims=[self.nupts, regions['curved']],
+                    gradu=slicem(self._vect_upts, 'curved'),
+                    smats=self.curved_smat_at('upts'),
+                    rcpdjac=self.rcpdjac_at('upts', 'curved')
+                )
+
+            if 'linear' in regions:
+                self.kernels['gradcoru_upts_linear'] = lambda: kernel(
+                    'gradcorulin', tplargs=tplargs,
+                    dims=[self.nupts, regions['linear']],
+                    gradu=slicem(self._vect_upts, 'linear'),
+                    upts=self.upts, verts=self.ploc_at('linspts', 'linear')
+                )
 
         if 'flux' in self.antialias and self.basis.order > 0:
             def gradcoru_qpts():

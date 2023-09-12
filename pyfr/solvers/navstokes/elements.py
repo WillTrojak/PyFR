@@ -35,9 +35,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         if self.basis.order == 0:
             return
 
-        # Register our flux kernels
-        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.tflux')
-        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.tfluxlin')
+        kern_reg_path = 'pyfr.solvers.navstokes.kernels'
 
         # Handle shock capturing and Sutherland's law
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
@@ -62,12 +60,17 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         av = self.artvisc
 
         if c in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[self.nupts, r[c]],
-                u=s(self.scal_upts[uin], c), f=s(self._vect_upts, c),
-                artvisc=s(av, c), smats=self.curved_smat_at('upts')
+            self._be.pointwise.register(kern_reg_path + '.tfluxgradcoru')
+            self.kernels['tdisf_fused_curved'] = lambda uin: self._be.kernel(
+                'tfluxgradcoru', tplargs=tplargs, dims=[self.nupts, r[c]],
+                u=s(self.scal_upts[uin], c), artvisc=s(av, c),
+                f=s(self._vect_upts, c), gradu=s(self._grad_upts, c),
+                rcpdjac=self.rcpdjac_at('upts', 'curved'),
+                smats=self.curved_smat_at('upts')
             )
         elif c in r:
+            # Register our flux kernels
+            self._be.pointwise.register(kern_reg_path + '.tflux')
             self.kernels['tdisf_curved'] = lambda: self._be.kernel(
                 'tflux', tplargs=tplargs, dims=[self.nqpts, r[c]],
                 u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
@@ -75,13 +78,16 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             )
 
         if l in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_linear'] = lambda uin: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[self.nupts, r[l]],
-                u=s(self.scal_upts[uin], l), f=s(self._vect_upts, l),
-                artvisc=s(av, l), verts=self.ploc_at('linspts', l),
-                upts=self.upts
+            self._be.pointwise.register(kern_reg_path + '.tfluxgradcorulin')
+            self.kernels['tdisf_fused_linear'] = lambda uin: self._be.kernel(
+                'tfluxgradcorulin', tplargs=tplargs, dims=[self.nupts, r[l]],
+                u=s(self.scal_upts[uin], l), artvisc=s(av, l),
+                f=s(self._vect_upts, l), gradu=s(self._grad_upts, l),
+                verts=self.ploc_at('linspts', l), upts=self.upts
             )
         elif l in r:
+            # Register our flux kernels
+            self._be.pointwise.register(kern_reg_path + '.tfluxlin')
             self.kernels['tdisf_linear'] = lambda: self._be.kernel(
                 'tfluxlin', tplargs=tplargs, dims=[self.nqpts, r[l]],
                 u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),

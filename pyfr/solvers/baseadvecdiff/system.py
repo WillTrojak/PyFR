@@ -77,10 +77,20 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         for l in k['eles/gradcoru_upts_linear']:
             g2.add(l, deps=deps(l, 'eles/tgradcoru_upts'))
 
+        # Compute the fused transformed flux and corrected gradient
+        for l in k['eles/tdisf_fused_curved'] + k['eles/tdisf_fused_linear']:
+            ldeps = deps(l, 'eles/tgradcoru_upts')
+            g2.add(l, deps=ldeps)
+
         # Interpolate these gradients to the flux points
         for l in k['eles/gradcoru_fpts']:
-            ldeps = deps(l, 'eles/gradcoru_upts_curved',
-                         'eles/gradcoru_upts_linear')
+            if (k['eles/gradcoru_upts_curved'] and
+                k['eles/gradcoru_upts_linear']):
+                ldeps = deps(l, 'eles/gradcoru_upts_curved',
+                             'eles/gradcoru_upts_linear')
+            else:
+                ldeps = deps(l, 'eles/tdisf_fused_curved',
+                             'eles/tdisf_fused_linear')
             g2.add(l, deps=ldeps)
 
         # Pack and send these interpolated gradients to our neighbours
@@ -112,7 +122,13 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         # Compute the transformed divergence of the partially corrected flux
         for l in k['eles/tdivtpcorf']:
-            g2.add(l, deps=deps(l, 'eles/tdisf_curved', 'eles/tdisf_linear'))
+            if k['eles/tdisf_curved'] and ['eles/tdisf_linear']:
+                g2.add(l, deps=deps(l, 'eles/tdisf_curved',
+                                    'eles/tdisf_linear'))
+            else:
+                g2.add(l, deps=deps(l, 'eles/tdisf_fused_curved',
+                                    'eles/tdisf_fused_linear'))
+
         g2.commit()
 
         g3 = self.backend.graph()
