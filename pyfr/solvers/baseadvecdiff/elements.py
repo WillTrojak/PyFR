@@ -53,7 +53,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         self.kernels['gradcoru_fpts'] = gradcoru_fpts
 
-        if 'flux' in self.antialias:
+        if 'flux' in self.antialias or self.basis.order == 0:
             # Register our pointwise kernels
             self._be.pointwise.register(f'{kprefix}.gradcoru')
             self._be.pointwise.register(f'{kprefix}.gradcorulin')

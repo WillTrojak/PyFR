@@ -35,7 +35,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         if self.basis.order == 0:
             return
 
-        kern_reg_path = 'pyfr.solvers.navstokes.kernels'
+        kprefix = 'pyfr.solvers.navstokes.kernels'
 
         # Handle shock capturing and Sutherland's law
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
@@ -60,7 +60,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         av = self.artvisc
 
         if c in r and 'flux' not in self.antialias:
-            self._be.pointwise.register(kern_reg_path + '.tfluxgradcoru')
+            self._be.pointwise.register(f'{kprefix}.tfluxgradcoru')
             self.kernels['tdisf_fused_curved'] = lambda uin: self._be.kernel(
                 'tfluxgradcoru', tplargs=tplargs, dims=[self.nupts, r[c]],
                 u=s(self.scal_upts[uin], c), artvisc=s(av, c),
@@ -70,7 +70,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             )
         elif c in r:
             # Register our flux kernels
-            self._be.pointwise.register(kern_reg_path + '.tflux')
+            self._be.pointwise.register(f'{kprefix}.tflux')
             self.kernels['tdisf_curved'] = lambda: self._be.kernel(
                 'tflux', tplargs=tplargs, dims=[self.nqpts, r[c]],
                 u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
@@ -78,7 +78,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             )
 
         if l in r and 'flux' not in self.antialias:
-            self._be.pointwise.register(kern_reg_path + '.tfluxgradcorulin')
+            self._be.pointwise.register(f'{kprefix}.tfluxgradcorulin')
             self.kernels['tdisf_fused_linear'] = lambda uin: self._be.kernel(
                 'tfluxgradcorulin', tplargs=tplargs, dims=[self.nupts, r[l]],
                 u=s(self.scal_upts[uin], l), artvisc=s(av, l),
@@ -87,7 +87,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             )
         elif l in r:
             # Register our flux kernels
-            self._be.pointwise.register(kern_reg_path + '.tfluxlin')
+            self._be.pointwise.register(f'{kprefix}.tfluxlin')
             self.kernels['tdisf_linear'] = lambda: self._be.kernel(
                 'tfluxlin', tplargs=tplargs, dims=[self.nqpts, r[l]],
                 u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
