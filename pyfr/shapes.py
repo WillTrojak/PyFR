@@ -314,6 +314,17 @@ class BaseShape:
     def nmpts(self):
         return len(self.mpts)
 
+    @cached_property
+    def fpts_in_upts(self):
+        mrowsum = np.max(np.abs(np.sum(self.m0, axis=1) - 1.0))
+        return np.min(self.m0) > -1e-8 and mrowsum < 1e-8
+
+    @cached_property
+    def fpts_map_upts(self):
+        if not self.fpts_in_upts:
+            raise ValueError("Flux points not subset of solution points")
+        return np.array([np.where(r == 1.)[0][0] for r in self.m0])
+
 
 class TensorProdShape:
     @classmethod

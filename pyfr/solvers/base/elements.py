@@ -46,6 +46,14 @@ class BaseElements:
         self.nfacefpts = basis.nfacefpts
         self.nmpts = basis.nmpts
 
+        # Set view
+        if basis.fpts_in_upts:
+            self.get_vect_fpts_for_inter = self._get_vect_upts_for_inter
+            self.get_comm_fpts_for_inter = self._get_comm_fpts_for_inter
+        else:
+            self.get_vect_fpts_for_inter = self._get_vect_fpts_for_inter
+            self.get_comm_fpts_for_inter = self._get_vect_fpts_for_inter
+
     @staticmethod
     def validate_formulation(form, intg, cfg):
         pass
@@ -182,6 +190,8 @@ class BaseElements:
             self._vect_upts = valloc('vect_upts', nupts)
         if 'grad_upts' in sbufs:
             self._grad_upts = valloc('grad_upts', nupts)
+        if 'comm_fpts' in sbufs:
+            self._comm_fpts = salloc('comm_fpts', nupts)
         if 'vect_qpts' in sbufs:
             self._vect_qpts = valloc('vect_qpts', nqpts)
         if 'vect_fpts' in sbufs:
@@ -371,7 +381,16 @@ class BaseElements:
 
         return (self._scal_fpts.mid,)*nfp, rmap, cmap
 
-    def get_vect_fpts_for_inter(self, eidx, fidx):
+
+    def _get_comm_fpts_for_inter(self, eidx, fidx):
+        nfp = self.nfacefpts[fidx]
+
+        rmap = self._srtd_face_fpts[fidx][eidx]
+        cmap = (eidx,)*nfp
+
+        return (self._comm_fpts.mid,)*nfp, rmap, cmap
+
+    def _get_vect_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
         rmap = self._srtd_face_fpts[fidx][eidx]
@@ -379,6 +398,16 @@ class BaseElements:
         rstri = (self.nfpts,)*nfp
 
         return (self._vect_fpts.mid,)*nfp, rmap, cmap, rstri
+
+    def _get_vect_upts_for_inter(self, eidx, fidx):
+        nfp = self.nfacefpts[fidx]
+
+        rmap = self._srtd_face_fpts[fidx][eidx]
+        fmap = self.basis.fpts_map_upts[rmap]
+        cmap = (eidx,)*nfp
+        rstri = (self.nfpts,)*nfp
+
+        return (self._grad_upts.mid,)*nfp, fmap, cmap, rstri
 
     def get_ploc_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]

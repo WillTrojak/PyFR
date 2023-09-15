@@ -12,6 +12,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         else:
             bufs |= {'grad_upts'}
 
+        if self.basis.fpts_in_upts:
+            bufs |= {'comm_fpts'}
+
         return bufs
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
@@ -25,33 +28,46 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         regions = self._mesh_regions
 
         if abs(self.cfg.getfloat('solver-interfaces', 'ldg-beta')) == 0.5:
-            self.kernels['copy_fpts'] = lambda: kernel(
-                'copy', self._vect_fpts.slice(0, self.nfpts), self._scal_fpts
-            )
+            if self.basis.fpts_in_upts:
+                self.kernels['copy_fpts'] = lambda: kernel(
+                    'copy', self._comm_fpts, self._scal_fpts
+                )
+            else:
+                self.kernels['copy_fpts'] = lambda: kernel(
+                    'copy', self._vect_fpts.slice(0, self.nfpts),
+                    self._scal_fpts
+                )
 
         g = self._vect_upts if 'flux' in self.antialias else self._grad_upts
         if self.basis.order > 0:
             self.kernels['tgradpcoru_upts'] = lambda uin: kernel(
                 'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin], out=g
             )
-        self.kernels['tgradcoru_upts'] = lambda: kernel(
-            'mul', self.opmat('M6'), self._vect_fpts.slice(0, self.nfpts),
-            out=g, beta=float(self.basis.order > 0)
-        )
+        if self.basis.fpts_in_upts:
+            self.kernels['tgradcoru_upts'] = lambda: kernel(
+                'mul', self.opmat('M6'), self._comm_fpts,
+                out=g, beta=float(self.basis.order > 0)
+            )
+        else:
+            self.kernels['tgradcoru_upts'] = lambda: kernel(
+                'mul', self.opmat('M6'), self._vect_fpts.slice(0, self.nfpts),
+                out=g, beta=float(self.basis.order > 0)
+            )
 
-        def gradcoru_fpts():
-            nupts, nfpts = self.nupts, self.nfpts
-            vupts, vfpts = g, self._vect_fpts
+        if not self.basis.fpts_in_upts:
+            def gradcoru_fpts():
+                nupts, nfpts = self.nupts, self.nfpts
+                vupts, vfpts = g, self._vect_fpts
 
-            # Exploit the block-diagonal form of the operator
-            muls = [kernel('mul', self.opmat('M0'),
-                        vupts.slice(i*nupts, (i + 1)*nupts),
-                        vfpts.slice(i*nfpts, (i + 1)*nfpts))
-                    for i in range(self.ndims)]
+                # Exploit the block-diagonal form of the operator
+                muls = [kernel('mul', self.opmat('M0'),
+                            vupts.slice(i*nupts, (i + 1)*nupts),
+                            vfpts.slice(i*nfpts, (i + 1)*nfpts))
+                        for i in range(self.ndims)]
 
-            return self._be.unordered_meta_kernel(muls)
+                return self._be.unordered_meta_kernel(muls)
 
-        self.kernels['gradcoru_fpts'] = gradcoru_fpts
+            self.kernels['gradcoru_fpts'] = gradcoru_fpts
 
         if 'flux' in self.antialias or self.basis.order == 0:
             # Register our pointwise kernels
