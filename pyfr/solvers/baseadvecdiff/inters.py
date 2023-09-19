@@ -10,8 +10,8 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         # Generate the additional view matrices
         self._vect_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inter')
         self._vect_rhs = self._vect_view(rhs, 'get_vect_fpts_for_inter')
-        self._comm_lhs = self._vect_view(lhs, 'get_comm_fpts_for_inter')
-        self._comm_rhs = self._vect_view(rhs, 'get_comm_fpts_for_inter')
+        self._comm_lhs = self._scal_view(lhs, 'get_comm_fpts_for_inter')
+        self._comm_rhs = self._scal_view(rhs, 'get_comm_fpts_for_inter')
 
         # Generate the additional view matrices for artificial viscosity
         if cfg.get('solver', 'shock-capturing') == 'artificial-viscosity':
@@ -120,6 +120,9 @@ class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
 
         # Additional view matrices
         self._vect_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inter')
+        self._vect_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inter')
+        self._comm_lhs = self._scal_view(lhs, 'get_comm_fpts_for_inter')
+        self._comm_lhs = self._scal_view(lhs, 'get_comm_fpts_for_inter')
 
         # Additional kernel constants
         self.c |= cfg.items_as('solver-interfaces', float)

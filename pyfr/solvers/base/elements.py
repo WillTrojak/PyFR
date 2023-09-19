@@ -191,7 +191,7 @@ class BaseElements:
         if 'grad_upts' in sbufs:
             self._grad_upts = valloc('grad_upts', nupts)
         if 'comm_fpts' in sbufs:
-            self._comm_fpts = salloc('comm_fpts', nupts)
+            self._comm_fpts = salloc('comm_fpts', nfpts)
         if 'vect_qpts' in sbufs:
             self._vect_qpts = valloc('vect_qpts', nqpts)
         if 'vect_fpts' in sbufs:
