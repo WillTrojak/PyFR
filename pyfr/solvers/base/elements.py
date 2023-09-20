@@ -404,7 +404,7 @@ class BaseElements:
         rmap = self._srtd_face_fpts[fidx][eidx]
         fmap = self.basis.fpts_map_upts[rmap]
         cmap = (eidx,)*nfp
-        rstri = (self.nfpts,)*nfp
+        rstri = (self.nupts,)*nfp
 
         return (self._grad_upts.mid,)*nfp, fmap, cmap, rstri
 
