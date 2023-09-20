@@ -1,3 +1,5 @@
+import numpy as np
+
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
@@ -10,8 +12,8 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         # Generate the additional view matrices
         self._vect_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inter')
         self._vect_rhs = self._vect_view(rhs, 'get_vect_fpts_for_inter')
-        self._comm_lhs = self._view(lhs, 'get_comm_fpts_for_inter')
-        self._comm_rhs = self._view(rhs, 'get_comm_fpts_for_inter')
+        self._comm_lhs = self._scal_view(lhs, 'get_comm_fpts_for_inter')
+        self._comm_rhs = self._scal_view(rhs, 'get_comm_fpts_for_inter')
 
         # Generate the additional view matrices for artificial viscosity
         if cfg.get('solver', 'shock-capturing') == 'artificial-viscosity':
