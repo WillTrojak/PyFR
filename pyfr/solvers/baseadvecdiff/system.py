@@ -191,9 +191,9 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g2.add_all(k['eles/tgradcoru_upts'], deps=k['mpiint/con_u'])
 
         # Obtain the physical gradients at the solution points
-        for l in k['eles/gradcoru_upts_curved']:
+        for l in k['eles/gradcoru_upts_cur_grad']:
             g2.add(l, deps=deps(l, 'eles/tgradcoru_upts'))
-        for l in k['eles/gradcoru_upts_linear']:
+        for l in k['eles/gradcoru_upts_lin_grad']:
             g2.add(l, deps=deps(l, 'eles/tgradcoru_upts'))
         g2.commit()
 

@@ -323,7 +323,8 @@ class BaseShape:
     def fpts_map_upts(self):
         if not self.fpts_in_upts:
             raise ValueError("Flux points not subset of solution points")
-        return np.array([np.where(r == 1.)[0][0] for r in self.m0])
+        is_one = lambda r: np.logical_and(1 - 1e-8 <= r, r <= 1 + 1e-8)
+        return np.array([np.where(is_one(r))[0][0] for r in self.m0])
 
 
 class TensorProdShape:
