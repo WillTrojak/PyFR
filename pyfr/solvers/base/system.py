@@ -46,7 +46,9 @@ class BaseSystem:
         # Get all the solution point locations for the elements
         self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
 
-        if hasattr(eles[0], '_vect_upts'):
+        if hasattr(eles[0], '_grad_upts'):
+            self.eles_vect_upts = [e._grad_upts for e in eles]
+        elif hasattr(eles[0], '_vect_upts'):
             self.eles_vect_upts = [e._vect_upts for e in eles]
 
         if hasattr(eles[0], 'entmin_int'):

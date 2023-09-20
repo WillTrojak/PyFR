@@ -381,7 +381,6 @@ class BaseElements:
 
         return (self._scal_fpts.mid,)*nfp, rmap, cmap
 
-
     def _get_comm_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 

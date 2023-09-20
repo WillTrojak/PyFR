@@ -27,48 +27,23 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         # Mesh regions
         regions = self._mesh_regions
 
-        if abs(self.cfg.getfloat('solver-interfaces', 'ldg-beta')) == 0.5:
-            if self.basis.fpts_in_upts:
-                kerns['copy_fpts'] = lambda: kernel(
-                    'copy', self._comm_fpts, self._scal_fpts
-                )
-            else:
-                kerns['copy_fpts'] = lambda: kernel(
-                    'copy', self._vect_fpts.slice(0, self.nfpts),
-                    self._scal_fpts
-                )
+        # Set memory optimisation based on config
+        grad = self._vect_upts if 'flux' in self.antialias else self._grad_upts
+        comm = (self._comm_fpts if self.basis.fpts_in_upts
+                else self._vect_fpts.slice(0, self.nfpts))
 
-        g = self._vect_upts if 'flux' in self.antialias else self._grad_upts
+        if abs(self.cfg.getfloat('solver-interfaces', 'ldg-beta')) == 0.5:
+            kerns['copy_fpts'] = lambda: kernel('copy', comm, self._scal_fpts)
+
         if self.basis.order > 0:
             kerns['tgradpcoru_upts'] = lambda uin: kernel(
-                'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin], out=g
+                'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin], out=grad
             )
 
-        if self.basis.fpts_in_upts:
-            kerns['tgradcoru_upts'] = lambda: kernel(
-                'mul', self.opmat('M6'), self._comm_fpts,
-                out=g, beta=float(self.basis.order > 0)
-            )
-        else:
-            kerns['tgradcoru_upts'] = lambda: kernel(
-                'mul', self.opmat('M6'), self._vect_fpts.slice(0, self.nfpts),
-                out=g, beta=float(self.basis.order > 0)
-            )
-
-        if not self.basis.fpts_in_upts:
-            def gradcoru_fpts():
-                nupts, nfpts = self.nupts, self.nfpts
-                vupts, vfpts = g, self._vect_fpts
-
-                # Exploit the block-diagonal form of the operator
-                muls = [kernel('mul', self.opmat('M0'),
-                            vupts.slice(i*nupts, (i + 1)*nupts),
-                            vfpts.slice(i*nfpts, (i + 1)*nfpts))
-                        for i in range(self.ndims)]
-
-                return self._be.unordered_meta_kernel(muls)
-
-            self.kernels['gradcoru_fpts'] = gradcoru_fpts
+        kerns['tgradcoru_upts'] = lambda: kernel(
+            'mul', self.opmat('M6'), comm, out=grad,
+            beta=float(self.basis.order > 0)
+        )
 
         # Register our pointwise kernels
         self._be.pointwise.register(f'{kprefix}.gradcoru')
@@ -83,42 +58,57 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         }
 
         if 'curved' in regions:
-            kerns['gradcoru_upts_cur_grad'] = lambda: kernel(
+            kerns['ggradcoru_upts_curved'] = lambda: kernel(
                 'gradcoru', tplargs=tplargs,
                 dims=[self.nupts, regions['curved']],
-                gradu=slicem(g, 'curved'),
+                gradu=slicem(grad, 'curved'),
                 smats=self.curved_smat_at('upts'),
                 rcpdjac=self.rcpdjac_at('upts', 'curved')
             )
 
         if 'linear' in regions:
-            kerns['gradcoru_upts_lin_grad'] = lambda: kernel(
+            kerns['ggradcoru_upts_linear'] = lambda: kernel(
                 'gradcorulin', tplargs=tplargs,
                 dims=[self.nupts, regions['linear']],
-                gradu=slicem(g, 'linear'),
+                gradu=slicem(grad, 'linear'),
                 upts=self.upts, verts=self.ploc_at('linspts', 'linear')
             )
 
         if 'flux' in self.antialias or self.basis.order == 0:
             if 'linear' in regions:
-                kerns['gradcoru_upts_linear'] = kerns['gradcoru_upts_lin_grad']
+                kerns['gradcoru_upts_linear'] = kerns['ggradcoru_upts_linear']
             if 'curved' in regions:
-                kerns['gradcoru_upts_curved'] = kerns['gradcoru_upts_cur_grad']
+                kerns['gradcoru_upts_curved'] = kerns['ggradcoru_upts_curved']
+
+        def gradcoru_qpts():
+            nupts, nqpts = self.nupts, self.nqpts
+            vupts, vqpts = self._vect_upts, self._vect_qpts
+
+            # Exploit the block-diagonal form of the operator
+            muls = [kernel('mul', self.opmat('M7'),
+                            vupts.slice(i*nupts, (i + 1)*nupts),
+                            vqpts.slice(i*nqpts, (i + 1)*nqpts))
+                    for i in range(self.ndims)]
+
+            return self._be.unordered_meta_kernel(muls)
 
         if 'flux' in self.antialias and self.basis.order > 0:
-            def gradcoru_qpts():
-                nupts, nqpts = self.nupts, self.nqpts
-                vupts, vqpts = self._vect_upts, self._vect_qpts
-
-                # Exploit the block-diagonal form of the operator
-                muls = [kernel('mul', self.opmat('M7'),
-                               vupts.slice(i*nupts, (i + 1)*nupts),
-                               vqpts.slice(i*nqpts, (i + 1)*nqpts))
-                        for i in range(self.ndims)]
-
-                return self._be.unordered_meta_kernel(muls)
-
             kerns['gradcoru_qpts'] = gradcoru_qpts
+
+        def gradcoru_fpts():
+            nupts, nfpts = self.nupts, self.nfpts
+            vupts, vfpts = grad, self._vect_fpts
+
+            # Exploit the block-diagonal form of the operator
+            muls = [kernel('mul', self.opmat('M0'),
+                        vupts.slice(i*nupts, (i + 1)*nupts),
+                        vfpts.slice(i*nfpts, (i + 1)*nfpts))
+                    for i in range(self.ndims)]
+
+            return self._be.unordered_meta_kernel(muls)
+
+        if not self.basis.fpts_in_upts:
+            self.kernels['gradcoru_fpts'] = gradcoru_fpts
 
         # Shock capturing
         shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
