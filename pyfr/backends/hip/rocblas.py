@@ -1,4 +1,4 @@
-from ctypes import POINTER, c_int, c_double, c_float, c_void_p
+from ctypes import POINTER, c_int, c_double, c_float, c_uint32, c_void_p
 
 import numpy as np
 
@@ -30,6 +30,11 @@ class RocBLASWrappers(LibWrapper):
     # Constants
     OPERATION_NONE = 111
     OPERATION_TRANSPOSE = 112
+    ROCBLAS_COMPUTE_TYPE_F32 = 300
+    ROCBLAS_DATATYPE_F32_R = 151
+    ROCBLAS_DATATYPE_F64_R = 152
+    ROCBLAS_GEMM_ALGO_STANDARD = 0x0
+    ROCBLAS_GEMM_ALGO_SOLUTION_INDEX = 0x1
 
     # Functions
     _functions = [
@@ -41,7 +46,15 @@ class RocBLASWrappers(LibWrapper):
          POINTER(c_double), c_void_p, c_int),
         (c_int, 'rocblas_sgemm', c_void_p, c_int, c_int, c_int, c_int, c_int,
          POINTER(c_float), c_void_p, c_int, c_void_p, c_int,
-         POINTER(c_float), c_void_p, c_int)
+         POINTER(c_float), c_void_p, c_int),
+        (c_int, 'rocblas_gemm_ex_get_solutions', c_void_p, c_int, c_int, c_int,
+         c_int, c_int, POINTER(c_double), c_void_p, c_int, c_int, c_void_p,
+         c_int, c_int, POINTER(c_double), c_void_p, c_int, c_int, c_void_p,
+         c_int, c_int, c_int, c_int, c_uint32, c_void_p, c_void_p),
+        (c_int, 'rocblas_gemm_ex', c_void_p, c_int, c_int, c_int,
+         c_int, c_int, POINTER(c_double), c_void_p, c_int, c_int, c_void_p,
+         c_int, c_int, POINTER(c_double), c_void_p, c_int, c_int, c_void_p,
+         c_int, c_int, c_int, c_int, c_int, c_uint32)
     ]
 
 
@@ -92,30 +105,84 @@ class HIPRocBLASKernels(HIPKernelProvider):
 
         # α and β factors for C = α*(A*B) + β*C
         if a.dtype == np.float64:
+            rtype = w.ROCBLAS_DATATYPE_F64_R
             rocblas_gemm = w.rocblas_dgemm
             alpha_ct, beta_ct = c_double(alpha), c_double(beta)
         else:
+            rtype = w.ROCBLAS_DATATYPE_F32_R
             rocblas_gemm = w.rocblas_sgemm
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
-        # Convenience wrapper
-        def gemm(stream):
-            w.rocblas_set_stream(h, stream)
-            rocblas_gemm(h, opA, opB, m, n, k, alpha_ct, A, A.leaddim, B,
-                         B.leaddim, beta_ct, C, C.leaddim)
+        if self.backend.cfg.getbool('backend-hip', 'tune', False):
 
-        # Obtain the performance of the kernel
-        try:
-            dt = self._mul_timing[ckey]
-        except KeyError:
+            size = c_int(0)
+
+            # Get number of kernels
+            w.rocblas_gemm_ex_get_solutions(h, opA, opB, m, n, k, alpha_ct,
+                                            A, rtype, A.leaddim,
+                                            B, rtype, B.leaddim, beta_ct,
+                                            C, rtype, C.leaddim,
+                                            C, rtype, C.leaddim,
+                                            w.ROCBLAS_COMPUTE_TYPE_F32,
+                                            w.ROCBLAS_GEMM_ALGO_SOLUTION_INDEX,
+                                            None, None, size)
+
+            # Get all kernel solution indices
+            sidx = np.ascontiguousarray(np.zeros(size, dtype=int))
+            w.rocblas_gemm_ex_get_solutions(h, opA, opB, m, n, k, alpha_ct,
+                                            A, rtype, A.leaddim,
+                                            B, rtype, B.leaddim, beta_ct,
+                                            C, rtype, C.leaddim,
+                                            C, rtype, C.leaddim,
+                                            w.ROCBLAS_COMPUTE_TYPE_F32,
+                                            w.ROCBLAS_GEMM_ALGO_SOLUTION_INDEX,
+                                            None, sidx.ctypes.data, sidx.size)
+
             # Save a copy of the contents of the output matrix
             out_np = getattr(out, 'parent', out).get()
 
-            # Benchmark the kernel and update the cache
-            self._mul_timing[ckey] = dt = self._benchmark(gemm)
+            best_kern = None
+            for s in sidx:
+                def gemm(stream):
+                    w.rocblas_set_stream(h, stream)
+                    w.rocblas_gemm_ex(h, opA, opB, m, n, k, alpha_ct,
+                                      A, rtype, A.leaddim,
+                                      B, rtype, B.leaddim, beta_ct,
+                                      C, rtype, C.leaddim,
+                                      C, rtype, C.leaddim,
+                                      w.ROCBLAS_COMPUTE_TYPE_F32,
+                                      w.ROCBLAS_GEMM_ALGO_SOLUTION_INDEX,
+                                      s, None)
+
+                # Benchmark the kernel and update the cache
+                dt = self._benchmark(gemm)
+                if best_kern is None or dt < best_kern[-1]:
+                    best_kern = gemm, s, dt
+
+            gemm, s, dt = best_kern
 
             # Restore the output matrix
             getattr(out, 'parent', out).set(out_np)
+
+        else:
+            # Convenience wrapper
+            def gemm(stream):
+                w.rocblas_set_stream(h, stream)
+                rocblas_gemm(h, opA, opB, m, n, k, alpha_ct, A, A.leaddim, B,
+                            B.leaddim, beta_ct, C, C.leaddim)
+
+            # Obtain the performance of the kernel
+            try:
+                dt = self._mul_timing[ckey]
+            except KeyError:
+                # Save a copy of the contents of the output matrix
+                out_np = getattr(out, 'parent', out).get()
+
+                # Benchmark the kernel and update the cache
+                self._mul_timing[ckey] = dt = self._benchmark(gemm)
+
+                # Restore the output matrix
+                getattr(out, 'parent', out).set(out_np)
 
         class MulKernel(HIPKernel):
             def add_to_graph(self, graph, deps):
