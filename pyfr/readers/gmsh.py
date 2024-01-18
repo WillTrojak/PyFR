@@ -1,4 +1,5 @@
 from collections import defaultdict
+from itertools import tee
 import re
 
 import numpy as np
@@ -23,6 +24,38 @@ def msh_section(mshit, section):
 
     if next(mshit) != endln:
         raise ValueError(f'Expected $End{section}')
+
+class MSHSection:
+    def __init__(self, mshit, section):
+        self.mshit = mshit
+        self.section = section
+
+        self.endln = f'$End{section}\n'
+        self.endix = int(next(mshit))
+
+    def __iter__(self):
+        self._count = 0
+        return self
+
+    def __next__(self):
+        try:
+            l = next(self.mshit)
+        except StopIteration:
+            raise ValueError(f'Expected $End{self.section}')
+
+        if l == self.endln and self._count != self.endix:
+            raise ValueError(f'Unexpected end of section ${self.section}')
+        elif self._count == self.endix:
+            if l == self.endln:
+                raise StopIteration
+            else:
+                raise ValueError(f'Expected $End{self.section}')
+        else:
+            self._count += 1
+            return l.strip()
+
+    def __len__(self):
+        return self.endix
 
 
 class GmshReader(BaseReader):
@@ -339,15 +372,15 @@ class GmshReader(BaseReader):
     def _read_nodes_impl_v2(self, mshit):
         nodemap = {}
 
-        # Read in the nodes as a dict
-        for l in msh_section(mshit, 'Nodes'):
-            nv = l.split()
-            nodemap[int(nv[0])] = nv[1:]
+        # Create an iterator class for nodes
+        node_iter = MSHSection(mshit, 'Nodes')
 
-        # Pack them into a dense array
-        self._nodepts = nodepts = np.empty((max(nodemap) + 1, 3))
-        for k, nv in nodemap.items():
-            nodepts[k] = [float(x) for x in nv]
+        # Create an empty array to store nodes
+        self._nodepts = nodepts = np.empty((len(node_iter) + 1, 3))
+
+        for l in node_iter:
+            nv = l.split()
+            nodepts[int(nv[0])] = [float(x) for x in nv[1:]]
 
     def _read_nodes_impl_v41(self, mshit):
         # Entity count, node count, minimum and maximum node numbers
@@ -369,8 +402,30 @@ class GmshReader(BaseReader):
         self._read_eles_impl(mshit)
 
     def _read_eles_impl_v2(self, mshit):
-        elenodes = defaultdict(list)
+        # Copy msh iter
+        mshit, mshit_copy = tee(mshit)
 
+        # Loop over elements to count them
+        eles_count = defaultdict(lambda: 0)
+        for l in msh_section(mshit_copy, 'Elements'):
+            elei = [int(i) for i in l.split()]
+            enum, etype, entags = elei[:3]
+            etags, enodes = elei[3:3 + entags], elei[3 + entags:]
+
+            # Physical entity type (used for BCs)
+            epent = etags[0]
+
+            eles_count[etype, epent, len(enodes)] += 1
+
+        # Allocate memory upfront
+        self._elenodes = {}
+        for (etype, epent, nnode), neles in eles_count.items():
+            self._elenodes[etype, epent] = np.empty((neles, nnode), dtype=int)
+
+        # Zero the accumulators
+        eles_idx = defaultdict(lambda: 0)
+
+        # Read in element data
         for l in msh_section(mshit, 'Elements'):
             # Extract the raw element data
             elei = [int(i) for i in l.split()]
@@ -383,9 +438,9 @@ class GmshReader(BaseReader):
             # Physical entity type (used for BCs)
             epent = etags[0]
 
-            elenodes[etype, epent].append(enodes)
-
-        self._elenodes = {k: np.array(v) for k, v in elenodes.items()}
+            idx = eles_idx[etype, epent]
+            self._elenodes[etype, epent][idx] = np.array(enodes)
+            eles_idx[etype, epent] += 1
 
     def _read_eles_impl_v41(self, mshit):
         elenodes = defaultdict(list)

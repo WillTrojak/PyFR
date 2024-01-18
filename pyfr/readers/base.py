@@ -260,9 +260,19 @@ class NodalMeshAssembler:
             leles = leles.reshape(nnodes, -1, ndim)
 
             # Use this to determine which elements are linear
-            num = np.max(np.abs(eles - leles), axis=0)
-            den = np.max(eles, axis=0) - np.min(eles, axis=0)
-            lin = lidx[petype] = np.all(num / den < lintol, axis=1)
+            neles = eles.shape[1]
+            lidx[petype] = np.empty((neles), dtype=bool)
+            nbatch = 2**20
+            for i in range(0, neles, nbatch):
+                s = slice(i, min(i + nbatch,neles))
+
+                _eles = eles[:,s]
+                _leles = leles[:,s]
+
+                num = np.max(np.abs(_eles - _leles), axis=0)
+                den = np.max(_eles, axis=0) - np.min(_eles, axis=0)
+                lidx[petype][s] = np.all(num / den < lintol, axis=1)
+            lin = lidx[petype]
 
             for ix in np.nonzero(lin)[0]:
                 self._nodepts[elesix[ix], :ndim] = leles[ptoi, ix]
