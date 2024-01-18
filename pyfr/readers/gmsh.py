@@ -443,7 +443,8 @@ class GmshReader(BaseReader):
             eles_idx[etype, epent] += 1
 
     def _read_eles_impl_v41(self, mshit):
-        elenodes = defaultdict(list)
+        elenodes = {}
+        self._elenodes = {}
 
         # Block and total element count
         nb, ne = (int(i) for i in next(mshit).split()[:2])
@@ -456,18 +457,23 @@ class GmshReader(BaseReader):
 
             # Physical entity type (used for BCs)
             epent = self._tagpents.get((edim, etag), -1)
-            append = elenodes[etype, epent].append
+
+            # Allocate memory upfront
+            nnode = self._etype_map[etype][1]
+            self._elenodes[etype, epent] = np.empty((ecount, nnode),
+                                                    dtype=np.int64)
 
             for j in range(ecount):
-                append([int(k) for k in next(mshit).split()[1:]])
+                nodes = [int(k) for k in next(mshit).split()[1:]]
+                self._elenodes[etype, epent][j] = nodes
 
-        if ne != sum(len(v) for v in elenodes.values()):
+            elenodes[etype, epent] = ecount
+
+        if ne != sum(v for v in elenodes.values()):
             raise ValueError('Invalid element count')
 
         if next(mshit) != '$EndElements\n':
             raise ValueError('Expected $EndElements')
-
-        self._elenodes = {k: np.array(v) for k, v in elenodes.items()}
 
     def _to_raw_pyfrm(self, lintol):
         # Assemble a nodal mesh
