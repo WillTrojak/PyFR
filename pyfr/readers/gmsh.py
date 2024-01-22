@@ -203,7 +203,7 @@ class GmshReader(BaseReader):
             mshit = iter(msh)
 
             # Have our spinner flashed every 10,000 lines
-            mshit = pspinner.wrap_iterable(mshit, 10000)
+            mshit = pspinner.wrap_iterable(mshit, 10000000)
 
             # Section readers
             sect_map = {

@@ -19,10 +19,19 @@ class BaseReader:
         pass
 
     def to_pyfrm(self, lintol):
+        print("Getting raw")
         mesh = self._to_raw_pyfrm(lintol)
+        print("Raw done")
+
+        uuid = []
+        for k, v in mesh.items():
+            uuid.append(UUID(digest(k)[:32]))
+            uuid.append(UUID(digest(str(v))[:32]))
+
+        uuid_total = UUID(digest(uuid)[:32])
 
         # Add metadata
-        mesh['mesh_uuid'] = np.array(str(UUID(digest(mesh)[:32])), dtype='S')
+        mesh['mesh_uuid'] = np.array(uuid_total, dtype='S')
 
         return mesh
 
