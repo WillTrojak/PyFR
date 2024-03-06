@@ -47,10 +47,10 @@ class BasePartitioner:
                 rnum_map = defaultdict(list)
 
                 for (pold, iold), (pnew, inew) in sorted(emap.items()):
-                    rnum_map[pold].append([pnew, inew])
+                    rnum_map[pnew].append([inew, pold, iold])
 
-                for pold, v in rnum_map.items():
-                    f[f'rnum_{etype}_p{pold}'] = np.array(v, dtype=int)
+                for pnew, v in rnum_map.items():
+                    f[f'rnum_{etype}_p{pnew}'] = np.array(v, dtype=int)
 
     def _combine_mesh_parts(self, mesh):
         # Get the per-partition element counts

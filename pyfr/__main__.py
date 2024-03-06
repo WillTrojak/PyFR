@@ -66,6 +66,17 @@ def main():
                               help='partitioner-specific option')
     ap_partition.set_defaults(process=process_partition)
 
+    ap_partition_sp = ap_partition.add_subparsers()
+
+    ap_renumber = ap_partition_sp.add_parser('renumber',
+                                             help='partition renumber --help')
+    ap_renumber.add_argument('mesh', help='already partitioned mesh file')
+    ap_renumber.add_argument('rnum', help='renunbering file')
+    ap_renumber.add_argument('solns', metavar='soln', nargs='*',
+                              help='input solution files')
+    ap_renumber.add_argument('outd', help='output directory')
+    ap_renumber.set_defaults(process=process_renumber)
+
     # Export command
     ap_export = sp.add_parser('export', help='export --help')
     ap_export.add_argument('meshf', help='PyFR mesh file to be converted')
@@ -193,16 +204,11 @@ def process_partition(args):
     # Write the repartitioned mesh file
     with args.progress.start('Write mesh'):
         write_pyfrms(os.path.join(args.outd, os.path.basename(args.mesh)),
-                     mesh)
+                    mesh)
 
     # Write out the renumbering table
     if args.rnumf:
         with args.progress.start('Write renumbering table'):
-            # print('etype,pold,iold,pnew,inew', file=args.rnumf)
-
-            # for etype, emap in sorted(rnum.items()):
-            #     for k, v in sorted(emap.items()):
-            #         print(etype, *k, *v, sep=',', file=args.rnumf)
             part.write_renumbering(args.rnumf, rnum, old_uuid)
 
     # Repartition any solutions
@@ -214,6 +220,32 @@ def process_partition(args):
 
                 # Save to disk
                 write_pyfrms(opath, part_soln_fn(NativeReader(ipath)))
+
+
+def process_renumber(args):
+    # Ensure outd is a directory
+    if not os.path.isdir(args.outd):
+        raise ValueError('Invalid output directory')
+
+    # Read the mesh and query the partition info
+    mesh = NativeReader(args.mesh)
+    old_uuid = mesh['mesh_uuid']
+    pinfo = mesh.partition_info('spt')
+
+    # Read the renumbering file
+    rnum = NativeReader(args.rnum)
+
+    part = get_partitioner('renumber', None)
+    part_soln_fn = part.partition(mesh, rnum)
+
+    # Repartition solutions
+    with args.progress.start_with_bar('Repartition solutions') as pbar:
+        for ipath in pbar.start_with_iter(args.solns):
+            # Compute the output path
+            opath = os.path.join(args.outd, os.path.basename(ipath))
+
+            # Save to disk
+            write_pyfrms(opath, part_soln_fn(NativeReader(ipath)))
 
 
 def process_export(args):
