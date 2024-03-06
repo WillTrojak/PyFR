@@ -56,7 +56,7 @@ def main():
     partitioners = sorted(cls.name for cls in subclasses(BasePartitioner))
     ap_partition.add_argument('-p', dest='partitioner', choices=partitioners,
                               help='partitioner to use')
-    ap_partition.add_argument('-r', dest='rnumf', type=FileType('w'),
+    ap_partition.add_argument('-r', dest='rnumf',
                               help='output renumbering file')
     ap_partition.add_argument('-e', dest='elewts', action='append',
                               default=[], metavar='shape:weight',
@@ -149,6 +149,7 @@ def process_partition(args):
 
     # Read the mesh and query the partition info
     mesh = NativeReader(args.mesh)
+    old_uuid = mesh['mesh_uuid']
     pinfo = mesh.partition_info('spt')
 
     # Partition weights
@@ -197,11 +198,12 @@ def process_partition(args):
     # Write out the renumbering table
     if args.rnumf:
         with args.progress.start('Write renumbering table'):
-            print('etype,pold,iold,pnew,inew', file=args.rnumf)
+            # print('etype,pold,iold,pnew,inew', file=args.rnumf)
 
-            for etype, emap in sorted(rnum.items()):
-                for k, v in sorted(emap.items()):
-                    print(etype, *k, *v, sep=',', file=args.rnumf)
+            # for etype, emap in sorted(rnum.items()):
+            #     for k, v in sorted(emap.items()):
+            #         print(etype, *k, *v, sep=',', file=args.rnumf)
+            part.write_renumbering(args.rnumf, rnum, old_uuid)
 
     # Repartition any solutions
     if args.solns:

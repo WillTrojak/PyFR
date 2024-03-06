@@ -3,6 +3,7 @@ import itertools as it
 import re
 from uuid import UUID
 
+import h5py
 import numpy as np
 
 from pyfr.inifile import Inifile
@@ -34,6 +35,22 @@ class BasePartitioner:
                 self.opts[k] = self.enum_opts[k][v]
             else:
                 raise ValueError('Invalid partitioner option')
+
+    def write_renumbering(self, filename, rnum, uuid, extn=".pyfrr"):
+        if not filename.endswith(extn):
+            filename += extn
+
+        with h5py.File(filename, 'w', libver='latest') as f:
+            f['mesh_uuid'] = np.array(uuid, dtype='S')
+
+            for etype, emap in sorted(rnum.items()):
+                rnum_map = defaultdict(list)
+
+                for (pold, iold), (pnew, inew) in sorted(emap.items()):
+                    rnum_map[pold].append([pnew, inew])
+
+                for pold, v in rnum_map.items():
+                    f[f'rnum_{etype}_p{pold}'] = np.array(v, dtype=int)
 
     def _combine_mesh_parts(self, mesh):
         # Get the per-partition element counts
