@@ -23,13 +23,13 @@ class RenumberingPartitioner(BasePartitioner):
         soln_regex = re.compile(r'rnum_([a-z]+)_p([0-9]+)$')
 
         parts = [n for n in rnum if n.startswith('rnum')]
-        print(parts)
 
         def part_soln_fn(soln):
             newsoln = defaultdict(list)
             newsoln['mesh_uuid'] = uuid
 
             newsoln |= {n: soln[n] for n in soln if n.startswith('config')}
+            newsoln |= {'stats': soln['stats']}
 
             for key in parts:
                 etype, part = soln_regex.match(key).groups()
