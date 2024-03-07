@@ -66,10 +66,10 @@ def main():
                               help='partitioner-specific option')
     ap_partition.set_defaults(process=process_partition)
 
+    # Renumber command
     ap_partition_sp = ap_partition.add_subparsers()
 
-    ap_renumber = ap_partition_sp.add_parser('renumber',
-                                             help='partition renumber --help')
+    ap_renumber = sp.add_parser('renumber', help='renumber --help')
     ap_renumber.add_argument('mesh', help='already partitioned mesh file')
     ap_renumber.add_argument('rnum', help='renunbering file')
     ap_renumber.add_argument('solns', metavar='soln', nargs='*',
@@ -235,7 +235,7 @@ def process_renumber(args):
     # Read the renumbering file
     rnum = NativeReader(args.rnum)
 
-    part = get_partitioner('renumber', None)
+    part = get_partitioner('renumber', [])
     part_soln_fn = part.partition(mesh, rnum)
 
     # Repartition solutions

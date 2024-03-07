@@ -1,5 +1,6 @@
 from pyfr.partitioners.base import BasePartitioner
 from pyfr.partitioners.metis import METISPartitioner
+from pyfr.partitioners.renumber import RenumberingPartitioner
 from pyfr.partitioners.scotch import SCOTCHPartitioner
 from pyfr.util import subclass_where
 
