@@ -14,7 +14,9 @@ class ThroughputLimitMixin:
     _tput_degrade_windows = 3
     _tput_grace_windows = 2
 
-    def _init_tput_limit(self, sect, initsoln):
+    def _init_tput_limit(self, initsoln):
+        sect = 'solver-time-integrator'
+
         self._tput_limit = self.cfg.getbool(sect, 'tput-limit', True)
         self.dt_update_interval = self.cfg.getint(sect, 'dt-update-interval',
                                                   100)
@@ -229,25 +231,8 @@ class ImplicitPIController(ThroughputLimitMixin, PIControllerMixin,
     def __init__(self, backend, systemcls, mesh, initsoln, cfg):
         super().__init__(backend, systemcls, mesh, initsoln, cfg)
 
-        self._init_pi_controller()
-
-        sect = 'solver-time-integrator'
-        self._pi_alpha = self.cfg.getfloat(sect, 'pi-alpha', 0.7)
-        self._pi_beta = self.cfg.getfloat(sect, 'pi-beta', 0.4)
-
-        # Initialise dt/errprev from restart or defaults
-        if initsoln and (sd := initsoln.state.get('intg/ctrl')) is not None:
-            self.dt, self._errprev = sd[:2]
-            diff = self.cfg.sect_diff(initsoln.config, 'solver-time-integrator')
-            if any(k.startswith(('atol', 'rtol')) for k in diff):
-                self._errprev = 1.0
-        else:
-            self._errprev = 1.0
-
-        self.serialiser.register('intg/ctrl',
-                                 lambda: [self.dt, self._errprev])
-
-        self._init_tput_limit(sect, initsoln)
+        self._init_pi_controller(initsoln)
+        self._init_tput_limit(initsoln)
 
     def advance_to(self, t):
         if t < self.tcurr:
@@ -307,7 +292,7 @@ class ImplicitThroughputController(ThroughputLimitMixin,
         self._max_failures = cfg.getint(sect, 'max-failures', 5)
 
         self._init_dt(initsoln)
-        self._init_tput_limit(sect, initsoln)
+        self._init_tput_limit(initsoln)
 
     def _init_dt(self, initsoln):
         sd = initsoln.state.get('intg/ctrl') if initsoln else None

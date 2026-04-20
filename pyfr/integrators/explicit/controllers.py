@@ -68,24 +68,7 @@ class ExplicitPIController(PIControllerMixin, BaseExplicitController):
     def __init__(self, backend, systemcls, mesh, initsoln, cfg):
         super().__init__(backend, systemcls, mesh, initsoln, cfg)
 
-        self._init_pi_controller()
-
-        f = self.cfg.getfloat
-
-        self._pi_alpha = f('solver-time-integrator', 'pi-alpha', 0.58)
-        self._pi_beta = f('solver-time-integrator', 'pi-beta', 0.42)
-
-        # Initialise dt/errprev from restart or defaults
-        if initsoln and (sd := initsoln.state.get('intg/ctrl')) is not None:
-            self.dt, self._errprev = sd
-            diff = self.cfg.sect_diff(initsoln.config, 'solver-time-integrator')
-            if any(k.startswith(('atol', 'rtol')) for k in diff):
-                self._errprev = 1.0
-        else:
-            self._errprev = 1.0
-
-        self.serialiser.register('intg/ctrl',
-                                 lambda: [self.dt, self._errprev])
+        self._init_pi_controller(initsoln)
 
     def advance_to(self, t):
         if t < self.tcurr:

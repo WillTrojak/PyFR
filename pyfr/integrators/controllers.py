@@ -46,10 +46,11 @@ class PIControllerMixin:
     controller_needs_cfl = False
     controller_has_variable_dt = True
 
-    def _init_pi_controller(self):
-        f = lambda k, d=None: self.cfg.getfloat('solver-time-integrator', k, d)
-        g = lambda k, d=None: self.cfg.get('solver-time-integrator', k, d)
-        h = lambda k: self.cfg.hasopt('solver-time-integrator', k)
+    def _init_pi_controller(self, initsoln):
+        sect = 'solver-time-integrator'
+        f = lambda k, d=None: self.cfg.getfloat(sect, k, d)
+        g = lambda k, d=None: self.cfg.get(sect, k, d)
+        h = lambda k: self.cfg.hasopt(sect, k)
 
         self.dtmax = f('dt-max', 1e2)
 
@@ -83,6 +84,22 @@ class PIControllerMixin:
 
         if not self._minfac < 1 <= self._maxfac:
             raise ValueError('Invalid max-fact, min-fact')
+
+        self._pi_alpha = f('pi-alpha', 0.7)
+        self._pi_beta = f('pi-beta', 0.4)
+
+        # If restarting attempt to restore our state
+        if initsoln and (sd := initsoln.state.get('intg/ctrl')) is not None:
+            self.dt, self._errprev = sd
+
+            # Void previous error if tolerance values have changed
+            diff = self.cfg.sect_diff(initsoln.config, sect)
+            if any(k.startswith(('atol', 'rtol')) for k in diff):
+                self._errprev = 1.0
+
+        # Register our serialiser
+        self.serialiser.register('intg/ctrl',
+                                 lambda: [self.dt, self._errprev])
 
     def _errest(self, rcurr, rerr):
         comm, rank, root = get_comm_rank_root()
