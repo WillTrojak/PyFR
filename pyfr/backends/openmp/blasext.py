@@ -84,7 +84,8 @@ class OpenMPBlasExtKernels(BaseBlasExtKernels, OpenMPKernelProvider):
     def _reduction(self, fvvar, vvars, svars, tplargs):
         ixdtype = self.backend.ixdtype
         nblocks, nrow, *_, fpdtype = fvvar.traits
-        ncola, narr = fvvar.ioshape[1:]
+        narr = fvvar.ioshape[-1]
+        ncola = fvvar.ioshape[-2] if len(fvvar.ioshape) >= 3 else 1
 
         # Add backend-specific template arguments
         tplargs['ncola'] = ncola
