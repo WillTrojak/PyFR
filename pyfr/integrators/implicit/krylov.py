@@ -20,7 +20,7 @@ class BaseKrylovSolver(BaseImplicitIntegrator):
             self._krylov_eps = backend.fpdtype_eps**0.5
 
         # Preconditioner
-        self._precond = cfg.get(sect, 'krylov-precond', 'block-jacobi').lower()
+        self._precond = cfg.get(sect, 'krylov-precond', 'none').lower()
         if self._precond not in ('none', 'block-jacobi'):
             raise ValueError('Invalid preconditioner: must be none or '
                              'block-jacobi')
