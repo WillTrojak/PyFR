@@ -131,14 +131,12 @@ class NewtonSolver(BaseKrylovSolver):
             if i == 0:
                 rnorm_init = rnorm
                 tol = max(rnorm*self._newton_rtol, self._newton_atol)
-
-            # Check for convergence
-            if rnorm < tol:
+            # After we've done at least one step check for converge
+            elif rnorm < tol:
                 break
 
-            self._compute_precond(t, u_reg, gamma_dt, self._rhs,
-                                  f_reg, self._jfnk_temp,
-                                  eps_scales=self._scales)
+            self._compute_precond(t, u_reg, gamma_dt, self._rhs, f_reg,
+                                  self._jfnk_temp, eps_scales=self._scales)
 
             # Scale the residual vector for the Krylov solver
             self._add(1, self._newton_resid, out_scale=self._inv_scales)
