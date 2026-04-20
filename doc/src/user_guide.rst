@@ -44,6 +44,9 @@ pyfr partition
       Further details can be found in the
       :ref:`performance guide <perf mixed grids>`.
 
+      Element region tags can also influence the partitioning via the
+      ``-r`` flag.  See :ref:`perf region tags` for details.
+
    pyfr partition reconstruct
       Reconstructs a partitioning from a solution file.  Example:
 

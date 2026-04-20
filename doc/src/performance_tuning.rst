@@ -164,10 +164,14 @@ for situations where installing a third-party partitioner is
 impractical.  It supports all features, including balanced partitioning
 for mixed grids.  However, it is substantially slower than the
 alternatives---especially for large partition counts---and the resulting
-decompositions may have a somewhat higher edge cut.  The balanced mode
-(``-e balanced``) works best with moderate partition counts (up to
-approximately 16 parts); for larger counts element weights should be
-used instead.
+decompositions may have a somewhat higher edge cut.  The balanced modes
+(``-e balanced`` and ``-r balanced``) work best with moderate partition
+counts (up to approximately 16 parts); for larger counts explicit
+weights should be used instead.
+
+The ``Balanced`` column in the table above also determines whether a
+partitioner supports balanced *tag* partitioning (``-r balanced``), as
+both modes rely on multi-constraint graph partitioning.
 
 .. _perf mixed grids:
 
@@ -230,6 +234,49 @@ domain is 90% tetrahedra and 10% prisms then, absent any additional
 information about the relative performance of tetrahedra and prisms, a
 safe choice is to assume the prisms are considerably *more* expensive
 than the tetrahedra.
+
+.. _perf region tags:
+
+Region tag weighting
+--------------------
+
+Element *region tags* introduced at mesh import (see
+:ref:`meshing:Importing Meshes`) can be used to further influence the
+partitioning.  This is useful when a physically or numerically
+distinguished subset of the mesh carries a different per-element cost
+or should be distributed uniformly across ranks.
+
+Tag weights are specified using the ``-r`` flag on
+``pyfr partition add`` and have two modes of operation.
+
+The *multiplicative* mode scales the weight of any element carrying a
+given tag by the supplied factor.  The flag may be repeated to compose
+multiple tag weights; the combined multiplier applied to an element is
+the product of the weights of all tags which it carries.  For example,
+to give every element carrying ``near-wall`` four times the base weight
+of an untagged element:
+
+.. code-block:: shell
+
+    pyfr partition add -r near-wall:4 ...
+
+This mode is available with every partitioner that supports element
+weights.
+
+The *balanced* mode adds an additional graph constraint for each tag in
+the mesh so that every partition receives approximately the same number
+of elements carrying each tag.  This is requested as:
+
+.. code-block:: shell
+
+    pyfr partition add -r balanced ...
+
+Balanced tag partitioning is only available with partitioners that
+support multi-constraint partitioning---currently METIS and the
+baseline partitioner---and can be combined with ``-e balanced`` or with
+explicit element weights.  The balanced mode is most effective when the
+number of tagged elements is appreciably larger than the number of
+partitions.
 
 Detecting load imbalances
 -------------------------

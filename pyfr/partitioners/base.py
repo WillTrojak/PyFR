@@ -26,19 +26,23 @@ def write_partitioning(mesh, pname, pinfo):
 
 
 class BasePartitioner:
-    def __init__(self, partwts, elewts=None, nsubeles=64, opts={}):
+    def __init__(self, partwts, elewts='balanced', tagwts={}, opts={}):
         self.partwts = partwts
         self.elewts = elewts
+        self.tagwts = tagwts
         self.nparts = len(partwts)
-        self.nsubeles = nsubeles
 
         if not self.has_part_weights and len(set(partwts)) != 1:
             raise ValueError(f'Partitioner {self.name} does not support '
                              'per-partition weights')
 
-        if elewts is None and not self.has_multiple_constraints:
+        if elewts == 'balanced' and not self.has_multiple_constraints:
             raise ValueError(f'Partitioner {self.name} does not support '
                              'balanced partitioning')
+
+        if tagwts == 'balanced' and not self.has_multiple_constraints:
+            raise ValueError(f'Partitioner {self.name} does not support '
+                             'balanced tag partitioning')
 
         # Parse the options list
         self.opts = {}
@@ -53,14 +57,15 @@ class BasePartitioner:
     @staticmethod
     def construct_global_con(mesh):
         codec = [c.decode() for c in mesh['codec']]
-        edisps, efaces, ecurved = {}, {}, []
+        edisps, efaces, ecurved, etags = {}, {}, [], []
 
         # Read the data for each element type
         disp = 0
         for etype, einfo in sorted(mesh['eles'].items()):
-            einfo = einfo['curved', 'faces'][()]
+            einfo = einfo['curved', 'faces', 'tags'][()]
             efaces[etype] = einfo['faces']
             ecurved.append(einfo['curved'])
+            etags.append(einfo['tags'])
 
             # Note the displacement
             edisps[etype] = disp
@@ -100,26 +105,59 @@ class BasePartitioner:
         # Eliminate duplicates
         conn = conn[np.lexsort(conn.T[::-1])[::2]]
 
-        # Stack all of the curved element arrays together
+        # Stack all of the curved element and tag arrays together
         ecurved = np.concatenate(ecurved)
+        etags = np.concatenate(etags)
 
-        # Eliminate duplicates and return
-        return conn, ecurved, edisps, cdisps
+        return conn, ecurved, etags, edisps, cdisps
 
-    def _get_elewts_fn(self, edisps):
-        # If we have an element weighting table then use it
-        if self.elewts is not None:
-            elewts = self.elewts
-        # Else, use multiple constraints for a balanced partitioning
-        else:
+    def _get_elewts_fn(self, edisps, etags, tagwts):
+        # Use multiple constraints for a balanced partitioning
+        if self.elewts == 'balanced':
             elewts = dict(zip(edisps, np.eye(len(edisps), dtype=int)))
+        # Else, use the provided element weighting table
+        else:
+            elewts = self.elewts
 
         # Unpack the weights and displacement dictionaries
         elewts = np.array([elewts[etype] for etype in edisps])
         edisps = np.array(list(edisps.values()))
 
-        def wts(e):
-            return elewts[np.searchsorted(edisps, e, side='right') - 1]
+        # Determine the number of elements and tags in the mesh
+        neles, ntags = len(etags), int(etags.max()).bit_length()
+
+        # Balanced tag partitioning
+        if tagwts == 'balanced' and ntags > 1:
+            # Obtain the base set of weights
+            etidx = np.searchsorted(edisps, np.arange(neles), side='right') - 1
+            base = elewts[etidx].reshape(neles, -1)
+
+            # Add in one constraint column per tag
+            bits = np.arange(ntags, dtype=np.uint64)
+            tmat = ((etags[:, None] >> bits) & 1).astype(int)
+
+            # Concatenate
+            fwts = np.hstack([base, tmat])
+
+            def wts(e):
+                return fwts[e]
+        # Multiplicative tag partitioning; scale by product of tag weights
+        else:
+            if tagwts and ntags > 1:
+                tmult = np.ones(neles, dtype=int)
+                for bit, weight in tagwts.items():
+                    idxs = ((etags >> np.uint64(bit)) & 1).astype(bool)
+                    tmult[idxs] *= weight
+            else:
+                tmult = None
+
+            def wts(e):
+                w = elewts[np.searchsorted(edisps, e, side='right') - 1]
+                if tmult is not None:
+                    m = tmult[e]
+                    w *= m[..., None] if np.ndim(w) > 1 else m
+
+                return w
 
         return wts
 
@@ -301,13 +339,38 @@ class BasePartitioner:
 
         return (peidx, pregions), (neighbours, nregions)
 
-    def partition(self, mesh, progress=NullProgressSequence):
+    def _resolve_tag_weights(self, mesh):
+        # Balance tag weighting
+        if self.tagwts == 'balanced':
+            return 'balanced'
+        # Weights provided; resolve names to bit masks
+        elif self.tagwts:
+            # Obtain the tags in the mesh
+            tnames = [c[4:].decode()
+                      for c in mesh['codec'] if c.startswith(b'tag/')]
+
+            # Check no weights are missing
+            if (missing := set(self.tagwts) - set(tnames)):
+                raise ValueError('Unknown tag name(s) in tag weights: '
+                                 f'{", ".join(sorted(missing))}')
+
+            # Resolve
+            return {tnames.index(n): w for n, w in self.tagwts.items()}
+        # No weights provided
+        else:
+            return {}
+
+    def partition(self, mesh, progress=NullProgressSequence()):
         # Construct the global connectivity array
         with progress.start('Construct global connectivity array'):
-            con, ecurved, edisps, cdisps = self.construct_global_con(mesh)
+            info = self.construct_global_con(mesh)
+            con, ecurved, etags, edisps, cdisps = info
+
+        # Resolve tag weights
+        tagwts = self._resolve_tag_weights(mesh)
 
         # Obtain the global element number weighting function
-        elewts_fn = self._get_elewts_fn(edisps)
+        elewts_fn = self._get_elewts_fn(edisps, etags, tagwts)
 
         # Merge periodic elements
         with progress.start('Group periodic elements'):

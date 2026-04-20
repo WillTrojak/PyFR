@@ -97,6 +97,11 @@ def main():
         metavar='shape:weight', help='element weighting factor or "balanced"'
     )
     ap_partition_add.add_argument(
+        '-r', dest='regwts', action='append', default=[],
+        metavar='tag:weight',
+        help='region tag weighting factor or "balanced"'
+    )
+    ap_partition_add.add_argument(
         '--popt', dest='popts', action='append', default=[],
         metavar='key:value', help='partitioner-specific option'
     )
@@ -318,17 +323,24 @@ def process_partition_add(args):
 
         # Element weights
         if args.elewts == ['balanced']:
-            ewts = None
+            ewts = 'balanced'
         elif len(etypes) == 1:
             ewts = {etypes[0]: 1}
         else:
             ewts = (ew.split(':') for ew in args.elewts)
             ewts = {e: int(w) for e, w in ewts}
 
-        # Ensure all weights have been provided
-        if ewts is not None and len(ewts) != len(etypes):
-            missing = ', '.join(set(etypes) - set(ewts))
-            raise ValueError(f'Missing element weights for: {missing}')
+            # Ensure all weights have been provided
+            if len(ewts) != len(etypes):
+                missing = ', '.join(set(etypes) - set(ewts))
+                raise ValueError(f'Missing element weights for: {missing}')
+
+        # Region tag weights
+        if args.regwts == ['balanced']:
+            twts = 'balanced'
+        else:
+            twts = (rw.split(':') for rw in args.regwts)
+            twts = {n: int(w) for n, w in twts}
 
         # Get the partitioning name
         pname = args.name or str(len(pwts))
@@ -344,12 +356,13 @@ def process_partition_add(args):
 
         # Create the partitioner
         if args.partitioner:
-            part = get_partitioner(args.partitioner, pwts, ewts, opts=opts)
+            part = get_partitioner(args.partitioner, pwts, ewts, twts,
+                                   opts=opts)
         else:
             parts = sorted(cls.name for cls in subclasses(BasePartitioner))
             for name in parts:
                 try:
-                    part = get_partitioner(name, pwts, ewts)
+                    part = get_partitioner(name, pwts, ewts, twts)
                     break
                 except OSError:
                     pass
