@@ -6,7 +6,7 @@ import h5py
 import numpy as np
 
 from pyfr._version import __version__
-from pyfr.nputil import iter_struct, fuzzysort
+from pyfr.nputil import iter_struct, fuzzysort, range_offsets
 from pyfr.polys import get_polybasis
 from pyfr.progress import NullProgressSequence, NullProgressSpinner
 from pyfr.shapes import BaseShape
@@ -311,10 +311,7 @@ class NodalMeshAssembler:
         max_colours = max(einfo['faces'].shape[-1] for einfo in eles.values()) + 1
 
         # Build element type displacements
-        edisps, disp = {}, 0
-        for etype in eles:
-            edisps[etype] = disp
-            disp += len(eles[etype])
+        edisps, disp = range_offsets(eles.items())
 
         # Create a map from cidx element types to their displacements
         cdisps = [None]*len(codec)

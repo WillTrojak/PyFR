@@ -20,6 +20,16 @@ def block_diag(arrs):
     return out
 
 
+def range_offsets(items, item_len=len):
+    offsets, off = {}, 0
+
+    for key, item in items:
+        offsets[key] = off
+        off += item_len(item)
+
+    return offsets, off
+
+
 def clean(origfn=None, tol=1e-10, ckwarg='clean'):
     def cleanfn(fn):
         @ft.wraps(fn)

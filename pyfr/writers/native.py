@@ -37,9 +37,10 @@ class NativeWriter:
         self.prefix = prefix
         self.fpdtype = fpdtype
 
-        # Tally up how many elements of each type our partition has
-        self._ecounts = {etype: len(mesh.eidxs.get(etype, []))
-                         for etype in mesh.etypes}
+        # Compute global element counts
+        counts = np.array([len(mesh.eidxs.get(et, [])) for et in mesh.etypes])
+        comm.Allreduce(mpi.IN_PLACE, counts, op=mpi.SUM)
+        self._global_ecounts = dict(zip(mesh.etypes, counts.tolist()))
 
         # Append the relevant extension
         if not basename.endswith(extn):
@@ -136,12 +137,12 @@ class NativeWriter:
 
     def set_shapes_eidxs(self, shapes, eidxs, field_groups,
                          aux_fields=None, *, ndims=0):
-        comm, rank, root = get_comm_rank_root()
+        comm, _, _ = get_comm_rank_root()
 
         # Prepare the element information
         self._einfo = {}
         self._futures = {}
-        for etype, ecount in self._ecounts.items():
+        for etype, gcount in self._global_ecounts.items():
             # See if any ranks want to write elements of this type
             eshape = comm.allgather(shapes.get(etype))
             if any(eshape):
@@ -157,7 +158,7 @@ class NativeWriter:
                 order = ecls.order_from_npts(shape[2])
 
                 # See if the element is being subset
-                subset = comm.allreduce(len(idxs) != ecount, op=mpi.LOR)
+                subset = gatherer.tot != gcount
 
                 # Also get the associated nodal points
                 rname = self.cfg.get(f'solver-elements-{etype}', 'soln-pts')

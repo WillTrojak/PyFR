@@ -2,7 +2,7 @@ from collections import namedtuple
 
 import numpy as np
 
-from pyfr.nputil import iter_struct
+from pyfr.nputil import iter_struct, range_offsets
 from pyfr.progress import NullProgressSequence
 from pyfr.util import DisjointSet
 
@@ -57,19 +57,17 @@ class BasePartitioner:
     @staticmethod
     def construct_global_con(mesh):
         codec = [c.decode() for c in mesh['codec']]
-        edisps, efaces, ecurved, etags = {}, {}, [], []
+        efaces, ecurved, etags = {}, [], []
 
         # Read the data for each element type
-        disp = 0
         for etype, einfo in sorted(mesh['eles'].items()):
             einfo = einfo['curved', 'faces', 'tags'][()]
             efaces[etype] = einfo['faces']
             ecurved.append(einfo['curved'])
             etags.append(einfo['tags'])
 
-            # Note the displacement
-            edisps[etype] = disp
-            disp += len(einfo)
+        # Build per-etype displacements
+        edisps, _ = range_offsets(efaces.items())
 
         # Create a map from cidx element types to their displacements
         cdisps = np.empty(len(codec), dtype=int)
