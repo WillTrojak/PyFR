@@ -213,7 +213,7 @@ class ImplicitNoneController(BaseImplicitController):
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
 
-        while self.tcurr < t:
+        while self.tcurr < t and self.tcurr < self.tend:
             # Decide on the time step
             dt = self._clamp_dt(self.dt, t)
 
@@ -256,7 +256,7 @@ class ImplicitPIController(ThroughputLimitMixin, PIControllerMixin,
         expa = self._pi_alpha / self.stepper_order
         expb = self._pi_beta / self.stepper_order
 
-        while self.tcurr < t:
+        while self.tcurr < t and self.tcurr < self.tend:
             # Decide on the time step
             dt = self._clamp_dt(min(self.dt, self.dtmax), t)
 
@@ -327,7 +327,7 @@ class ImplicitThroughputController(ThroughputLimitMixin,
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
 
-        while self.tcurr < t:
+        while self.tcurr < t and self.tcurr < self.tend:
             # Decide on the time step
             dt = self._clamp_dt(min(self.dt, self.dtmax), t)
 

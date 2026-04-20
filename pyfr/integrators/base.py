@@ -114,6 +114,7 @@ class BaseIntegrator(metaclass=RegisterMeta):
 
     def plugin_end(self):
         self.tend = self.tcurr
+        self.tlist.clear()
 
     def fire_trigger(self, name):
         self.triggers.fire(name)

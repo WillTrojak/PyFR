@@ -49,7 +49,7 @@ class ExplicitNoneController(BaseExplicitController):
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
 
-        while self.tcurr < t:
+        while self.tcurr < t and self.tcurr < self.tend:
             # Decide on the time step
             dt = self._clamp_dt(self.dt, t)
 
@@ -100,7 +100,7 @@ class ExplicitPIController(PIControllerMixin, BaseExplicitController):
         expa = self._pi_alpha / sord
         expb = self._pi_beta / sord
 
-        while self.tcurr < t:
+        while self.tcurr < t and self.tcurr < self.tend:
             # Decide on the time step
             dt = self._clamp_dt(min(self.dt, self.dtmax), t)
 

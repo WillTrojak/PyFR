@@ -29,7 +29,7 @@ class CFLControllerMixin:
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
 
-        while self.tcurr < t:
+        while self.tcurr < t and self.tcurr < self.tend:
             if self.nacptsteps % self._cfl_nsteps == 0:
                 self.dt = self._compute_dt_cfl(self.idxcurr)
 
