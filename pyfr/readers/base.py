@@ -308,7 +308,7 @@ class NodalMeshAssembler:
     @staticmethod
     def compute_element_colouring(eles, codec, spinner=NullProgressSpinner()):
         # Maximum number of colours
-        max_colours = max(einfo['faces'].shape[-1] for einfo in eles.values()) + 1
+        max_colours = max(ei['faces'].shape[-1] for ei in eles.values()) + 1
 
         # Build element type displacements
         edisps, disp = range_offsets(eles.items())
