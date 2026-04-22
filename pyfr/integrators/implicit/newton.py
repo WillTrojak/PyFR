@@ -69,8 +69,8 @@ class NewtonSolver(BaseKrylovSolver):
         return self._norm2(r, weights=weights, norm_gndofs=True)
 
     def _jfnk_matvec(self, t, u, f, gamma_dt, eps, v_s, result):
-        self._add(0, self._jfnk_temp, 1, u, eps, v_s,
-                  in_scale=self._scales, in_scale_idxs=(2,))
+        self._add(0, self._jfnk_temp, 1, u, eps, v_s, in_scale=self._scales,
+                  in_scale_idxs=(2,))
         self._rhs(t, self._jfnk_temp, self._jfnk_temp)
         self._add(0, result, 1, v_s, -gamma_dt/eps, self._jfnk_temp,
                   gamma_dt/eps, f, in_scale=self._scales, in_scale_idxs=(1,),
@@ -115,7 +115,9 @@ class NewtonSolver(BaseKrylovSolver):
             self._jfnk_matvec(t, u_reg, f_reg, gamma_dt, self._krylov_eps, v,
                               result)
 
+        # Pick an initial starting guess
         initial_guess_fn(u_reg)
+
         krylov_total = precond_total = 0
         rnorm = None
 
@@ -135,6 +137,7 @@ class NewtonSolver(BaseKrylovSolver):
             elif rnorm < tol:
                 break
 
+            # Compute the preconditioner
             self._compute_precond(t, u_reg, gamma_dt, self._rhs, f_reg,
                                   self._jfnk_temp, eps_scales=self._scales)
 
@@ -176,11 +179,13 @@ class NewtonSolver(BaseKrylovSolver):
         # Scaled preconditioner: M̃⁻¹ = S⁻¹ M⁻¹ S
         if self._precond != 'none':
             def precond(in_reg, out_reg):
-                self._apply_precond(in_reg, out_reg,
-                                    in_scale=self._scales,
+                self._apply_precond(in_reg, out_reg, in_scale=self._scales,
                                     out_scale=self._inv_scales)
         else:
             precond = None
+
+        # Choose a suitable finite difference perturbation
+        self._compute_krylov_eps(u_reg)
 
         for i in range(self._tol_controller.max_retries + 1):
             # Determine and broadcast the optimal Krylov tolerance

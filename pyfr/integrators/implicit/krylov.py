@@ -16,8 +16,10 @@ class BaseKrylovSolver(BaseImplicitIntegrator):
         # Finite difference perturbation for JFNK and preconditioner
         if cfg.hasopt(sect, 'krylov-eps'):
             self._krylov_eps = cfg.getfloat(sect, 'krylov-eps')
+            self._krylov_eps_adapt = False
         else:
             self._krylov_eps = backend.fpdtype_eps**0.5
+            self._krylov_eps_adapt = True
 
         # Preconditioner
         self._precond = cfg.get(sect, 'krylov-precond', 'none').lower()
@@ -32,6 +34,12 @@ class BaseKrylovSolver(BaseImplicitIntegrator):
 
         if self._precond == 'block-jacobi':
             self._init_precond()
+
+    def _compute_krylov_eps(self, u_reg):
+        # If we are adaptive then recompute eps
+        if self._krylov_eps_adapt:
+            unorm = self._norm2(u_reg)
+            self._krylov_eps = ((1 + unorm)*self.backend.fpdtype_eps)**0.5
 
     def _init_precond(self):
         for kname in ['applyprecond', 'precondperturb',
