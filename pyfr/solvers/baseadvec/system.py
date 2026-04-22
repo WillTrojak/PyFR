@@ -17,14 +17,11 @@ class BaseAdvectionSystem(BaseSystem):
             for eles in self.ele_map.values():
                 eles.init_wavespeed()
 
-    def commit(self):
-        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
 
         # Create scal_fpts views and MPI exchange at the system level
         scal_fpts = {et: e._scal_fpts for et, e in self.ele_map.items()}
-        iint_v, mpi_v, bc_v = self.make_field_views(
-            scal_fpts, vshape=(self.nvars,)
-        )
+        iint_v, mpi_v, bc_v = self.make_field_views(scal_fpts,
+                                                    vshape=(self.nvars,))
         for i, (lhs, rhs) in zip(self._int_inters, iint_v):
             i.scal_lhs = lhs
             i.scal_rhs = rhs
@@ -35,6 +32,9 @@ class BaseAdvectionSystem(BaseSystem):
             b.scal_lhs = lhs
         self.register_mpi_exchange('scal_fpts', mpi_v)
 
+        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+
+        # Handle entropy filtering
         if (shock_capturing == 'entropy-filter' and
             self.cfg.getint('solver', 'order') > 0):
             self._ef = EntropyFilter(self.backend, self.cfg, self,
@@ -43,6 +43,7 @@ class BaseAdvectionSystem(BaseSystem):
         else:
             self._ef = None
 
+    def commit(self):
         self.backend.commit()
 
         # Reduction kernels to find max wavespeed across each element type
@@ -138,7 +139,8 @@ class BaseAdvectionSystem(BaseSystem):
     def _preproc_graphs(self, uinbank):
         if self._ef:
             return self._preproc_graphs_ef(uinbank)
-        return ()
+        else:
+            return ()
 
     @memoize
     def _preproc_graphs_ef(self, uinbank):

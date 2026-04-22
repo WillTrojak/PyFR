@@ -8,9 +8,12 @@ from pyfr.solvers.baseadvecdiff.artvisc import ArtificialViscosity
 class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
     _shock_capturing_modes = {'none', 'entropy-filter', 'artificial-viscosity'}
 
-    def commit(self):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
         shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
 
+        # Handle artificial viscosity
         if shock_capturing == 'artificial-viscosity':
             # Create the AV object (allocates buffers, registers kernels)
             self._av = ArtificialViscosity(
@@ -47,8 +50,6 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             send=lambda m: m.c['ldg-beta'] != -0.5,
             recv=lambda m: m.c['ldg-beta'] != 0.5,
         )
-
-        super().commit()
 
     @memoize
     def _rhs_graphs(self, uinbank, foutbank):
