@@ -6,7 +6,7 @@ import numpy as np
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.postproc.base import get_pp_plugins
 from pyfr.shapes import BaseShape
-from pyfr.util import subclass_where
+from pyfr.util import first, subclass_where
 from pyfr.writers import BaseWriter
 
 
@@ -404,23 +404,21 @@ class BaseVTKWriter(BaseWriter):
 
         self._extra_fields = {}
 
-        # Return empty for idle ranks
-        etype = self._extra_etype
-        if etype is None:
-            self.pp_plugins = []
-            return
-
         # Classify aux fields by shape
-        pshapes = self._extra_point_shapes(etype)
-        for name, arr in self.soln.aux.get(etype, {}).items():
-            shape = arr.shape[1:]
-            if shape in pshapes:
-                meta = FieldMeta('point', 1, arr.dtype)
-            elif shape[:-1] in pshapes:
-                meta = FieldMeta('point', shape[-1], arr.dtype)
-            else:
-                meta = FieldMeta('cell', int(np.prod(shape)), arr.dtype)
-            self._extra_fields[name] = meta
+        pshapes = self._extra_point_shapes(self._extra_etype)
+        for dt in self.soln.dtypes.values():
+            for name in dt['aux'].names:
+                adtype = dt['aux'][name].base
+                shape = dt['aux'][name].shape
+
+                if shape in pshapes:
+                    meta = FieldMeta('point', 1, adtype)
+                elif shape[:-1] in pshapes:
+                    meta = FieldMeta('point', shape[-1], adtype)
+                else:
+                    meta = FieldMeta('cell', int(np.prod(shape) or 1), adtype)
+
+                self._extra_fields[name] = meta
 
         # Resolve postproc plugins and register fields
         cfg = self._pp_cfg or self.cfg
@@ -549,10 +547,8 @@ class BaseVTKWriter(BaseWriter):
     def _load_soln(self, *args, **kwargs):
         super()._load_soln(*args, **kwargs)
 
-        # Get extra fields from solution data
-        etype = next((k for k in self.soln.data if k in self.mesh.eidxs),
-                     None)
-        self._extra_etype = etype
+        # Pick an arbitrary element type for aux field classification
+        self._extra_etype = first(self.soln.dtypes)
 
         # Ensure a divisor has been set
         if self.divisor is None:
@@ -766,9 +762,9 @@ class BaseVTKWriter(BaseWriter):
         return self._vtk_dtypes[np.dtype(dtype).type]
 
     def _extra_point_shapes(self, etype):
-        # Shapes that identify per-point (as opposed to per-cell) aux data
-        nupts = self.soln.data[etype].shape[0]
-        return {(nupts,)}
+        dtype = self.soln.dtypes[etype]
+        group = next(g for g in dtype.names if g != 'aux')
+        return {dtype[group][0].shape[-1:]}
 
     def _extra_field_lists(self):
         cfields, pfields = [], []

@@ -54,6 +54,7 @@ class Solution:
     data: dict = field(default_factory=dict)
     grad_data: dict = field(default_factory=dict)
     aux: dict = field(default_factory=dict)
+    dtypes: dict = field(default_factory=dict)
     prevcfgs: dict = field(default_factory=dict)
     state: dict = field(default_factory=dict)
 
@@ -222,6 +223,8 @@ class NativeReader:
                 # Complete element present so reuse the elements scatterer
                 else:
                     escatter = self.escatter[etype]
+
+                soln.dtypes[etype] = f[ek].dtype
 
                 # Build field list from the first dataset encountered
                 if soln.fields is None:

@@ -20,7 +20,7 @@ class VTKVolumeWriter(BaseVTKWriter):
 
     def _extra_point_shapes(self, etype):
         shapes = super()._extra_point_shapes(etype)
-        npts = len(self.mesh.spts[etype])
+        npts = self.reader.f[f'eles/{etype}'].dtype['nodes'].shape[0]
         shape = subclass_where(BaseShape, name=etype)(npts, self.cfg)
         shapes.add((len(shape.linspts),))
         return shapes

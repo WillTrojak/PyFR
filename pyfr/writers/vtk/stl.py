@@ -141,10 +141,10 @@ class VTKSTLWriter(BaseVTKWriter):
         self._extra_fields = {n: m for n, m in self._extra_fields.items()
                               if m.kind == 'point'}
 
-        # Aux fields sampled through the pipeline (those also in soln.aux)
-        etype = self._extra_etype
+        # Aux fields sampled through the pipeline (those in the file)
+        file_aux = set(soln.dtypes[self._extra_etype]['aux'].names)
         aux_info = [(n, m.ncomps) for n, m in self._extra_fields.items()
-                    if n in soln.aux.get(etype, {})]
+                    if n in file_aux]
 
         naux = sum(n for _, n in aux_info)
 
