@@ -235,7 +235,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             spts = args.name
 
             if rank == root:
-                pts = mesh.raw[f'plugin/sampler/{spts}']['ploc']
+                pts = mesh.raw[f'plugins/sampler/{spts}']['ploc']
 
         # Determine if gradient data is present
         has_grads = bool(soln.grad_data)
