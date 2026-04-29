@@ -83,6 +83,7 @@ class CUDABackend(BaseBackend):
                   blasext.CUDABlasExtKernels,
                   packing.CUDAPackingKernels,
                   gimmik.CUDAGiMMiKKernels,
+                  gimmik.PTXGiMMiKKernels,
                   cublaslt.CUDACUBLASLtKernels,
                   linalg.CUDALinalgKernels]
         self._providers = [k(self) for k in kprovs]

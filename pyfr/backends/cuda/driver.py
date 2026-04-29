@@ -1,6 +1,6 @@
-from ctypes import (POINTER, Structure, addressof, byref, create_string_buffer,
-                    c_char, c_char_p, c_float, c_int, c_size_t, c_uint,
-                    c_ulonglong, c_void_p)
+from ctypes import (POINTER, Structure, addressof, byref, cast,
+                    create_string_buffer, c_char, c_char_p, c_float, c_int,
+                    c_size_t, c_uint, c_ulonglong, c_void_p)
 from uuid import UUID
 
 import numpy as np
@@ -13,8 +13,10 @@ class CUDAError(Exception): pass
 class CUDAInvalidValue(CUDAError): pass
 class CUDAOutofMemory(CUDAError): pass
 class CUDANotInitalized(CUDAError): pass
+class CUDADeinitalized(CUDAError): pass
 class CUDANoDevice(CUDAError): pass
 class CUDAInvalidDevice(CUDAError): pass
+class CUDAInvalidContext(CUDAError): pass
 class CUDAECCUncorrectable(CUDAError): pass
 class CUDAErrorInvalidPTX(CUDAError): pass
 class CUDAErrorUnsupportedPTXVersion(CUDAError): pass
@@ -112,8 +114,10 @@ class CUDAWrappers(LibWrapper):
         1: CUDAInvalidValue,
         2: CUDAOutofMemory,
         3: CUDANotInitalized,
+        4: CUDADeinitalized,
         100: CUDANoDevice,
         101: CUDAInvalidDevice,
+        201: CUDAInvalidContext,
         214: CUDAECCUncorrectable,
         218: CUDAErrorInvalidPTX,
         222: CUDAErrorUnsupportedPTXVersion,
@@ -138,6 +142,20 @@ class CUDAWrappers(LibWrapper):
     FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
     MEMORYTYPE_UNIFIED = 4
     MULTIPROCESSOR_COUNT = 16
+
+    TENSOR_MAP_DATA_TYPE_FLOAT32 = 7
+    TENSOR_MAP_DATA_TYPE_FLOAT64 = 8
+    TENSOR_MAP_INTERLEAVE_NONE = 0
+    TENSOR_MAP_SWIZZLE_NONE = 0
+    TENSOR_MAP_SWIZZLE_32B = 1
+    TENSOR_MAP_SWIZZLE_64B = 2
+    TENSOR_MAP_SWIZZLE_128B = 3
+    TENSOR_MAP_L2_PROMOTION_NONE = 0
+    TENSOR_MAP_L2_PROMOTION_64B = 1
+    TENSOR_MAP_L2_PROMOTION_128B = 2
+    TENSOR_MAP_L2_PROMOTION_256B = 3
+    TENSOR_MAP_FLOAT_OOB_FILL_NONE = 0
+    TENSOR_MAP_FLOAT_OOB_FILL_NAN = 1
 
     # Functions
     _functions = [
@@ -176,6 +194,12 @@ class CUDAWrappers(LibWrapper):
          POINTER(c_int), POINTER(c_void_p)),
         (c_int, 'cuModuleUnload', c_void_p),
         (c_int, 'cuModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
+        (c_int, 'cuModuleGetGlobal_v2', POINTER(c_void_p), POINTER(c_size_t),
+         c_void_p, c_char_p),
+        (c_int, 'cuTensorMapEncodeTiled',
+         c_void_p, c_int, c_uint, c_void_p, POINTER(c_ulonglong),
+         POINTER(c_ulonglong), POINTER(c_uint), POINTER(c_uint), c_int, c_int,
+         c_int, c_int),
         (c_int, 'cuLaunchKernel', c_void_p, c_uint, c_uint, c_uint, c_uint,
          c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p),
         (c_int, 'cuFuncGetAttribute', POINTER(c_int), c_int, c_void_p),
@@ -328,6 +352,12 @@ class CUDAModule(_CUDABase):
     def get_function(self, name, argspec):
         return CUDAFunction(self.cuda, self, name, argspec)
 
+    def get_global(self, name):
+        ptr = c_void_p()
+        nbytes = c_size_t()
+        self.cuda.lib.cuModuleGetGlobal(ptr, nbytes, self, name.encode())
+        return ptr, nbytes
+
 
 class CUDAFunction(_CUDABase):
     def __init__(self, cuda, module, name, argtypes):
@@ -357,8 +387,9 @@ class CUDAFunction(_CUDABase):
         attr = getattr(self.cuda.lib, f'FUNC_ATTR_{attr.upper()}')
         self.cuda.lib.cuFuncSetAttribute(self, attr, val)
 
-    def set_shared_size(self, *, dynm_shared=0, carveout=None):
-        self._set_attr('max_dynamic_shared_size_bytes', dynm_shared)
+    def set_shared_size(self, *, dynm_shared=None, carveout=None):
+        if dynm_shared is not None:
+            self._set_attr('max_dynamic_shared_size_bytes', dynm_shared)
 
         if carveout is not None:
             self._set_attr('preferred_shared_memory_carveout', carveout)
@@ -600,3 +631,39 @@ class CUDA:
 
     def create_graph(self):
         return CUDAGraph(self)
+
+    def set_tensormap(self, tm_addr, a, tile, interleave=None, swizzle=None,
+                      l2_promotion=None, oob_fill=None):
+        lib = self.lib
+        a_ptr = a.data
+
+        dtype = 0
+        if a.dtype == np.float64:
+            dtype = lib.TENSOR_MAP_DATA_TYPE_FLOAT64
+        elif a.dtype == np.float32:
+            dtype = lib.TENSOR_MAP_DATA_TYPE_FLOAT32
+        else:
+            raise AttributeError(f"Type {a.dtype} tensor map not supported")
+
+        ndims = 2
+        dims = (c_ulonglong * ndims)(*(a.ncol, a.nrow))
+        ld = c_ulonglong(a.leaddim * a.itemsize)
+        tile_dim = (c_uint * ndims)(*tile)
+        tile_stride = (c_uint * ndims)(*([1] * ndims))
+
+        interleave = interleave or lib.TENSOR_MAP_INTERLEAVE_NONE
+        swizzle = swizzle or lib.TENSOR_MAP_SWIZZLE_NONE
+        l2_promotion = l2_promotion or lib.TENSOR_MAP_L2_PROMOTION_NONE
+        oob_fill = oob_fill or lib.TENSOR_MAP_FLOAT_OOB_FILL_NONE
+
+        align = 64
+        raw = create_string_buffer(128 + align)
+        aligned = (addressof(raw) + align - 1) & ~(align - 1)
+        host_tm = (c_char * 128).from_address(aligned)
+
+        lib.cuTensorMapEncodeTiled(host_tm, dtype, ndims, a_ptr, dims, ld,
+                                   tile_dim, tile_stride, interleave, swizzle,
+                                   l2_promotion, oob_fill)
+
+        dst = tm_addr.value if hasattr(tm_addr, 'value') else int(tm_addr)
+        lib.cuMemcpy(dst, addressof(host_tm), 128)
