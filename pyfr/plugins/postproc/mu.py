@@ -9,11 +9,8 @@ class MuPostProc(BasePostProcPlugin):
     dimensions = '2|3'
     export_types = '.*'
 
-    def fields(self):
-        return {}
-
     def _process(self, data):
-        cfg = data.cfg
+        cfg = data.soln.config
         mu_ref = cfg.getfloat('constants', 'mu')
 
         if cfg.get('solver', 'viscosity-correction', 'none') == 'sutherland':
