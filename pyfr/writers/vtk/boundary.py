@@ -188,5 +188,5 @@ class VTKBoundaryWriter(BaseVTKWriter):
         cellf = {k: np.hstack(v) for k, v in cellf.items()}
         pointf = {k: np.hstack(v) for k, v in pointf.items()}
 
-        return (np.hstack(vspts), np.dstack(vsoln),
-                np.hstack(curved), cellf, pointf)
+        return (np.hstack(vspts), np.dstack(vsoln), np.hstack(curved), cellf,
+                pointf)

@@ -108,8 +108,8 @@ class PointLocator:
 
         return shape, basis
 
-    def _minloc(self, coll, x, y, ndim=None):
-        dtype = y.dtype
+    @memoize
+    def _get_minloc_op(self, dtype, ndim):
         fields = list(dtype.fields)[:ndim]
 
         def op(pmem, qmem, dt):
@@ -125,10 +125,13 @@ class PointLocator:
 
             q[lmask] = p[lmask]
 
+        return autofree(mpi.Op.Create(op, commute=False))
+
+    def _minloc(self, coll, x, y, ndim=None):
         sbuf = (x, mpi.BYTE) if x is not mpi.IN_PLACE else x
         rbuf = (y, mpi.BYTE)
 
-        coll(sbuf, rbuf, op=autofree(mpi.Op.Create(op, commute=False)))
+        coll(sbuf, rbuf, op=self._get_minloc_op(y.dtype, ndim))
 
     @memoize
     def _get_nodes_off_tree(self):
@@ -271,25 +274,11 @@ class PointSampler:
     def __init__(self, mesh, spts, slocs=None):
         locf = ['cidx', 'eidx', 'tloc']
         self.mesh = mesh
+        self.pts = np.asanyarray(spts, dtype=float)
 
-        # Named point set
-        if isinstance(spts, str):
-            comm, rank, root = get_comm_rank_root()
-
-            if rank == root:
-                sinfo = mesh.raw[f'plugins/sampler/{spts}'][:]
-            else:
-                sinfo = None
-
-            sinfo = comm.bcast(sinfo, root=root)
-
-            self.pts, self.locs = sinfo['ploc'], sinfo[locf]
-        # Points with location data
-        elif slocs is not None:
-            self.pts, self.locs = spts, slocs[locf]
-        # Points without location data
+        if slocs is not None:
+            self.locs = slocs[locf]
         else:
-            self.pts = np.array(spts)
             self.locs = PointLocator(mesh).locate(self.pts)[locf]
 
     def configure_with_intg_nvars(self, intg, nvars):

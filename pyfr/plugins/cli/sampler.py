@@ -229,13 +229,19 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             else:
                 pts = None
 
-            spts = pts = comm.bcast(pts, root=root)
+            pts = comm.bcast(pts, root=root)
+            locs = None
         # Obtain the pre-processed sample points from the mesh
         else:
-            spts = args.name
-
             if rank == root:
-                pts = mesh.raw[f'plugins/sampler/{spts}']['ploc']
+                pdata = mesh.raw[f'plugins/sampler/{args.name}'][:]
+            else:
+                pdata = None
+
+            pdata = comm.bcast(pdata, root=root)
+
+            pts = pdata['ploc']
+            locs = pdata[['cidx', 'eidx', 'tloc']]
 
         # Determine if gradient data is present
         has_grads = bool(soln.grad_data)
@@ -253,7 +259,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
         # Postproc plugins require primitive format
         if args.pp_plugins and args.format != 'primitive':
-            raise ValueError('Postproc plugins require --format primitive')
+            raise ValueError('Postproc plugins require --format=primitive')
 
         # Handle conversion from conservative to primitive variables
         if args.format == 'primitive':
@@ -289,30 +295,35 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                                     'volume')
 
         # Construct and configure the point sampler
-        sampler = PointSampler(mesh, spts)
+        sampler = PointSampler(mesh, pts, locs)
         sampler.configure_with_cfg_nvars(soln.config, len(fields))
 
         # Sample the solution
         samps = sampler.sample(sdata, process=process)
 
-        # Run postproc plugins at the sampled points (primitive only)
+        # Have the root rank post-process and write the samples
         if rank == root:
-            adapter = PostProcData(soln, samps.T, pts.T)
-            pp_field_map = {}
-            for pp in pp_plugins:
-                pp.run(adapter)
-                pp_field_map.update(pp.fields)
+            # Run any requested post-processing plugins
+            if pp_plugins:
+                adapter = PostProcData(soln, samps.T, pts.T)
+                pp_field_map = {}
+                for pp in pp_plugins:
+                    pp.run(adapter)
+                    pp_field_map.update(pp.fields)
 
-            extra_cols = []
-            for name, arr in adapter.fields.items():
-                if name.startswith('_'):
-                    continue
-                fields.extend(pp_field_map[name])
-                extra_cols.append(np.atleast_2d(arr.T).T)
-            samps = np.concatenate([samps, *extra_cols], axis=1)
+                extra_cols = []
+                for name, arr in adapter.fields.items():
+                    if name.startswith('_'):
+                        continue
 
-        if rank == root:
+                    fields.extend(pp_field_map[name])
+                    extra_cols.append(np.atleast_2d(arr.T).T)
+
+                samps = np.concatenate([samps, *extra_cols], axis=1)
+
+            # Write out the header
             print(*dims, *fields, sep=args.sep)
 
+            # Write out the samples
             for ploc, samp in zip(pts, samps):
                 print(*ploc, *samp, sep=args.sep)

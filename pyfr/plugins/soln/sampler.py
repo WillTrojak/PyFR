@@ -30,12 +30,23 @@ class SamplerPlugin(BackendMixin, BaseSolnPlugin):
         spts = self.cfg.get(self.cfgsect, 'samp-pts')
         if ',' in spts:
             spts = self.cfg.getliteral(self.cfgsect, 'samp-pts')
+            locs = None
+        else:
+            if rank == root:
+                pdata = intg.system.mesh.raw[f'plugins/sampler/{spts}'][:]
+            else:
+                pdata = None
+
+            pdata = comm.bcast(pdata, root=root)
+
+            spts = pdata['ploc']
+            locs = pdata[['cidx', 'eidx', 'tloc']]
 
         # Number of output variables per sample
         self.nsvars = (1 + self.ndims*self._sample_grads)*self.nvars
 
         # Construct and configure the point sampler (for location + MPI)
-        self.psampler = PointSampler(intg.system.mesh, spts)
+        self.psampler = PointSampler(intg.system.mesh, spts, locs)
         self.psampler.configure_with_intg_nvars(intg, self.nsvars)
 
         # Initialise backend and kernel infrastructure
