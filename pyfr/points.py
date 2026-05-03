@@ -227,7 +227,7 @@ class PointLocator:
 
     def _initial_tlocs(self, etype, spts, plocs):
         shape, basis = self._get_shape_basis(etype, len(spts))
-        tpts = np.array(shape.std_ele(self.fine_order))
+        tpts = shape.std_ele(self.fine_order)
 
         # Obtain a fine sampling of points inside each element
         fop = basis.nodal_basis_at(tpts)

@@ -41,8 +41,8 @@ class SharedNodesFinder(AlltoallMixin):
         shapecls = subclass_where(BaseShape, name=etype)
         order = shapecls.order_from_npts(nspts)
 
-        spts = np.array(shapecls.std_ele(order))
-        linspts = np.array(shapecls.std_ele(1))
+        spts = shapecls.std_ele(order)
+        linspts = shapecls.std_ele(1)
 
         return np.argmin(np.linalg.norm(spts - linspts[:, None], axis=2),
                          axis=1)

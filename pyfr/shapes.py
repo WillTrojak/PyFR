@@ -330,7 +330,8 @@ class TensorProdShape:
     @classmethod
     def std_ele(cls, sptord):
         pts1d = np.linspace(-1, 1, sptord + 1)
-        return [p[::-1] for p in it.product(pts1d, repeat=cls.ndims)]
+        return np.array([p[::-1] for p in
+                         it.product(pts1d, repeat=cls.ndims)])
 
     @classmethod
     def valid_spt(cls, pt, tol=1e-9):
@@ -461,9 +462,9 @@ class TriShape(BaseShape):
     def std_ele(cls, sptord):
         pts1d = np.linspace(-1, 1, sptord + 1)
 
-        return [(p, q)
-                for i, q in enumerate(pts1d)
-                for p in pts1d[:(sptord + 1 - i)]]
+        return np.array([(p, q)
+                         for i, q in enumerate(pts1d)
+                         for p in pts1d[:(sptord + 1 - i)]])
 
     @classmethod
     def valid_spt(cls, spt, tol=1e-9):
@@ -504,10 +505,10 @@ class TetShape(BaseShape):
     def std_ele(cls, sptord):
         pts1d = np.linspace(-1, 1, sptord + 1)
 
-        return [(p, q, r)
-                for i, r in enumerate(pts1d)
-                for j, q in enumerate(pts1d[:(sptord + 1 - i)])
-                for p in pts1d[:(sptord + 1 - i - j)]]
+        return np.array([(p, q, r)
+                         for i, r in enumerate(pts1d)
+                         for j, q in enumerate(pts1d[:(sptord + 1 - i)])
+                         for p in pts1d[:(sptord + 1 - i - j)]])
 
     @classmethod
     def valid_spt(cls, spt, tol=1e-9):
@@ -560,10 +561,10 @@ class PriShape(BaseShape):
     def std_ele(cls, sptord):
         pts1d = np.linspace(-1, 1, sptord + 1)
 
-        return [(p, q, r)
-                for r in pts1d
-                for i, q in enumerate(pts1d)
-                for p in pts1d[:(sptord + 1 - i)]]
+        return np.array([(p, q, r)
+                         for r in pts1d
+                         for i, q in enumerate(pts1d)
+                         for p in pts1d[:(sptord + 1 - i)]])
 
     @classmethod
     def valid_spt(cls, spt, tol=1e-9):
@@ -620,10 +621,10 @@ class PyrShape(BaseShape):
         npts1d = 2*sptord + 1
         pts1d = np.linspace(-1, 1, npts1d)
 
-        return [(p, q, r)
-                for i, r in enumerate(pts1d[::2])
-                for q in pts1d[i:npts1d - i:2]
-                for p in pts1d[i:npts1d - i:2]]
+        return np.array([(p, q, r)
+                         for i, r in enumerate(pts1d[::2])
+                         for q in pts1d[i:npts1d - i:2]
+                         for p in pts1d[i:npts1d - i:2]])
 
     @classmethod
     def valid_spt(cls, spt, tol=1e-9):

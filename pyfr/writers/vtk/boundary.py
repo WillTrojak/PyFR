@@ -81,7 +81,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
         ishapecls = subclass_where(BaseShape, name=itype)
 
         # Obtain the visualisation points on this face
-        svpts = np.array(ishapecls.std_ele(self.etypes_div[itype]))
+        svpts = ishapecls.std_ele(self.etypes_div[itype])
         svpts = np.vstack(np.broadcast_arrays(*proj(*svpts.T))).T
 
         if self.ho_output:

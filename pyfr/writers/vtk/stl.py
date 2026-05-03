@@ -233,7 +233,7 @@ class VTKSTLWriter(BaseVTKWriter):
             vnorms = _vertex_normals_mwa(fnorms, uverts, vids)
 
             # Barycentric coordinates at the subdivision points
-            spts = np.array(TriShape.std_ele(order))
+            spts = TriShape.std_ele(order)
             bary = np.column_stack([-(spts[:, 0] + spts[:, 1]) / 2,
                                     (1 + spts[:, 0]) / 2,
                                     (1 + spts[:, 1]) / 2])
