@@ -330,12 +330,11 @@ class TensorProdShape:
     @classmethod
     def std_ele(cls, sptord):
         pts1d = np.linspace(-1, 1, sptord + 1)
-        return np.array([p[::-1] for p in
-                         it.product(pts1d, repeat=cls.ndims)])
+        return np.array([p[::-1] for p in it.product(pts1d, repeat=cls.ndims)])
 
     @classmethod
-    def valid_spt(cls, pt, tol=1e-9):
-        return all(abs(p) < 1 + tol for p in pt)
+    def valid_spt(cls, spt, tol=1e-9):
+        return (np.abs(spt) < 1 + tol).all(axis=-1)
 
 
 class QuadShape(TensorProdShape, BaseShape):
@@ -468,10 +467,10 @@ class TriShape(BaseShape):
 
     @classmethod
     def valid_spt(cls, spt, tol=1e-9):
-        x, y = spt
+        x, y = np.moveaxis(spt, -1, 0)
 
-        return (x + tol > -1 and x - tol < -y and
-                y + tol > -1 and y - tol < 1)
+        return ((x + tol > -1) & (x - tol < -y) &
+                (y + tol > -1) & (y - tol < 1))
 
 
 class TetShape(BaseShape):
@@ -512,11 +511,11 @@ class TetShape(BaseShape):
 
     @classmethod
     def valid_spt(cls, spt, tol=1e-9):
-        x, y, z = spt
+        x, y, z = np.moveaxis(spt, -1, 0)
 
-        return (x + tol > -1 and x - tol < -1 - y - z and
-                y + tol > -1 and y - tol < -z and
-                z + tol > -1 and z - tol < 1)
+        return ((x + tol > -1) & (x - tol < -1 - y - z) &
+                (y + tol > -1) & (y - tol < -z) &
+                (z + tol > -1) & (z - tol < 1))
 
 
 class PriShape(BaseShape):
@@ -568,7 +567,8 @@ class PriShape(BaseShape):
 
     @classmethod
     def valid_spt(cls, spt, tol=1e-9):
-        return abs(spt[2]) < 1 + tol and TriShape.valid_spt(spt[:2], tol=tol)
+        return ((np.abs(spt[..., 2]) < 1 + tol) &
+                TriShape.valid_spt(spt[..., :2], tol=tol))
 
 
 class PyrShape(BaseShape):
@@ -628,9 +628,9 @@ class PyrShape(BaseShape):
 
     @classmethod
     def valid_spt(cls, spt, tol=1e-9):
-        x, y, z = spt
+        x, y, z = np.moveaxis(spt, -1, 0)
         u = (1 - z) / 2
 
-        return (x + tol > -u and x - tol < u and
-                y + tol > -u and y - tol < u and
-                z + tol > -1 and z - tol < 1)
+        return ((x + tol > -u) & (x - tol < u) &
+                (y + tol > -u) & (y - tol < u) &
+                (z + tol > -1) & (z - tol < 1))
