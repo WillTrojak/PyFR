@@ -12,7 +12,7 @@ class OpenCLBackend(BaseBackend):
         super().__init__(cfg)
 
         from pyfr.backends.opencl.compiler import OpenCLCompiler
-        from pyfr.backends.opencl.driver import OpenCL
+        from pyfr.backends.opencl.driver import OpenCL, OpenCLError
 
         # Load and wrap OpenCL
         self.cl = OpenCL()
@@ -97,8 +97,11 @@ class OpenCLBackend(BaseBackend):
         # Pointwise kernels
         self.pointwise = self._providers[0]
 
-        # Queues (in and out of order)
-        self.queue = self.cl.queue(out_of_order=True)
+        # Queues (out of order if possible, in order as fallback)
+        try:
+            self.queue = self.cl.queue(out_of_order=True)
+        except OpenCLError:
+            self.queue = self.cl.queue(out_of_order=False)
 
         # Bounce buffer for device-to-host transfers
         self._xfer_buf = None
