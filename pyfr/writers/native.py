@@ -139,6 +139,11 @@ class NativeWriter:
                          aux_fields=None, *, ndims=0):
         comm, _, _ = get_comm_rank_root()
 
+        # Merge aux_fields across ranks
+        aux_fields = {k: v
+                      for a in comm.allgather(aux_fields or {})
+                      for k, v in a.items()}
+
         # Prepare the element information
         self._einfo = {}
         self._futures = {}
@@ -165,9 +170,8 @@ class NativeWriter:
                 upts = get_quadrule(etype, rname, shape[2]).pts
 
                 # Build nested compound dtype for this element type
-                aux = aux_fields.get(etype, []) if aux_fields else []
                 dtype = self._build_dtype(field_groups, shape[2], ndims,
-                                          aux)
+                                          aux_fields.get(etype, []))
 
                 ek = f'p{order}-{etype}'
                 self._einfo[ek] = (gatherer, subset, etype, dtype,
