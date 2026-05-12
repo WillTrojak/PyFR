@@ -6,7 +6,7 @@ from pyfr.cache import memoize
 from pyfr.plugins.postproc.adapters import BoundaryPostProcData
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
-from pyfr.util import first, subclass_where
+from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
 
 
@@ -26,7 +26,6 @@ class VTKBoundaryWriter(BaseVTKWriter):
         super().__init__(meshf, **kwargs)
 
         self.boundaries = boundaries
-        self._surface_info = defaultdict(list)
 
         if self.ndims != 3:
             raise RuntimeError('Boundary export only supported for 3D grids')
@@ -35,6 +34,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
         super()._load_soln(*args, **kwargs)
 
         ecount = defaultdict(int)
+        self._surface_info = defaultdict(list)
 
         rmesh, smesh = self.reader.mesh, self.mesh
         cidxs = [smesh.codec.index(f'bc/{b}') for b in self.boundaries]
@@ -66,11 +66,6 @@ class VTKBoundaryWriter(BaseVTKWriter):
                 self._surface_info[stype].append(info)
 
         self.einfo = list(ecount.items())
-
-    @memoize
-    def _get_shape(self, etype, cfg):
-        nspts = self.reader.f[f'eles/{etype}'].dtype['nodes'].shape[0]
-        return subclass_where(BaseShape, name=etype)(nspts, cfg)
 
     @memoize
     def _itype_opmats(self, etype, fidx, cfg):
@@ -110,34 +105,17 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
         return [(*info[f], idxs[f]) for f in info]
 
-    def _extra_point_shapes(self, key):
-        if key in self._surface_info:
-            etypes = [info[-2].etype for info in self._surface_info[key]]
-        else:
-            etypes = [key]
-
+    def _itype_point_shapes(self, itype):
         shapes = set()
-        for etype in etypes:
-            shapes.update(super()._extra_point_shapes(etype))
-            shape = self._get_shape(etype, self.cfg)
-            shapes.add((len(shape.linspts),))
-
+        for *_, finfo, _ in self._surface_info[itype]:
+            shapes.update(self._extra_point_shapes(finfo.etype))
         return shapes
-
-    def _resolve_etype(self, key):
-        if key is None:
-            key = first(self._surface_info)
-
-        if key in self._surface_info:
-            key = first(self._surface_info[key])[-2].etype
-
-        return key
 
     def _prepare_pts(self, itype):
         vspts, vsoln, curved = [], [], []
         cellf, pointf = defaultdict(list), defaultdict(list)
 
-        pshapes = self._extra_point_shapes(itype)
+        pshapes = self._itype_point_shapes(itype)
         for mesh_op, soln_op, lin_op, finfo, idxs in self._surface_info[itype]:
             etype = finfo.etype
             spts = self.mesh.spts[etype][:, idxs]
