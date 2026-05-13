@@ -5,7 +5,7 @@ class OpenCLKernelGenerator(BaseGPUKernelGenerator):
     _lid = ('get_local_id(0)', 'get_local_id(1)')
     _gid = 'get_global_id(0)'
     _shared_prfx = '__local'
-    _shared_sync = 'work_group_barrier(CLK_GLOBAL_MEM_FENCE)'
+    _shared_sync = 'work_group_barrier(CLK_LOCAL_MEM_FENCE)'
 
     def _render_spec(self):
         g, c, r = '__global', 'const', 'restrict'

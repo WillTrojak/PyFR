@@ -2,6 +2,8 @@ from collections import defaultdict
 from ctypes import c_int
 from functools import cached_property
 
+import numpy as np
+
 import pyfr.backends.base as base
 from pyfr.backends.openmp.provider import (OpenMPBlockKernelArgs,
                                            OpenMPRegularRunArgs,
@@ -57,6 +59,47 @@ class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix): pass
 class OpenMPXchgMatrix(OpenMPMatrix, base.XchgMatrix): pass
 class OpenMPXchgView(base.XchgView): pass
 class OpenMPView(base.View): pass
+
+
+class OpenMPTiledMatrix(base.TiledMatrix):
+    def __init__(self, backend, dtype, block_size, nmats, tile_shape, extent,
+                 tags):
+        self.backend = backend
+        self.tags = self._base_tags | tags
+
+        self.dtype = dtype
+        self.itemsize = np.dtype(dtype).itemsize
+
+        self.block_size = block_size
+        self.nmats = nmats
+
+        trows, tcols = tile_shape
+        if trows != tcols:
+            raise ValueError('OpenMP tiled matrices must be square')
+        self.trows = self.tcols = self.tsize = tcols
+        self.ntiles_r = self.ntiles_c = self.ntiles = -(-block_size // tcols)
+
+        self.soasz = backend.soasz
+        self.csubsz = backend.csubsz
+        self.nsoa = self.csubsz // self.soasz
+        self.nblocks = -(-nmats // self.csubsz)
+
+        self.padded_size = self.ntiles*self.tsize
+        self.block_words = self.padded_size*self.padded_size*self.csubsz
+        self.nbytes = self.nblocks*self.block_words*self.itemsize
+
+        backend.malloc(self, extent)
+
+    def onalloc(self, basedata, offset):
+        self.basedata = basedata.ctypes.data
+        self.offset = offset
+
+        self.data = basedata[offset:offset + self.nbytes]
+        self.data = self.data.view(self.dtype)
+        self.data = self.data.reshape(self.nblocks, self.ntiles, self.ntiles,
+                                      self.tsize, self.nsoa, self.tsize, -1)
+
+        self._as_parameter_ = self.data.ctypes.data
 
 
 class OpenMPGraph(base.Graph):

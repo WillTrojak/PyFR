@@ -137,6 +137,7 @@ class CUDAWrappers(LibWrapper):
     FUNC_ATTR_MAX_DYNAMIC_SHARED_SIZE_BYTES = 8
     FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
     MEMORYTYPE_UNIFIED = 4
+    MULTIPROCESSOR_COUNT = 16
 
     # Functions
     _functions = [
@@ -153,6 +154,8 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuMemGetInfo_v2', POINTER(c_size_t), POINTER(c_size_t)),
         (c_int, 'cuMemAlloc_v2', POINTER(c_void_p), c_size_t),
         (c_int, 'cuMemFree_v2', c_void_p),
+        (c_int, 'cuMemAllocAsync', POINTER(c_void_p), c_size_t, c_void_p),
+        (c_int, 'cuMemFreeAsync', c_void_p, c_void_p),
         (c_int, 'cuMemAllocHost_v2', POINTER(c_void_p), c_size_t),
         (c_int, 'cuMemFreeHost', c_void_p),
         (c_int, 'cuMemcpy', c_void_p, c_void_p, c_size_t),
@@ -177,6 +180,8 @@ class CUDAWrappers(LibWrapper):
          c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p),
         (c_int, 'cuFuncGetAttribute', POINTER(c_int), c_int, c_void_p),
         (c_int, 'cuFuncSetAttribute', c_void_p, c_int, c_int),
+        (c_int, 'cuOccupancyMaxActiveBlocksPerMultiprocessor',
+         POINTER(c_int), c_void_p, c_int, c_size_t),
         (c_int, 'cuGraphCreate', POINTER(c_void_p), c_uint),
         (c_int, 'cuGraphDestroy', c_void_p),
         (c_int, 'cuGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
@@ -221,10 +226,10 @@ class _CUDABase:
         self._as_parameter_ = ptr.value
 
     def __del__(self):
-        if self._destroyfn:
+        if (p := getattr(self, '_as_parameter_', None)) and self._destroyfn:
             try:
                 if self.cuda.ctx:
-                    getattr(self.cuda.lib, self._destroyfn)(self)
+                    getattr(self.cuda.lib, self._destroyfn)(p)
             except AttributeError:
                 pass
 
@@ -235,12 +240,19 @@ class _CUDABase:
 class CUDADevAlloc(_CUDABase):
     _destroyfn = 'cuMemFree'
 
-    def __init__(self, cuda, nbytes):
+    def __init__(self, cuda, nbytes, stream=None):
         ptr = c_void_p()
-        cuda.lib.cuMemAlloc(ptr, nbytes)
+        if stream is None:
+            cuda.lib.cuMemAlloc(ptr, nbytes)
+        else:
+            cuda.lib.cuMemAllocAsync(ptr, nbytes, stream)
 
         super().__init__(cuda, ptr)
         self.nbytes = nbytes
+
+    def free_async(self, stream):
+        self.cuda.lib.cuMemFreeAsync(self, stream)
+        del self._as_parameter_
 
 
 class CUDAHostAlloc(_CUDABase):
@@ -358,6 +370,17 @@ class CUDAFunction(_CUDABase):
         self.cuda.lib.cuLaunchKernel(self, *params.grid, *params.block,
                                      params.shared_mem_bytes, stream,
                                      params.kernel_params, None)
+
+    def max_active_blocks(self, nthreads, dynsmem=0):
+        n = c_int()
+        self.cuda.lib.cuOccupancyMaxActiveBlocksPerMultiprocessor(
+            byref(n), self, nthreads, dynsmem
+        )
+        return n.value
+
+    def resident_blocks(self, nthreads, dynsmem=0):
+        nsm = self.cuda.multiprocessor_count()
+        return max(1, self.max_active_blocks(nthreads, dynsmem)*nsm)
 
 
 class CUDAGraph(_CUDABase):
@@ -521,13 +544,19 @@ class CUDA:
 
         return major.value, minor.value
 
+    def multiprocessor_count(self):
+        count = c_int()
+        self.lib.cuDeviceGetAttribute(count, self.lib.MULTIPROCESSOR_COUNT,
+                                      self.dev)
+        return count.value
+
     def mem_info(self):
         free, total = c_size_t(), c_size_t()
         self.lib.cuMemGetInfo(free, total)
         return free.value, total.value
 
-    def mem_alloc(self, nbytes):
-        return CUDADevAlloc(self, nbytes)
+    def mem_alloc(self, nbytes, stream=None):
+        return CUDADevAlloc(self, nbytes, stream)
 
     def pagelocked_empty(self, shape, dtype):
         nbytes = np.prod(shape)*np.dtype(dtype).itemsize

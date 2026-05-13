@@ -62,13 +62,14 @@ class OpenCLBackend(BaseBackend):
         self.csubsz = self.soasz
 
         from pyfr.backends.opencl import (blasext, clblast, gimmik, packing,
-                                          provider, tinytc, types)
+                                          linalg, provider, tinytc, types)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.OpenCLConstMatrix
         self.graph_cls = types.OpenCLGraph
         self.matrix_cls = types.OpenCLMatrix
         self.matrix_slice_cls = types.OpenCLMatrixSlice
+        self.tiled_matrix_cls = types.OpenCLTiledMatrix
         self.view_cls = types.OpenCLView
         self.xchg_matrix_cls = types.OpenCLXchgMatrix
         self.xchg_view_cls = types.OpenCLXchgView
@@ -78,6 +79,7 @@ class OpenCLBackend(BaseBackend):
         # Instantiate the base kernel providers
         kprovs = [provider.OpenCLPointwiseKernelProvider,
                   blasext.OpenCLBlasExtKernels,
+                  linalg.OpenCLLinalgKernels,
                   packing.OpenCLPackingKernels,
                   gimmik.OpenCLGiMMiKKernels]
         self._providers = [k(self) for k in kprovs]

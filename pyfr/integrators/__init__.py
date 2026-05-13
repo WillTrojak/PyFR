@@ -4,7 +4,8 @@ from pyfr.integrators.explicit import (BaseExplicitController,
                                        BaseExplicitStepper)
 from pyfr.integrators.implicit import (BaseImplicitController,
                                        BaseImplicitStepper)
-from pyfr.integrators.implicit.krylov import BaseKrylovSolver
+from pyfr.integrators.implicit.krylov import BaseLinearSolver
+from pyfr.integrators.implicit.nonlinear import BaseNonlinearSolver
 from pyfr.util import subclass_where
 
 
@@ -21,10 +22,17 @@ def get_integrator(backend, systemcls, mesh, initsoln, cfg):
         cc = subclass_where(BaseImplicitController, controller_name=cn)
         sc = subclass_where(BaseImplicitStepper, stepper_name=sn)
 
-        kn = cfg.get('solver-time-integrator', 'krylov-solver', 'gmres')
-        kc = subclass_where(BaseKrylovSolver, krylov_name=kn)
+        # Nonlinear solver
+        nn = cfg.get('solver-time-integrator', 'nonlinear-solver', 'newton')
+        nc = subclass_where(BaseNonlinearSolver, nonlinear_name=nn)
 
-        bases = (cc, sc, kc)
+        # If the nonlinear solver requires a linear solver then mix it in
+        if nc.requires_linear_solver:
+            ln = cfg.get('solver-time-integrator', 'linear-solver', 'gmres')
+            lc = subclass_where(BaseLinearSolver, linear_name=ln)
+            nc = type(f'{nn}_{ln}', (nc, lc), {})
+
+        bases = (cc, sc, nc)
     else:
         raise ValueError(f'Invalid formulation {form!r}')
 

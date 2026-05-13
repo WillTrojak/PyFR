@@ -4,9 +4,9 @@ from pyfr.nputil import LogGPOptimiser
 from pyfr.util import subclass_where
 
 
-def get_krylov_tol_controller(cfg, serialiser, initsoln):
+def get_linear_tol_controller(cfg, serialiser, initsoln):
     sect = 'solver-time-integrator'
-    name = cfg.get(sect, 'krylov-tol-controller', 'none')
+    name = cfg.get(sect, 'linear-tol-controller', 'none')
     cls = subclass_where(BaseToleranceController, name=name)
 
     return cls(cfg, serialiser, initsoln)
@@ -16,6 +16,12 @@ class BaseToleranceController:
     name = None
     max_retries = 0
     settled = True
+    probing = False
+    _best_tol = None
+
+    @property
+    def best_tol(self):
+        return self._best_tol
 
     def update(self, wall_time, gamma_dt, success):
         pass
@@ -32,7 +38,7 @@ class NullToleranceController(BaseToleranceController):
 
     def __init__(self, cfg, serialiser, initsoln):
         sect = 'solver-time-integrator'
-        self._tol = cfg.getfloat(sect, 'krylov-rtol', 1e-2)
+        self._best_tol = self._tol = cfg.getfloat(sect, 'linear-rtol', 1e-2)
 
     def select_tolerance(self):
         return self._tol
@@ -41,7 +47,7 @@ class NullToleranceController(BaseToleranceController):
 class BaseProbeController(BaseToleranceController):
     def __init__(self, cfg, serialiser, initsoln):
         sect = 'solver-time-integrator'
-        self._probe_nsolves = cfg.getint(sect, 'krylov-probe-nsolves', 20)
+        self._probe_nsolves = cfg.getint(sect, 'linear-probe-nsolves', 20)
 
         self._ref_gdt = None
         self._steps_until_probe = 0
@@ -50,6 +56,10 @@ class BaseProbeController(BaseToleranceController):
         self._probe_remaining = 0
         self._probe_costs = []
         self._probe_tol = None
+
+    @property
+    def probing(self):
+        return self._probe_remaining > 0
 
     def _abort_probe(self):
         self._probe_remaining = 0
@@ -109,9 +119,9 @@ class WindowedGPController(BaseProbeController):
         sect = 'solver-time-integrator'
         f, i = cfg.getfloat, cfg.getint
 
-        self._rtol_min = f(sect, 'krylov-rtol-min', 1e-3)
-        self._rtol_max = f(sect, 'krylov-rtol-max', 1e-1)
-        self.max_retries = i(sect, 'krylov-max-retries', 2)
+        self._rtol_min = f(sect, 'linear-rtol-min', 1e-3)
+        self._rtol_max = f(sect, 'linear-rtol-max', 1e-1)
+        self.max_retries = i(sect, 'linear-max-retries', 2)
 
         self._gp = LogGPOptimiser(10, (self._rtol_min, self._rtol_max))
         self._in_soft_reset = False
@@ -230,8 +240,8 @@ class ListController(BaseProbeController):
 
         sect = 'solver-time-integrator'
 
-        self._tols = cfg.getliteral(sect, 'krylov-rtol-list')
-        self._reprobe_interval = cfg.getint(sect, 'krylov-reprobe-interval',
+        self._tols = cfg.getliteral(sect, 'linear-rtol-list')
+        self._reprobe_interval = cfg.getint(sect, 'linear-reprobe-interval',
                                             200)
 
         self._rtol_max = max(self._tols)

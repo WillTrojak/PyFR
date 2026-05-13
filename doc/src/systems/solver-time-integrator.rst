@@ -289,30 +289,24 @@ Controller Selection
 
         *int* (default: 5)
 
-Krylov Solver Options
----------------------
+Linear (Krylov) Solver Options
+------------------------------
 
-#. ``krylov-solver`` --- Krylov subspace method
+These apply only when ``nonlinear-solver = newton``.
 
-    ``gmres``
+#. ``linear-solver`` --- Krylov subspace method
 
-#. ``krylov-max-iter`` --- maximum Krylov iterations per solve
+    ``gmres`` | ``bicgstab`` | ``tfqmr`` (default: ``gmres``)
+
+#. ``linear-max-iter`` --- maximum matrix-vector products per solve
 
     *int* (default: 10)
 
-#. ``krylov-rtol`` --- relative tolerance for Krylov convergence
+#. ``linear-rtol`` --- relative tolerance for Krylov convergence
 
     *float* (default: 1e-2)
 
-#. ``krylov-precond`` --- preconditioner type
-
-    ``none`` | ``block-jacobi``
-
-    where ``block-jacobi`` is an element-wise block Jacobi
-    preconditioner. For many problems, ``none`` is sufficient
-    when using a modest ``krylov-rtol``.
-
-#. ``krylov-tol-controller`` --- Krylov tolerance controller
+#. ``linear-tol-controller`` --- Krylov tolerance controller
 
     ``none`` | ``windowed-gp`` | ``list`` (default: ``none``)
 
@@ -320,77 +314,141 @@ Krylov Solver Options
     adaptively adjusted using a GP-based optimiser to balance
     solve cost against accuracy.  When set to ``list``, the
     controller cycles through a fixed set of candidate
-    tolerances (see ``krylov-rtol-list``) and exploits the
+    tolerances (see ``linear-rtol-list``) and exploits the
     one with lowest cost.
 
-#. ``krylov-probe-nsolves`` --- number of solves per probe
+#. ``linear-probe-nsolves`` --- number of solves per probe
    window (used by ``windowed-gp`` and ``list``)
 
     *int* (default: 20)
 
-#. ``krylov-rtol-min`` --- minimum Krylov tolerance for
+#. ``linear-rtol-min`` --- minimum Krylov tolerance for
    ``windowed-gp`` controller
 
     *float* (default: 1e-3)
 
-#. ``krylov-rtol-max`` --- maximum Krylov tolerance for
+#. ``linear-rtol-max`` --- maximum Krylov tolerance for
    ``windowed-gp`` controller
 
     *float* (default: 1e-1)
 
-#. ``krylov-max-retries`` --- maximum retries with loosened
+#. ``linear-max-retries`` --- maximum retries with loosened
    tolerance on Newton failure (``windowed-gp`` controller)
 
     *int* (default: 2)
 
-#. ``krylov-rtol-list`` --- candidate tolerances for ``list``
+#. ``linear-rtol-list`` --- candidate tolerances for ``list``
    controller
 
     *list of floats*
 
     Example: ``[1e-1, 3e-2, 1e-2, 3e-3, 1e-3]``.  Each
-    candidate is probed for ``krylov-probe-nsolves`` steps and
+    candidate is probed for ``linear-probe-nsolves`` steps and
     the cheapest is used until the next re-probe cycle.
 
-#. ``krylov-reprobe-interval`` --- re-probe interval for
+#. ``linear-reprobe-interval`` --- re-probe interval for
    ``list`` controller
 
     *int* (default: 200)
 
     Number of steps between re-probe cycles.
 
-#. ``gmres-arnoldi`` --- Arnoldi orthogonalisation method
+GMRES Options
+-------------
 
-    ``cgs`` | ``mgs``
+Read from the ``[solver-gmres]`` section when ``linear-solver = gmres``:
+
+#. ``arnoldi`` --- Arnoldi orthogonalisation method
+
+    ``cgs`` | ``mgs`` (default: ``cgs``)
 
     Classical Gram-Schmidt (``cgs``) or Modified Gram-Schmidt
-    (``mgs``). Default is ``cgs``.
+    (``mgs``).
 
-#. ``gmres-restart`` --- GMRES restart size
+#. ``restart`` --- GMRES restart size
 
     *int* (default: 0)
 
     When set to a positive integer *m*, GMRES restarts every *m*
     iterations.  Total iterations are still bounded by
-    ``krylov-max-iter``.  When 0 (default), no restart is
+    ``linear-max-iter``.  When 0 (default), no restart is
     performed.
 
-Newton Solver Options
----------------------
+Preconditioner Options
+----------------------
 
-#. ``newton-rtol`` --- relative tolerance for Newton convergence
+#. ``precond`` --- preconditioner type
+
+    ``none`` | ``block-jacobi`` (default: ``none``)
+
+    where ``block-jacobi`` is an element-wise block Jacobi
+    preconditioner.  The preconditioner is shared by the Newton
+    Krylov solve and the Anderson fixed point.
+
+#. ``precond-precision`` --- preconditioner storage precision
+
+    ``double`` | ``single`` | ``half`` | ``bf16`` (default: backend
+    precision)
+
+    Controls the precision used for storing and applying the
+    block-Jacobi preconditioner.  Lower precision reduces memory
+    and can improve throughput at the cost of preconditioner quality.
+    Automatically clamped to the backend precision if set higher.
+
+    The finite-difference Jacobian is always evaluated at the backend
+    precision.  For each setting the intermediate Jacobian storage, the
+    precision the block inverse is computed in, and the inverse storage
+    are:
+
+    ``double``
+        Jacobian and inverse stored in double; inverse computed in
+        double.  Clamped to ``single`` on a single-precision backend.
+
+    ``single``
+        Jacobian and inverse stored in single; inverse computed in
+        single.
+
+    ``half``
+        Jacobian stored in single; inverse computed in single and
+        stored in half.
+
+    ``bf16``
+        Jacobian stored in bf16; inverse computed in single and stored
+        in bf16.
+
+#. ``fd-eps`` --- finite-difference perturbation
+
+    ``auto`` or *float* (default: ``auto``)
+
+    Finite-difference perturbation shared by the JFNK matrix-vector
+    product and the block-Jacobi construction.  ``auto`` selects an
+    adaptive value from the solution norm; a numeric value pins it.
+
+Nonlinear Solver Options
+------------------------
+
+#. ``nonlinear-solver`` --- nonlinear solver driving each stage
+
+    ``newton`` | ``anderson`` (default: ``newton``)
+
+    ``newton`` is a Jacobian-free Newton-Krylov (JFNK) solver that
+    drives an inner linear (Krylov) solve; ``anderson`` is a
+    preconditioned Anderson acceleration of the defect-correction
+    fixed point and uses no inner Krylov solver.
+
+#. ``nonlinear-rtol`` --- relative tolerance for nonlinear convergence
 
     *float* (default: 1e-4)
 
-#. ``newton-atol`` --- absolute tolerance for Newton convergence
+#. ``nonlinear-atol`` --- absolute tolerance for nonlinear convergence
 
     *float* (default: 1e-8)
 
-#. ``newton-max-iter`` --- maximum Newton iterations per stage
+#. ``nonlinear-max-iter`` --- maximum nonlinear iterations per stage
 
     *int* (default: 10)
 
-#. ``newton-atol-<var>`` --- per-variable absolute tolerance
+#. ``nonlinear-atol-<var>`` --- per-variable absolute tolerance
 
     *float*
 
@@ -402,34 +460,45 @@ Newton Solver Options
 
     .. code-block:: ini
 
-        newton-atol-rho = 1e-8
-        newton-atol-rhou = 1e-6
-        newton-atol-rhov = 1e-8
-        newton-atol-E = 1e-3
+        nonlinear-atol-rho = 1e-8
+        nonlinear-atol-rhou = 1e-6
+        nonlinear-atol-rhov = 1e-8
+        nonlinear-atol-E = 1e-3
 
-Line Search
------------
-
-#. ``newton-linesearch`` --- enable backtracking line search
+#. ``nonlinear-linesearch`` --- enable backtracking line search
 
     ``true`` | ``false`` (default: ``false``)
 
-    A backtracking line search can improve robustness for
-    difficult problems by ensuring the Newton step reduces the
-    residual. However, it adds computational overhead and is not
-    necessary for well-conditioned problems.
+    A backtracking line search can improve robustness for difficult
+    problems by ensuring the step reduces the residual.  It applies
+    to both the Newton and Anderson solvers, adds computational
+    overhead, and is not necessary for well-conditioned problems.
 
-#. ``newton-linesearch-max-iter`` --- maximum line search iterations
+#. ``nonlinear-linesearch-max-iter`` --- maximum line search iterations
 
     *int* (default: 5)
 
-#. ``newton-linesearch-fact`` --- line search reduction factor
+#. ``nonlinear-linesearch-fact`` --- line search reduction factor
 
     *float* (default: 0.5)
 
-#. ``newton-linesearch-c1`` --- Armijo condition constant
+#. ``nonlinear-linesearch-c1`` --- Armijo condition constant
 
     *float* (default: 1e-4)
+
+Anderson Options
+----------------
+
+Read from the ``[solver-anderson]`` section when
+``nonlinear-solver = anderson``:
+
+#. ``depth`` --- Anderson history depth *m*
+
+    *int* (default: 5)
+
+    The number of previous iterates retained for the acceleration
+    least-squares.  A depth of 0 reduces to preconditioned Picard
+    iteration.
 
 Example (Fixed Time-Step)
 -------------------------
@@ -446,10 +515,10 @@ A basic implicit configuration with fixed time-step:
     tend = 10.0
     dt = 0.005
 
-    krylov-solver = gmres
-    krylov-max-iter = 50
-    krylov-rtol = 1e-3
-    krylov-precond = none
+    linear-solver = gmres
+    linear-max-iter = 50
+    linear-rtol = 1e-3
+    precond = none
 
 Example (Adaptive Time-Step --- PI)
 ------------------------------------
@@ -470,10 +539,10 @@ the PI controller:
     atol = 1e-5
     rtol = 1e-5
 
-    krylov-solver = gmres
-    krylov-max-iter = 50
-    krylov-rtol = 1e-3
-    krylov-precond = none
+    linear-solver = gmres
+    linear-max-iter = 50
+    linear-rtol = 1e-3
+    precond = none
 
 Example (Adaptive Time-Step --- Throughput)
 --------------------------------------------
@@ -492,10 +561,10 @@ time-stepping:
     dt = 0.01
     dt-max = 1.0
 
-    krylov-solver = gmres
-    krylov-max-iter = 50
-    krylov-rtol = 1e-3
-    krylov-precond = none
+    linear-solver = gmres
+    linear-max-iter = 50
+    linear-rtol = 1e-3
+    precond = none
 
 Example (Per-Variable Scaling)
 ------------------------------
@@ -512,13 +581,13 @@ For high-pressure compressible flow with large dynamic range:
     tend = 1.0
     dt = 0.0001
 
-    krylov-solver = gmres
-    krylov-max-iter = 50
-    krylov-rtol = 1e-3
-    krylov-precond = none
+    linear-solver = gmres
+    linear-max-iter = 50
+    linear-rtol = 1e-3
+    precond = none
 
-    newton-rtol = 1e-4
-    newton-atol-rho = 1e-8
-    newton-atol-rhou = 1e-6
-    newton-atol-rhov = 1e-8
-    newton-atol-E = 1e-3
+    nonlinear-rtol = 1e-4
+    nonlinear-atol-rho = 1e-8
+    nonlinear-atol-rhou = 1e-6
+    nonlinear-atol-rhov = 1e-8
+    nonlinear-atol-E = 1e-3

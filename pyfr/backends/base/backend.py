@@ -9,7 +9,7 @@ import numpy as np
 
 from pyfr.backends.base.provider import NotSuitableError
 from pyfr.backends.base.makoutil import mfilttag
-from pyfr.backends.base.types import Extent, StorageRegion
+from pyfr.backends.base.types import _AliasGroup, Extent
 from pyfr.template import DottedTemplateLookup
 
 
@@ -72,8 +72,8 @@ class BaseBackend:
         # Peak memory tracking
         self._mem_peak = 0
 
-    def _extent_alloc_bytes(self, nbytes):
-        return nbytes - (nbytes % -self.alignb)
+    def get_extent(self, name):
+        return self._extents[name]
 
     @cached_property
     def lookup(self):
@@ -94,16 +94,18 @@ class BaseBackend:
     def malloc(self, obj, extent):
         match extent:
             case None:
-                ext = Extent()
-                ext.reserve(obj, self._extent_alloc_bytes(obj.nbytes))
+                ext = Extent(self.alignb)
+                ext.reserve(obj)
                 ext.commit(self._malloc_checked)
                 self._track_extent(ext)
             case str() as name:
-                ext = self._extents.setdefault(name, Extent(name))
-                ext.reserve(obj, self._extent_alloc_bytes(obj.nbytes))
+                ext = self._extents.setdefault(name, Extent(self.alignb, name))
+                ext.reserve(obj)
+            case _AliasGroup() as group:
+                group.reserve(obj)
             case storage:
-                obj.onalloc(storage.basedata, storage.offset)
-                obj._storage_root = storage.storage_root
+                obj.bind(storage.storage_root, storage.basedata,
+                         storage.offset)
 
     def commit(self):
         for ext in self._extents.values():
@@ -149,8 +151,6 @@ class BaseBackend:
         dtype = dtype or self.fpdtype
         return self.matrix_cls(self, dtype, ioshape, initval, extent, tags)
 
-    def storage_view(self, parent, offset, nbytes):
-        return StorageRegion(parent, offset, nbytes)
 
     @recordmat
     def matrix_slice(self, mat, ra, rb, ca, cb):
@@ -163,6 +163,18 @@ class BaseBackend:
 
     def xchg_matrix_for_view(self, view, tags=set()):
         return self.xchg_matrix((view.nvrow, view.nvcol*view.n), tags=tags)
+
+    @recordmat
+    def tiled_matrix(self, block_size, nmats, tile_shape, dtype=None,
+                     extent=None, tags=set()):
+        dtype = dtype or self.fpdtype
+        return self.tiled_matrix_cls(self, dtype, block_size, nmats,
+                                     tile_shape, extent, tags)
+
+    def optimal_tile_shape(self, block_size, dtype):
+        # Square 64-byte-wide tile; wide-wavefront backends override this
+        s = 64 // np.dtype(dtype).itemsize
+        return (s, s)
 
     def view(self, matmap, rmap, cmap, rstridemap=1, vshape=(), tags=set()):
         return self.view_cls(self, matmap, rmap, cmap, rstridemap, vshape,

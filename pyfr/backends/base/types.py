@@ -15,26 +15,56 @@ class _StorageBase:
     def same_storage(self, other):
         return self.storage_root is other.storage_root
 
+    def bind(self, root, basedata, offset):
+        self._storage_root = root
+        self.onalloc(basedata, offset)
+
+
+class _AliasGroup:
+    def __init__(self, alignb):
+        self.alignb = alignb
+        self.nbytes = 0
+        self._pending = []
+
+    def reserve(self, obj):
+        nbytes = obj.nbytes - obj.nbytes % -self.alignb
+        self._pending.append((obj, self.nbytes))
+        self.nbytes += nbytes
+
 
 class Extent(_StorageBase):
-    def __init__(self, name=None):
+    def __init__(self, alignb, name=None):
+        self.alignb = alignb
         self.name = name
         self.offset = 0
         self.nbytes = 0
         self.basedata = None
         self._pending = []
+        self._alias_groups = []
         self._storage_root = self
 
-    def reserve(self, obj, nbytes):
+    def reserve(self, obj):
+        nbytes = obj.nbytes - obj.nbytes % -self.alignb
         self._pending.append((obj, self.nbytes))
         self.nbytes += nbytes
 
+    def alias_group(self):
+        g = _AliasGroup(self.alignb)
+        self._alias_groups.append(g)
+        return g
+
     def commit(self, alloc_fn):
+        for g in self._alias_groups:
+            self.nbytes = max(self.nbytes, g.nbytes)
+
         self.basedata = alloc_fn(self.nbytes)
+
         for obj, offset in self._pending:
-            obj.onalloc(self.basedata, offset)
-            obj._storage_root = self
-        self._pending.clear()
+            obj.bind(self, self.basedata, offset)
+
+        for g in self._alias_groups:
+            for obj, offset in g._pending:
+                obj.bind(self, self.basedata, offset)
 
 
 class MatrixBase(_StorageBase):
@@ -217,34 +247,43 @@ class MatrixSlice(_StorageBase):
         return self.parent.storage_root
 
 
-class StorageRegion(_StorageBase):
-    def __init__(self, parent, offset, nbytes):
-        offset, nbytes = int(offset), int(nbytes)
-        if offset < 0 or nbytes < 0 or offset + nbytes > parent.nbytes:
-            raise ValueError('Invalid storage region')
-
-        self.parent = parent
-        self.nbytes = nbytes
-        self.rel_offset = offset
-
-    @property
-    def basedata(self):
-        return self.parent.basedata
-
-    @property
-    def offset(self):
-        return self.parent.offset + self.rel_offset
-
-    @property
-    def storage_root(self):
-        return self.parent.storage_root
-
 
 class ConstMatrix(MatrixBase):
     _base_tags = {'const'}
 
     def __init__(self, backend, dtype, initval, tags):
         super().__init__(backend, dtype, initval.shape, initval, None, tags)
+
+
+class TiledMatrix(_StorageBase):
+    _base_tags = {'tiled'}
+
+    def __init__(self, backend, dtype, block_size, nmats, tile_shape, extent,
+                 tags):
+        self.backend = backend
+        self.tags = self._base_tags | tags
+
+        self.dtype = dtype
+        self.itemsize = np.dtype(dtype).itemsize
+
+        self.block_size = block_size
+        self.nmats = nmats
+
+        self.trows, self.tcols = tile_shape
+        self.ntiles_r = -(-block_size // self.trows)
+        self.ntiles_c = -(-block_size // self.tcols)
+        self.padr = self.ntiles_r*self.trows
+        self.padc = self.ntiles_c*self.tcols
+
+        self.elem_size = self.padr*self.padc
+        self.nbytes = nmats*self.elem_size*self.itemsize
+
+        backend.malloc(self, extent)
+
+    def onalloc(self, data, offset):
+        self.basedata = data
+        self.data = data
+        self.offset = offset
 
 
 class XchgMatrix(Matrix):

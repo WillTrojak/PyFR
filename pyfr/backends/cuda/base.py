@@ -64,13 +64,14 @@ class CUDABackend(BaseBackend):
             raise ValueError('Invalid CUDA backend MPI type')
 
         from pyfr.backends.cuda import (blasext, cublaslt, gimmik, packing,
-                                        provider, types)
+                                        linalg, provider, types)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.CUDAConstMatrix
         self.graph_cls = types.CUDAGraph
         self.matrix_cls = types.CUDAMatrix
         self.matrix_slice_cls = types.CUDAMatrixSlice
+        self.tiled_matrix_cls = types.CUDATiledMatrix
         self.view_cls = types.CUDAView
         self.xchg_matrix_cls = types.CUDAXchgMatrix
         self.xchg_view_cls = types.CUDAXchgView
@@ -82,7 +83,8 @@ class CUDABackend(BaseBackend):
                   blasext.CUDABlasExtKernels,
                   packing.CUDAPackingKernels,
                   gimmik.CUDAGiMMiKKernels,
-                  cublaslt.CUDACUBLASLtKernels]
+                  cublaslt.CUDACUBLASLtKernels,
+                  linalg.CUDALinalgKernels]
         self._providers = [k(self) for k in kprovs]
 
         # Pointwise kernels
@@ -107,6 +109,12 @@ class CUDABackend(BaseBackend):
 
         # Return a view of the correct shape and dtype
         return self._xfer_buf[:nbytes].view(dtype).reshape(shape)
+
+    def optimal_tile_shape(self, block_size, dtype):
+        if block_size >= 256:
+            return (32, 64 // np.dtype(dtype).itemsize)
+        else:
+            return super().optimal_tile_shape(block_size, dtype)
 
     @property
     def platform_id(self):

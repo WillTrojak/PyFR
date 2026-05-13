@@ -51,6 +51,13 @@ class MetalXchgView(base.XchgView): pass
 class MetalXchgMatrix(MetalMatrix, base.XchgMatrix): pass
 
 
+class MetalTiledMatrix(base.TiledMatrix):
+    def onalloc(self, basedata, offset):
+        self.basedata = basedata
+        self.offset = offset
+        self.data = (self.basedata, self.offset)
+
+
 class MetalGraph(base.Graph):
     def __init__(self, backend):
         super().__init__(backend)

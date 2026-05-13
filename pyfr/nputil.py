@@ -199,15 +199,43 @@ def iter_struct(arr, n=1000, axis=0):
         yield from c.tolist()
 
 
+bfloat16 = np.dtype('u2', metadata={'pyfr_bf16': True})
+
+
+def is_bf16(dtype):
+    md = np.dtype(dtype).metadata
+    return bool(md and md.get('pyfr_bf16'))
+
+
+def f32_to_bf16(x):
+    x = np.ascontiguousarray(x, dtype=np.float32)
+    u = x.view(np.uint32)
+    b = ((u + 0x7FFF + ((u >> 16) & 1)) >> 16).astype(np.uint16)
+
+    # Handle NaN
+    b[np.isnan(x)] = 0x7FC0
+    return b
+
+
+def bf16_to_f32(u):
+    u32 = np.ascontiguousarray(u, dtype=np.uint16).astype(np.uint32) << 16
+    return u32.view(np.float32)
+
+
 _ctype_map = {
     np.int32: 'int', np.uint32: 'unsigned int',
     np.int64: 'int64_t', np.uint64: 'uint64_t',
+    np.float16: 'half',
     np.float32: 'float', np.float64: 'double'
 }
 
 
 def npdtype_to_ctype(dtype):
-    return _ctype_map[np.dtype(dtype).type]
+    dtype = np.dtype(dtype)
+    if is_bf16(dtype):
+        return 'bf16'
+    else:
+        return _ctype_map[dtype.type]
 
 
 _ctypestype_map = {
