@@ -1,14 +1,20 @@
+import re
+
 from pyfr.readers.native import NativeReader
 from pyfr.util import subclass_where
 
 
 class BaseWriter:
+    needs_con = False
+
     def __init__(self, meshf, pname=None):
         # Load the mesh
-        self.reader = NativeReader(meshf, pname, construct_con=False)
+        self.reader = NativeReader(meshf, pname, construct_con=self.needs_con)
 
-        # Dimensions
-        self.ndims = self.reader.mesh.ndims
+        ndims = self.ndims = self.reader.mesh.ndims
+
+        if not re.fullmatch(self.dimensions, str(ndims)):
+            raise RuntimeError(f'{ndims}D grids not supported')
 
     def _load_soln(self, solnf):
         from pyfr.solvers.base import BaseSystem

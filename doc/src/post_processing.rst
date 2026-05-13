@@ -27,13 +27,18 @@ quadrilateral being divided into four elements.
 Clean to Grid
 -------------
 
-Upon opening an exported file in ParaView one should *always* run the
-*Clean to Grid* filter.  This will eliminate duplicate vertices along
-the faces and edges between elements that arise as a consequence of the
-discontinuous nature of the FR approach.  For best results it is
-recommended to set the *Point Data Weighting Strategy* to *Average by
-Number*.  Running this filter will not only result in cleaner visuals
-but will also improve the performance of ParaView.
+By default, volume, boundary, and spanwise VTK exports are written on a
+continuous grid: duplicate vertices within each piece are removed and
+point data at shared vertices is averaged.  For ``.pvtu`` outputs, each
+piece remains self-contained, but partition-boundary duplicates carry
+the same averaged values on each side.  Thus, in most cases no *Clean to
+Grid* filter is needed after export.
+
+To emit the discontinuous FR representation instead, pass
+``--discontinuous`` to ``pyfr export volume``, ``pyfr export boundary``,
+or ``pyfr export spanwise``.  When visualising such discontinuous
+outputs in ParaView, run *Clean to Grid* and set the *Point Data
+Weighting Strategy* to *Average by Number*.
 
 Tessellate
 ----------
@@ -56,10 +61,10 @@ Avoiding Seams
 --------------
 
 When working with mixed element meshes or with .pvtu files obtained by
-running pyfr export in parallel, it is possible for seams to appear.
-These can be avoided by adding the *Ghost Cells* plugin to the filter
-pipeline.  This filter should be added immediately after *Clean to Grid*
-and/or *Tessellate*.
+running pyfr export in parallel, it is possible for seams to appear in
+some ParaView filters.  These can be avoided by adding the *Ghost Cells*
+plugin after loading the dataset (or after *Tessellate* when using that
+filter).
 
 Parallel Processing
 -------------------
@@ -72,8 +77,8 @@ recommended filter stack is as follows:
 
 #. *Redistribute Dataset* which will distribute the cells such that each
    ParaView rank has a roughly equivalent amount of data.
-#. *Clean to Grid* and/or *Tessellate* for the reasons described above.
-#. *Ghost Cells* to avoid seams.
+#. *Tessellate* if adaptive subdivision of high-order data is required.
+#. *Ghost Cells* to avoid seams in filters that use neighbouring cells.
 
 When working with extremely large datasets in parallel it is recommended
 to use the .pvtu file format.  This has the advantage of being already
@@ -89,13 +94,49 @@ add a uniform partitioning to the mesh and employ this for the export.
 In the latter case the only robust solution is to use the *Redistribute
 Dataset* to rebalance the file.
 
+Spanwise Average Export
+-----------------------
+
+``pyfr export spanwise`` reduces a 3D solution to a 2D unstructured VTU
+by averaging along one Cartesian axis.  The user specifies a **pair of
+surfaces** that bound the averaging direction: either a periodic pair
+or two named boundaries.
+
+.. code-block:: shell
+
+    pyfr export spanwise mesh.pyfrm tavg.pyfrs out.vtu --eopt periodic:0
+    pyfr export spanwise mesh.pyfrm tavg.pyfrs out.vtu --eopt boundary:bcwalllower,bcwallupper
+
+The averaging axis is derived automatically from the pair geometry:
+for periodic pairs from the translation vector *T*; for boundary
+pairs from the centroid displacement between the two surfaces.
+
+For structured ``hex``/``pri`` meshes the exporter uses exact
+quadrature along element columns; for unstructured meshes it falls
+back to trapezium-rule sampling at ``nstations`` positions.  The
+path is selected automatically.
+
+Options (passed via ``--eopt key:value``):
+
+- ``periodic:NAME`` -- use periodic pair ``periodic/NAME``.  The
+  translation vector must be axis-aligned.  Mutually exclusive
+  with ``boundary:``.
+- ``boundary:LO,HI`` -- use two named boundary groups as the pair,
+  e.g. ``boundary:bcwalllower,bcwallupper``.  The two surfaces
+  must be separated along a single Cartesian axis.  Mutually
+  exclusive with ``periodic:``.
+- ``nstations:N`` -- number of sampling stations (sampled path
+  only).  Defaults to ``4*(p+1)`` where ``p`` is the solver order.
+
+The output VTU is 2D (the averaging-axis component is set to zero).
+All input scalar fields are preserved as VTK PointData arrays.
+
 Boundary and STL Export
 -----------------------
 
-When working with surface data, be it from a boundary or an STL file, it
-is recommended to start with the following filter pipeline:
+When working with surface data from a boundary export, it is
+recommended to start with the following filter pipeline:
 
-#. *Clean to Grid* for the reasons outlined above.
 #. *Extract Surface* which will convert the internal representation of
    the surface from an unstructured grid to polygonal data.
 #. *Generate Surface Normals* which will yield a much smoother surface.

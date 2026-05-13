@@ -1,8 +1,7 @@
-import numpy as np
-
 from pyfr.cache import memoize
 from pyfr.inifile import NoOptionError
 from pyfr.quadrules import get_quadrule
+from pyfr.shapes import proj_pts
 
 
 class SurfaceIntegrator:
@@ -46,6 +45,4 @@ class SurfaceIntegrator:
         q = get_quadrule(itype, qrule, qdeg=qdeg, flags=flags)
 
         # Project its points onto the provided surface
-        pts = np.atleast_2d(q.pts.T)
-
-        return np.vstack(np.broadcast_arrays(*proj(*pts))).T, q.wts
+        return proj_pts(proj, q.pts), q.wts

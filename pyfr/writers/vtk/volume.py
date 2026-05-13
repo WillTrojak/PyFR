@@ -6,10 +6,12 @@ from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
+from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
 class VTKVolumeWriter(BaseVTKWriter):
     type = 'volume'
+    dimensions = '2|3'
     output_curved = True
 
     def _load_soln(self, *args, **kwargs):
@@ -18,20 +20,39 @@ class VTKVolumeWriter(BaseVTKWriter):
         self.einfo = [(etype, self.soln.data[etype].shape[2])
                       for etype in self.mesh.eidxs]
 
+    def _output_topology(self):
+        cnodes, svpts = {}, {}
+        for etype, _ in self.einfo:
+            shapecls = subclass_where(BaseShape, name=etype)
+            spts_nodes = self.mesh.spts_nodes[etype]
+            cidxs = shapecls.corner_pts_idxs(spts_nodes.shape[1])
+            cnodes[etype] = spts_nodes[:, cidxs]
+            svpts[etype] = self._svpts(etype)
+
+        return cnodes, svpts
+
+    @memoize
+    def _svpts(self, etype):
+        shapecls = subclass_where(BaseShape, name=etype)
+        div = self.etypes_div[etype]
+        svpts = shapecls.std_ele(div)
+
+        # For high-order output permute the nodes to match the VTK ordering
+        if etype != 'pyr' and self.ho_output:
+            svpts = svpts[get_vtk_shape(etype, div).nodemaps[len(svpts)]]
+
+        return svpts
+
     @memoize
     def _opmats(self, etype, cfg):
         # Shape
         shapecls = subclass_where(BaseShape, name=etype)
 
         # Sub divison points inside of a standard element
-        svpts = shapecls.std_ele(self.etypes_div[etype])
-        nsvpts = len(svpts)
+        svpts = self._svpts(etype)
 
         # Basis
         basis = shapecls(len(self.mesh.spts[etype]), cfg)
-
-        if etype != 'pyr' and self.ho_output:
-            svpts = [svpts[i] for i in self._nodemaps[etype, nsvpts]]
 
         mesh_op = basis.sbasis.nodal_basis_at(svpts)
         soln_op = basis.ubasis.nodal_basis_at(svpts)

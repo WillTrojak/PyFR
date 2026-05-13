@@ -3,23 +3,21 @@ from collections import defaultdict, namedtuple
 import numpy as np
 
 from pyfr.cache import memoize
+from pyfr.nputil import search_unsorted
 from pyfr.plugins.postproc.adapters import BoundaryPostProcData
 from pyfr.polys import get_polybasis
-from pyfr.shapes import BaseShape
+from pyfr.shapes import BaseShape, proj_pts
 from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
+from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
 FaceInfo = namedtuple('FaceInfo', 'etype fidx svpts norm')
 
 
-def _search(a, v):
-    idx = np.argsort(a)
-    return idx[np.searchsorted(a, v, sorter=idx)]
-
-
 class VTKBoundaryWriter(BaseVTKWriter):
     type = 'boundary'
+    dimensions = '2|3'
     output_curved = True
 
     def __init__(self, meshf, boundaries, **kwargs):
@@ -58,7 +56,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
                     raise ValueError('Output boundaries not present in subset '
                                      'solution')
 
-                eoff = _search(smesh.eidxs[etype], eidxs[eoff])
+                eoff = search_unsorted(smesh.eidxs[etype], eidxs[eoff])
 
             # Obtain the associated surface info
             for stype, *info in self._get_surface_info(etype, eoff, fidx):
@@ -73,14 +71,9 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
         # Get the information about our face
         itype, proj, norm = shape.faces[fidx]
-        ishapecls = subclass_where(BaseShape, name=itype)
 
         # Obtain the visualisation points on this face
-        svpts = ishapecls.std_ele(self.etypes_div[itype])
-        svpts = np.vstack(np.broadcast_arrays(*proj(*svpts.T))).T
-
-        if self.ho_output:
-            svpts = svpts[self._nodemaps[itype, len(svpts)]]
+        svpts = proj_pts(proj, self._svpts(itype))
 
         mesh_op = shape.sbasis.nodal_basis_at(svpts)
         soln_op = shape.ubasis.nodal_basis_at(svpts)
@@ -93,6 +86,32 @@ class VTKBoundaryWriter(BaseVTKWriter):
         finfo = FaceInfo(etype, fidx, svpts, norm)
 
         return itype, mesh_op, soln_op, lin_op, finfo
+
+    @memoize
+    def _svpts(self, itype):
+        ishapecls = subclass_where(BaseShape, name=itype)
+        svpts = ishapecls.std_ele(self.etypes_div[itype])
+        if self.ho_output:
+            vshape = get_vtk_shape(itype, self.etypes_div[itype])
+            svpts = svpts[vshape.nodemaps[len(svpts)]]
+        return svpts
+
+    def _output_topology(self):
+        svpts = {itype: self._svpts(itype) for itype in self._surface_info}
+
+        cnodes = {}
+        for itype, groups in self._surface_info.items():
+            pieces = []
+            for *_, finfo, idxs in groups:
+                shapecls = subclass_where(BaseShape, name=finfo.etype)
+                spts_nodes = self.mesh.spts_nodes[finfo.etype]
+                cidxs = shapecls.face_corner_pts_idxs(finfo.fidx,
+                                                      spts_nodes.shape[1])
+                pieces.append(spts_nodes[np.ix_(idxs, cidxs)])
+
+            cnodes[itype] = np.concatenate(pieces)
+
+        return cnodes, svpts
 
     def _get_surface_info(self, etype, eoffs, fidxs):
         info, idxs = {}, defaultdict(list)

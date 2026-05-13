@@ -11,7 +11,7 @@ from pyfr.plugins.common import region_data
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.shapes import BaseShape
 from pyfr.util import file_path_gen, subclass_where
-from pyfr.writers.vtk import get_subdiv
+from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
 class AscentError(Exception): pass
@@ -318,7 +318,7 @@ class _AscentRenderer:
             mesh_n[f'{d_str}/coordsets/coords/values/{l}'] = x
 
         # Subdivide the element
-        subdiv = get_subdiv(etype, divisor)
+        subdiv = get_vtk_shape(etype, divisor)
         snodes = subdiv.subnodes
 
         sconn = np.tile(snodes, (neles, 1))

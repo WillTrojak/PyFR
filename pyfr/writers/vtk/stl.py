@@ -99,16 +99,15 @@ def _spherigon_smooth(flat_pts, bary, tri_verts, tri_norms):
 class VTKSTLWriter(BaseVTKWriter):
     type = 'stl'
     output_curved = False
+    dimensions = '3'
 
     def __init__(self, meshf, stlrgns, *, subdiv='linear', **kwargs):
         # Disable high-order output and (by default) subdivision
         kwargs['order'] = None
-        kwargs.setdefault('divisor', 1)
+        kwargs['discontinuous'] = True
+        divisor = kwargs.setdefault('divisor', 1)
 
         super().__init__(meshf, **kwargs)
-
-        if self.ndims != 3:
-            raise RuntimeError('STL export only supported for 3D grids')
 
         if subdiv not in ('linear', 'spherigon'):
             raise ValueError(f'Invalid subdiv type: {subdiv}')
@@ -118,7 +117,7 @@ class VTKSTLWriter(BaseVTKWriter):
                          for s in stlrgns])
 
         # Subdivide the mesh
-        pts = self._subdivide_pts(stl, self.divisor, subdiv)
+        pts = self._subdivide_pts(stl, divisor, subdiv)
 
         # Determine the unique vertices
         ppts, pinv = np.unique(pts.reshape(-1, 3), axis=0, return_inverse=True)
@@ -130,7 +129,6 @@ class VTKSTLWriter(BaseVTKWriter):
         self._stl_aux_names = []
 
     def _extra_point_shapes(self, etype):
-        # STL override, only sample per-upt point data
         dtype = self.soln.dtypes[etype]
         group = next(g for g in dtype.names if g != 'aux')
         return {dtype[group][0].shape[-1:]}
@@ -140,7 +138,7 @@ class VTKSTLWriter(BaseVTKWriter):
 
         mesh, soln = self.mesh, self.soln
         pts, pinv, spts, slocs = self._stl_pts
-        comm, rank, root = get_comm_rank_root()
+        _, rank, root = get_comm_rank_root()
         nsoln = len(self._soln_fields)
 
         # STL carries no per-element cell data; keep only point fields

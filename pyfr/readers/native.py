@@ -19,6 +19,7 @@ class Mesh:
 
     ndims: int = None
     subset: bool = False
+    parent: 'Mesh' = None
 
     creator: str = None
     codec: list = None
@@ -100,7 +101,8 @@ class NativeReader:
 
         if construct_con:
             self._construct_con()
-            self._construct_shared_nodes()
+
+        self._construct_shared_nodes()
 
     def close(self):
         self.f.close()
@@ -257,9 +259,10 @@ class NativeReader:
                 spts_nodes[etype] = self.mesh.spts_nodes[etype]
                 spts_curved[etype] = self.mesh.spts_curved[etype]
 
-        return replace(self.mesh, subset=True, eidxs=eidxs, spts=spts,
-                       spts_nodes=spts_nodes, spts_curved=spts_curved,
-                       con=None, con_p=None, bcon=None)
+        return replace(self.mesh, subset=True, parent=self.mesh,
+                       eidxs=eidxs, spts=spts, spts_nodes=spts_nodes,
+                       spts_curved=spts_curved, con=None, con_p=None,
+                       bcon=None)
 
     def _read_metadata(self):
         mesh = self.mesh

@@ -133,7 +133,7 @@ def main():
     ap_export = sp.add_parser('export', help='export --help')
     ap_export = ap_export.add_subparsers()
 
-    for etype in ('boundary', 'stl', 'volume'):
+    for etype in ('boundary', 'spanwise', 'stl', 'volume'):
         ap_export_type = ap_export.add_parser(etype,
                                               help=f'export {etype} --help')
 
@@ -179,6 +179,11 @@ def main():
                                     help='config file for postproc plugins')
         ap_export_type.add_argument('-P', '--pname',
                                     help='partitioning to use')
+        if etype in ('boundary', 'spanwise', 'volume'):
+            ap_export_type.add_argument(
+                '--discontinuous', dest='discontinuous', action='store_true',
+                default=False, help='emit discontinuous output'
+            )
         ap_export_type.set_defaults(etype=etype, process=process_export)
 
     # Region subcommand
@@ -467,10 +472,14 @@ def process_export(args):
               'pname': args.pname, 'pp_plugins': args.pp_plugins,
               'pp_cfg': pp_cfg}
 
+    # Discntinuous output
+    if 'discontinuous' in args:
+        kwargs['discontinuous'] = args.discontinuous
+
     # Process any exporter-specific options
     for e in args.eopts:
         k, v = e.split(':', 1)
-        kwargs[k] = int(v) if re.match(r'\d+', v) else v
+        kwargs[k.replace('-', '_')] = int(v) if re.fullmatch(r'\d+', v) else v
 
     # Obtain files to export from a batch file
     if args.solnf == '-' and args.outf == '-':

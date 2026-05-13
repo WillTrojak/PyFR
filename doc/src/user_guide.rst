@@ -101,6 +101,11 @@ pyfr export
    Convert a PyFR ``.pyfrs`` file into an unstructured VTK ``.vtu`` or
    ``.pvtu`` file.
 
+   By default volume, boundary, and spanwise exports are written on a
+   continuous grid: duplicate vertices within each output piece are
+   removed and point data at shared vertices is averaged.  To emit the
+   discontinuous FR representation instead, pass ``--discontinuous``.
+
    pyfr export volume
       Exports a volume grid.  If ``--eopt=order:n`` is provided then
       PyFR elements are converted where possible to high-order VTK
@@ -135,6 +140,23 @@ pyfr export
           pyfr export boundary mesh.pyfrm solution.pyfrs solution.vtu lower_wall upper_wall
 
       Note that boundary export is only supported for 3D grids.
+
+   pyfr export spanwise
+      Exports a spanwise average of a 3D grid to a 2D VTK grid.
+      Example:
+
+      .. code-block:: shell
+
+          pyfr export spanwise --eopt=periodic:0 mesh.pyfrm solution.pyfrs solution.vtu
+
+      For extruded ``hex``/``pri`` meshes the exporter follows the mesh
+      columns exactly.  For other 3D meshes a boundary or periodic face
+      set can be used as the output topology and the volume is sampled
+      at spanwise stations:
+
+      .. code-block:: shell
+
+          pyfr export spanwise --eopt=boundary:wall1,wall2 --eopt=nstations:16 mesh.pyfrm solution.pyfrs solution.vtu
 
    pyfr export stl
       Exports one or more STL surfaces.  Example:

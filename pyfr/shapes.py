@@ -7,9 +7,10 @@ import numpy as np
 from pyfr.nputil import block_diag, clean
 from pyfr.polys import get_polybasis
 from pyfr.quadrules import get_quadrule
+from pyfr.util import subclass_where
 
 
-def _proj_pts(projector, pts):
+def proj_pts(projector, pts):
     pts = np.atleast_2d(pts.T)
     return np.vstack(np.broadcast_arrays(*projector(*pts))).T
 
@@ -75,6 +76,22 @@ class BaseShape:
                 return n
         else:
             raise ValueError('Invalid number of shape points')
+
+    @classmethod
+    def linear_pts_idxs(cls, nspts, lpts=None):
+        pts = cls.std_ele(cls.order_from_npts(nspts))
+        lpts = cls.std_ele(1) if lpts is None else lpts
+        return np.argmin(np.linalg.norm(pts - lpts[:, None], axis=2), axis=1)
+
+    @classmethod
+    def corner_pts_idxs(cls, nspts):
+        return cls.linear_pts_idxs(nspts)
+
+    @classmethod
+    def face_corner_pts_idxs(cls, fidx, nspts):
+        kind, proj, _ = cls.faces[fidx]
+        fshape = subclass_where(BaseShape, name=kind)
+        return cls.linear_pts_idxs(nspts, proj_pts(proj, fshape.std_ele(1)))
 
     @clean
     def opmat(self, expr):
@@ -206,7 +223,7 @@ class BaseShape:
                 r = get_quadrule(kind, rule, npts)
 
             # Project
-            ppts.append(_proj_pts(proj, r.pts))
+            ppts.append(proj_pts(proj, r.pts))
 
         return np.vstack(ppts)
 
@@ -247,7 +264,7 @@ class BaseShape:
             L = self.facebases[kind].nodal_basis_at(qr.pts)
 
             # Do the quadrature
-            M = self.ubasis.ortho_basis_at(_proj_pts(proj, qr.pts))
+            M = self.ubasis.ortho_basis_at(proj_pts(proj, qr.pts))
             S = np.einsum('i...,ik,ji->kj', qr.wts, L, M)
 
             coeffs.append(S)
@@ -330,11 +347,23 @@ class TensorProdShape:
     @classmethod
     def std_ele(cls, sptord):
         pts1d = np.linspace(-1, 1, sptord + 1)
-        return np.array([p[::-1] for p in it.product(pts1d, repeat=cls.ndims)])
+        return np.array([p[::-1] for p in
+                         it.product(pts1d, repeat=cls.ndims)])
 
     @classmethod
-    def valid_spt(cls, spt, tol=1e-9):
-        return (np.abs(spt) < 1 + tol).all(axis=-1)
+    def valid_spt(cls, pt, tol=1e-9):
+        return (np.abs(pt) < 1 + tol).all(axis=-1)
+
+
+class LineShape(TensorProdShape, BaseShape):
+    name = 'line'
+    ndims = 1
+
+    # nspts = n
+    npts_coeffs = [1, 0]
+    npts_cdenom = 1
+
+    faces = []
 
 
 class QuadShape(TensorProdShape, BaseShape):
@@ -467,7 +496,7 @@ class TriShape(BaseShape):
 
     @classmethod
     def valid_spt(cls, spt, tol=1e-9):
-        x, y = np.moveaxis(spt, -1, 0)
+        x, y = spt[..., 0], spt[..., 1]
 
         return ((x + tol > -1) & (x - tol < -y) &
                 (y + tol > -1) & (y - tol < 1))
@@ -511,7 +540,7 @@ class TetShape(BaseShape):
 
     @classmethod
     def valid_spt(cls, spt, tol=1e-9):
-        x, y, z = np.moveaxis(spt, -1, 0)
+        x, y, z = spt[..., 0], spt[..., 1], spt[..., 2]
 
         return ((x + tol > -1) & (x - tol < -1 - y - z) &
                 (y + tol > -1) & (y - tol < -z) &
@@ -628,7 +657,7 @@ class PyrShape(BaseShape):
 
     @classmethod
     def valid_spt(cls, spt, tol=1e-9):
-        x, y, z = np.moveaxis(spt, -1, 0)
+        x, y, z = spt[..., 0], spt[..., 1], spt[..., 2]
         u = (1 - z) / 2
 
         return ((x + tol > -u) & (x - tol < u) &

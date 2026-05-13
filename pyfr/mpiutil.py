@@ -183,18 +183,38 @@ class DistributedDirectory(AlltoallMixin):
 
         # Send each key to its home rank
         home = home_rank(keys, comm.size)
-        sord = np.argsort(home)
-        scounts = np.bincount(home, minlength=comm.size)
+        self.sidx = np.argsort(home)
+        scount = np.bincount(home, minlength=comm.size)
+        sdisps = self._count_to_disp(scount)
+        self.scountdisps = (scount, sdisps)
 
-        recv, (rcounts, _) = self._alltoallcv(comm, keys[sord], scounts)
+        recv, self.rcountdisps = self._alltoallcv(comm, keys[self.sidx],
+                                                  scount, sdisps)
 
         # Reconstruct source ranks from receive counts
-        ranks = np.repeat(np.arange(comm.size, dtype=np.int32), rcounts)
+        rcount, _ = self.rcountdisps
+        ranks = np.repeat(np.arange(comm.size, dtype=np.int32), rcount)
 
-        # Store sorted for searchsorted in lookup
-        sord = np.argsort(recv, kind='stable')
-        self.keys = recv[sord]
-        self.ranks = ranks[sord]
+        # Sort received keys for searchsorted in lookup
+        self.ridx = np.argsort(recv, kind='stable')
+        self.keys = recv[self.ridx]
+        self.ranks = ranks[self.ridx]
+
+        self.ridx_inv = np.empty_like(self.ridx)
+        self.ridx_inv[self.ridx] = np.arange(len(self.ridx))
+
+    def scatter(self, values):
+        rv, _ = self._alltoallcv(self.comm, values[self.sidx],
+                                 *self.scountdisps)
+        return rv[self.ridx]
+
+    def gather(self, values):
+        rv, _ = self._alltoallcv(self.comm, values[self.ridx_inv],
+                                 *self.rcountdisps)
+
+        out = np.empty_like(rv)
+        out[self.sidx] = rv
+        return out
 
     def lookup(self, keys):
         comm = self.comm
@@ -204,15 +224,15 @@ class DistributedDirectory(AlltoallMixin):
         # Route query keys to their home ranks
         home = home_rank(keys, comm.size)
         sord = np.argsort(home)
-        scounts = np.bincount(home, minlength=comm.size)
+        scount = np.bincount(home, minlength=comm.size)
 
-        recv, (rcounts, _) = self._alltoallcv(comm, keys[sord], scounts)
+        recv, (rcount, _) = self._alltoallcv(comm, keys[sord], scount)
 
         # Look up owner ranks in the sorted table
         ans = self.ranks[np.searchsorted(self.keys, recv)]
 
-        # Send answers back; rcounts mirrors the forward counts
-        ret, _ = self._alltoallcv(comm, ans, rcounts)
+        # Send answers back; rcount mirrors the forward counts
+        ret, _ = self._alltoallcv(comm, ans, rcount)
 
         # Unshuffle from home-rank order back to caller order
         result = np.empty_like(keys)

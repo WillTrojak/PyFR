@@ -480,10 +480,10 @@ class GmshReader(BaseReader):
         mesh = NodalMeshAssembler(self._nodepts, elenodes, volpent,
                                   self._bfacespents, self._pfacespents, maps)
 
-        nodepts, eles, codec, pmap = mesh.get_eles(lintol, self.progress)
+        nodepts, eles, codec, periodic = mesh.get_eles(lintol, self.progress)
 
         # Append tag entries to the codec and assign per-element values
         codec.extend(f'tag/{tn}' for tn in sorted(self._volpents))
         self._assign_tags(eles, tagruns)
 
-        return nodepts, eles, codec, pmap
+        return nodepts, eles, codec, periodic
