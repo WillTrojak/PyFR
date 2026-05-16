@@ -24,7 +24,7 @@ def parse_region_expr(expr, rdata=None):
 
 
 class FaceSet:
-    def __init__(self, cidxmap, neles, interior_eles):
+    def __init__(self, cidxmap, neles, region_eles):
         self._cidxmap = cidxmap
         self._neles = {et: neles.get(et, 0) for et, _ in cidxmap.values()}
 
@@ -36,10 +36,10 @@ class FaceSet:
         self._off = np.cumsum(sizes) - sizes
         self._set = np.zeros(np.sum(sizes), dtype=bool)
 
-        # Mark all faces of interior elements as initially in the set
+        # Mark all faces of region elements as initially in the set
         for cidx, (etype, fidx) in cidxmap.items():
-            if etype in interior_eles:
-                eidxs = np.asarray(interior_eles[etype])
+            if etype in region_eles:
+                eidxs = np.asarray(region_eles[etype])
                 self._set[self._off[cidx] + eidxs] = True
 
     def _keys(self, cidx, eidx):
@@ -74,7 +74,15 @@ class FaceSet:
 
 
 class BaseRegion:
-    def interior_eles(self, mesh):
+    def region_eles(self, mesh):
+        eset = {}
+        for etype, spts in mesh.spts.items():
+            inside = self._mask(spts, np.mean(spts, axis=0))
+            eset[etype] = inside.nonzero()[0].tolist()
+
+        return {k: sorted(v) for k, v in eset.items()}
+
+    def _mask(self, spts, centroids):
         pass
 
     def surface_faces(self, mesh, exclbcs=[]):
@@ -82,7 +90,7 @@ class BaseRegion:
 
         # Build a face set assuming all interior faces are on the surface
         neles = {et: s.shape[1] for et, s in mesh.spts.items()}
-        fs = FaceSet(mesh.cidxmap, neles, self.interior_eles(mesh))
+        fs = FaceSet(mesh.cidxmap, neles, self.region_eles(mesh))
 
         # Eliminate any faces with internal connectivity
         fs.eliminate_paired(*mesh.con)
@@ -178,7 +186,7 @@ class TagRegion(BaseRegion):
     def __init__(self, tname):
         self.tname = tname
 
-    def interior_eles(self, mesh):
+    def region_eles(self, mesh):
         # Determine the bit mask for this tag
         tags = [c for c in mesh.codec if c.startswith('tag/')]
         tbit = np.uint64(1 << tags.index(f'tag/{self.tname}'))
@@ -191,7 +199,7 @@ class BoundaryRegion(BaseRegion):
     def __init__(self, bcname):
         self.bcname = bcname
 
-    def interior_eles(self, mesh):
+    def region_eles(self, mesh):
         comm, rank, root = get_comm_rank_root()
 
         eset = defaultdict(list)
@@ -235,25 +243,31 @@ class BaseGeometricRegion(BaseRegion):
                 c, s = np.cos(theta), np.sin(theta)
                 self.rot = np.array([[c, -s], [s, c]])
 
-    def interior_eles(self, mesh):
-        eset = {}
-
-        for etype, spts in mesh.spts.items():
-            inside = self.pts_in_region(np.mean(spts, axis=0))
-            inside[~inside] = self.pts_in_region(spts[:, ~inside]).any(axis=0)
-
-            eset[etype] = inside.nonzero()[0].tolist()
-
-        return {k: sorted(v) for k, v in eset.items()}
-
-    def pts_in_region(self, pts):
-        if self.rot is not None:
-            pts = np.einsum('ij,klj->kli', self.rot.T, pts)
-
-        return self._pts_in_region(pts)
+    def _rotate(self, pts):
+        return pts if self.rot is None else pts @ self.rot
 
 
-class BoxRegion(BaseGeometricRegion):
+class PointwiseGeometricRegion(BaseGeometricRegion):
+    def _mask(self, spts, centroids):
+        # Centroid fast-path; shape-points fallback for failing elements
+        c = self.test(self._rotate(centroids))
+        if not c.all():
+            c[~c] = self.test(self._rotate(spts[:, ~c])).any(axis=0)
+        return c
+
+    def test(self, pts):
+        pass
+
+
+class ElementwiseGeometricRegion(BaseGeometricRegion):
+    def _mask(self, spts, centroids):
+        return self.test(self._rotate(spts))
+
+    def test(self, spts):
+        pass
+
+
+class BoxRegion(PointwiseGeometricRegion):
     name = 'box'
 
     def __init__(self, x0, x1, **kwargs):
@@ -262,7 +276,7 @@ class BoxRegion(BaseGeometricRegion):
         self.x0 = x0
         self.x1 = x1
 
-    def _pts_in_region(self, pts):
+    def test(self, pts):
         pts = np.moveaxis(pts, -1, 0)
 
         inside = np.ones(pts.shape[1:], dtype=bool)
@@ -272,7 +286,7 @@ class BoxRegion(BaseGeometricRegion):
         return inside
 
 
-class ConicalFrustumRegion(BaseGeometricRegion):
+class ConicalFrustumRegion(PointwiseGeometricRegion):
     name = 'conical_frustum'
 
     def __init__(self, x0, x1, r0, r1, **kwargs):
@@ -287,7 +301,7 @@ class ConicalFrustumRegion(BaseGeometricRegion):
         self.h = (x1 - x0) / np.linalg.norm(x1 - x0)
         self.h_mag = np.linalg.norm(x1 - x0)
 
-    def _pts_in_region(self, pts):
+    def test(self, pts):
         r0, r1 = self.r0, self.r1
 
         # Project the points onto the centre line
@@ -317,7 +331,7 @@ class CylinderRegion(ConicalFrustumRegion):
         super().__init__(x0, x1, r, r, **kwargs)
 
 
-class EllipsoidRegion(BaseGeometricRegion):
+class EllipsoidRegion(PointwiseGeometricRegion):
     name = 'ellipsoid'
 
     def __init__(self, x0, a, b, c, **kwargs):
@@ -326,7 +340,7 @@ class EllipsoidRegion(BaseGeometricRegion):
         self.x0 = np.array(x0)
         self.abc = np.array([a, b, c])
 
-    def _pts_in_region(self, pts):
+    def test(self, pts):
         return np.sum(((pts - self.x0) / self.abc)**2, axis=-1) <= 1
 
 
@@ -337,7 +351,24 @@ class SphereRegion(EllipsoidRegion):
         super().__init__(x0, r, r, r, **kwargs)
 
 
-class STLRegion(BaseGeometricRegion):
+class PlaneRegion(ElementwiseGeometricRegion):
+    name = 'plane'
+
+    def __init__(self, x0, n, **kwargs):
+        super().__init__(**kwargs)
+
+        self.x0 = np.array(x0)
+        self.n = np.array(n, dtype=float)
+        self.n /= np.linalg.norm(self.n)
+
+    def test(self, spts):
+        # An element straddles the plane iff the signed distances of its
+        # shape points span both signs
+        dist = (spts - self.x0) @ self.n
+        return dist.min(axis=0) * dist.max(axis=0) <= 0
+
+
+class STLRegion(PointwiseGeometricRegion):
     name = 'stl'
 
     def __init__(self, name, rdata, **kwargs):
@@ -385,7 +416,7 @@ class STLRegion(BaseGeometricRegion):
         self.tri_idx = Index((np.arange(len(faces)), fmins, fmaxs),
                              properties=Property(dimension=3))
 
-    def _pts_in_region(self, pts):
+    def test(self, pts):
         inside = np.ones(pts.shape[:-1], dtype=bool)
         finside = inside.reshape(-1)
 
@@ -410,10 +441,8 @@ class STLRegion(BaseGeometricRegion):
         return inside
 
 
-class ConstructiveRegion(BaseGeometricRegion):
+class ConstructiveRegion(BaseRegion):
     def __init__(self, expr, rdata=None):
-        super().__init__()
-
         # Factor out the individual region expressions
         rexprs = []
         self.expr = re.sub(
@@ -450,7 +479,7 @@ class ConstructiveRegion(BaseGeometricRegion):
             # Construct the region
             regions.append(cls(*kargs, **kwargs))
 
-    def pts_in_region(self, pts):
+    def _combine(self, masks):
         # Helper to translate + and - to their boolean algebra equivalents
         class RegionVar:
             def __init__(self, r):
@@ -462,8 +491,10 @@ class ConstructiveRegion(BaseGeometricRegion):
             def __sub__(self, rhs):
                 return RegionVar(self.r & ~rhs.r)
 
-        # Query each of our constituent regions
-        rvars = {f'r{i}': RegionVar(r.pts_in_region(pts))
-                 for i, r in enumerate(self.regions)}
-
+        rvars = {k: RegionVar(m) for k, m in masks.items()}
         return eval(self.expr, {'__builtins__': None}, rvars).r
+
+    def _mask(self, spts, centroids):
+        masks = {f'r{i}': r._mask(spts, centroids)
+                 for i, r in enumerate(self.regions)}
+        return self._combine(masks)
