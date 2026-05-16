@@ -63,11 +63,11 @@ class HIPKernelNodeParams(Structure):
 class HIPMemsetParams(Structure):
     _fields_ = [
         ('dst', c_void_p),
+        ('element_size', c_uint),
+        ('height', c_size_t),
         ('pitch', c_size_t),
         ('value', c_uint),
-        ('element_size', c_uint),
-        ('width', c_size_t),
-        ('height', c_size_t)
+        ('width', c_size_t)
     ]
 
 
@@ -357,11 +357,11 @@ class HIPGraph(_HIPBase):
 
         params = HIPMemsetParams()
         params.dst = int(dst)
+        params.element_size = 1
+        params.height = 1
         params.pitch = 0
         params.value = val
-        params.element_size = 1
         params.width = nbytes
-        params.height = 1
 
         ptr = c_void_p()
         self.hip.lib.hipGraphAddMemsetNode(ptr, self, *self._make_deps(deps),
