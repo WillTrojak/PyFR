@@ -27,25 +27,20 @@ class SharedNodesFinder(AlltoallMixin):
         if self.comm.size == 1:
             return SharedNodes()
 
-        # Find boundary nodes (shared with other ranks)
+        # Locally-deficient corner nodes are touching at least one other rank
         bnodes = self._find_boundary_nodes()
 
-        # Rendezvous: send to home ranks, aggregate, scatter back
-        rresp = self._rendezvous_exchange(bnodes)
+        # Route each node to its home rank, where every owner meets
+        dd = DistributedDirectory(self.comm, bnodes)
 
-        # Parse responses into SharedNodes
+        # Home rank reports back the full sharer list for each node
+        rdata, rcounts = self._build_responses(dd.keys, dd.ranks)
+        rresp = self._alltoallcv(self.comm, rdata, rcounts)[0]
+
         return self._parse_responses(rresp)
 
     def _get_corner_indices(self, etype, nspts):
-        # Find corner node indices by matching against linear element coords
-        shapecls = subclass_where(BaseShape, name=etype)
-        order = shapecls.order_from_npts(nspts)
-
-        spts = shapecls.std_ele(order)
-        linspts = shapecls.std_ele(1)
-
-        return np.argmin(np.linalg.norm(spts - linspts[:, None], axis=2),
-                         axis=1)
+        return subclass_where(BaseShape, name=etype).corner_pts_idxs(nspts)
 
     def _find_boundary_nodes(self):
         # Collect corner nodes from all elements
@@ -62,28 +57,9 @@ class SharedNodesFinder(AlltoallMixin):
         mval = self.node_valency[np.searchsorted(self.node_idxs, lnodes)]
         return lnodes[lcounts < mval]
 
-    def _rendezvous_exchange(self, bnodes):
-        comm = self.comm
-
-        # Send nodes to their home ranks via distributed directory
-        dd = DistributedDirectory(comm, bnodes)
-
-        # Aggregate and build response buffers
-        if dd.keys.size == 0:
-            rdata = np.empty(0, dtype=int)
-            rcounts = np.zeros(comm.size, dtype=np.int32)
-        else:
-            rdata, rcounts = self._build_responses(dd.keys, dd.ranks)
-
-        return self._alltoallcv(comm, rdata, rcounts)[0]
-
-    def _build_responses(self, rnodes, rranks):
-        order = np.argsort(rnodes, kind='stable')
-        rnodes, rranks = rnodes[order], rranks[order]
-
-        # Find group boundaries where node changes
-        unodes, gstarts = np.unique(rnodes, return_index=True)
-        gsizes = np.diff(gstarts, append=rnodes.size)
+    def _build_responses(self, rkeys, rranks):
+        unodes, gstarts = np.unique(rkeys, return_index=True)
+        gsizes = np.diff(gstarts, append=rkeys.size)
 
         # Pack messages as [node, n_sharers, rank_0, rank_1, ...]
         plens = 2 + gsizes

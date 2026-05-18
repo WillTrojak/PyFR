@@ -112,8 +112,8 @@ class DisjointSet:
         return {i: r for i in self._parent if (r := self.find(i)) != i}
 
 
-def first(v):
-    return next(iter(v))
+def first(v, *args):
+    return next(iter(v), *args)
 
 
 def subclasses(cls, just_leaf=False):

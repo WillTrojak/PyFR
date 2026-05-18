@@ -33,6 +33,16 @@ def range_offsets(items, item_len=len):
     return offsets, off
 
 
+def fromarrays(**fields):
+    arrs = [np.asarray(v) for v in fields.values()]
+    dtype = np.dtype([(n, a.dtype, a.shape[1:]) for n, a in zip(fields, arrs)])
+    out = np.empty(len(arrs[0]), dtype=dtype)
+    for n, a in zip(fields, arrs):
+        out[n] = a
+
+    return out
+
+
 def clean(origfn=None, tol=1e-10, ckwarg='clean'):
     def cleanfn(fn):
         @ft.wraps(fn)
@@ -49,11 +59,11 @@ def clean(origfn=None, tol=1e-10, ckwarg='clean'):
             if arr.size > 1:
                 amfl = np.abs(arr.flat)
                 amix = np.argsort(amfl)
+                atol = 0.1*tol
 
                 i, ix = 0, amix[0]
                 for j, jx in enumerate(amix[1:], start=1):
-                    if not np.isclose(amfl[jx], amfl[ix], rtol=tol,
-                                      atol=0.1*tol):
+                    if abs(amfl[jx] - amfl[ix]) > atol + tol*amfl[ix]:
                         if j - i > 1:
                             amfl[amix[i:j]] = np.median(amfl[amix[i:j]])
                         i, ix = j, jx
@@ -128,6 +138,11 @@ def npeval(expr, locals):
         raise ValueError('Invalid expression')
 
     return eval(expr, _npeval_syms, locals)
+
+
+def search_unsorted(a, v):
+    idx = np.argsort(a)
+    return idx[np.searchsorted(a, v, sorter=idx)]
 
 
 def fuzzysort(arr, idx, dim=0, tol=1e-6):

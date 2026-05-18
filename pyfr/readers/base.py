@@ -55,7 +55,7 @@ class BaseReader:
         nnodes['location'] = nodes
 
         # Tally up the valencies
-        for etype, ele in eles.items():
+        for ele in eles.values():
             k, v = np.unique(ele['nodes'], return_counts=True)
             nnodes['valency'][k] += v.astype(np.uint16)
 
@@ -65,11 +65,11 @@ class BaseReader:
         pass
 
     def write(self, fname, lintol):
-        nodes, eles, codec, pmap = mesh = self._to_raw_mesh(lintol)
+        nodes, eles, codec, periodic = self._to_raw_mesh(lintol)
 
         # Compute the UUID
         with self.progress.start('Computing UUID'):
-            uuid = UUID(digest(mesh)[:32])
+            uuid = UUID(digest((nodes, eles, codec, periodic))[:32])
 
         # Write out the file
         with self.progress.start('Writing mesh'):
@@ -96,8 +96,10 @@ class BaseReader:
                     f[f'eles/{etype}'].attrs['pts'] = shape.std_ele(order)
 
                 # Write out the periodic boundary information
-                for pname, pidx in pmap.items():
+                for pname, (pidx, R, T) in periodic.items():
                     f[f'periodic/{pname}'] = pidx
+                    f[f'periodic/{pname}'].attrs['R'] = R
+                    f[f'periodic/{pname}'].attrs['T'] = T
 
                 # Write out the partitioning
                 f['partitionings/1/eles'] = parts
@@ -260,8 +262,22 @@ class NodalMeshAssembler:
 
         return resid, cconn
 
+    @staticmethod
+    def _pair_translational(lpts, rpts):
+        lfidx = fuzzysort(lpts.T, range(len(lpts)))
+        rfidx = fuzzysort(rpts.T, range(len(rpts)))
+
+        dT = rpts[rfidx] - lpts[lfidx]
+        T = dT.mean(axis=0)
+        if not np.allclose(dT, T):
+            raise ValueError('Periodic pairing is not a rigid translation')
+
+        # Pure translation: rotation/reflection block is the identity
+        R = np.eye(lpts.shape[1])
+        return lfidx, rfidx, R, T
+
     def _pair_periodic_volume_faces(self, bpart, cconn, resid):
-        pmap = {}
+        periodic = {}
         pdtype = [('cidx', np.int16), ('off', np.int64)]
 
         for k, (lpent, rpent) in self._pfacespents.items():
@@ -274,8 +290,9 @@ class NodalMeshAssembler:
                 lfpts = self._nodepts[lfnodes]
                 rfpts = self._nodepts[rfnodes]
 
-                lfidx = fuzzysort(lfpts.mean(axis=1).T, range(len(lfnodes)))
-                rfidx = fuzzysort(rfpts.mean(axis=1).T, range(len(rfnodes)))
+                lfidx, rfidx, R, T = self._pair_translational(
+                    lfpts.mean(axis=1), rfpts.mean(axis=1)
+                )
 
                 for lfn, rfn in zip(lfnodes[lfidx], rfnodes[rfidx]):
                     lf = lcidx, loff = resid.pop(tuple(sorted(lfn)))
@@ -286,9 +303,9 @@ class NodalMeshAssembler:
 
                     plist.append([lf, rf])
 
-            pmap[k] = np.array(plist, dtype=pdtype)
+            periodic[k] = (np.array(plist, dtype=pdtype), R, T)
 
-        return pmap
+        return periodic
 
     def _ident_boundary_faces(self, bpart, cconn, codec, resid):
         # Create a map from boundary entities to names
@@ -397,7 +414,7 @@ class NodalMeshAssembler:
 
         # Add in connectivity information
         with progress.start_with_spinner('Connecting elements') as spinner:
-            pmap = self._connect_eles(eles, codec, spinner)
+            periodic = self._connect_eles(eles, codec, spinner)
 
         # Compute element colouring
         with progress.start_with_spinner('Colouring elements') as spinner:
@@ -407,7 +424,7 @@ class NodalMeshAssembler:
         with progress.start_with_spinner('Linearising elements') as spinner:
             nodepts = self._linearise_eles(eles, lintol, spinner)
 
-        return nodepts, eles, codec, pmap
+        return nodepts, eles, codec, periodic
 
     def _connect_eles(self, eles, codec, spinner):
         # For connectivity a first-order representation is sufficient
@@ -427,7 +444,7 @@ class NodalMeshAssembler:
         spinner()
 
         # Tag and pair periodic boundary faces
-        pmap = self._pair_periodic_volume_faces(bpart, cconn, resid)
+        periodic = self._pair_periodic_volume_faces(bpart, cconn, resid)
         spinner()
 
         # Identify the fixed boundary faces
@@ -437,7 +454,7 @@ class NodalMeshAssembler:
         if any(resid.values()):
             raise ValueError('Unpaired faces in mesh')
 
-        return pmap
+        return periodic
 
     def _linearise_eles(self, emap, lintol, spinner):
         # Create a copy of the node points

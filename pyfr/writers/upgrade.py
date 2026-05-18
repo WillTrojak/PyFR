@@ -6,11 +6,29 @@ import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.readers.base import NodalMeshAssembler
+from pyfr.shapes import BaseShape
+from pyfr.util import subclass_where
 
 
 def _copy_attrs(src_dset, dst_dset):
     for k, v in src_dset.attrs.items():
         dst_dset.attrs[k] = v
+
+
+def _face_centroid(f, codec, cidx, off):
+    # Obtain the element type and face number
+    _, etype, fnum = codec[cidx].split('/')
+
+    # Query the normal vector for the face
+    shape = subclass_where(BaseShape, name=etype)
+    _, _, n = shape.faces[int(fnum)]
+
+    # With this determine which nodes are on the face
+    enodes = f[f'eles/{etype}'][off]['nodes']
+    spts = shape.std_ele(shape.order_from_npts(len(enodes)))
+    fidxs = np.flatnonzero(np.isclose(d := np.asarray(spts) @ n, d.max()))
+
+    return f['nodes'][np.sort(enodes[fidxs])]['location'].mean(axis=0)
 
 
 def _upgrade_mesh_v1_to_v2(src, dst):
@@ -25,9 +43,9 @@ def _upgrade_mesh_v1_to_v2(src, dst):
             ncodec.append(c)
     ncodec.append('tag/volume')
 
-    # Copy everything except eles, version, and codec
+    # Copy everything except eles, version, codec, and periodic
     for k in src:
-        if k not in ('eles', 'version', 'codec'):
+        if k not in ('eles', 'version', 'codec', 'periodic'):
             src.copy(k, dst)
 
     dst['version'] = 2
@@ -50,6 +68,20 @@ def _upgrade_mesh_v1_to_v2(src, dst):
     for etype, edata in eles.items():
         g[etype] = edata
         _copy_attrs(src[f'eles/{etype}'], g[etype])
+
+    # Compute the translation vector for each periodic group
+    if 'periodic' in src:
+        ndims = src['nodes'].dtype['location'].shape[0]
+
+        for pname, pdset in src['periodic'].items():
+            pcon = pdset[:]
+            lf, rf = pcon[0]
+            T = (_face_centroid(src, codec, *rf)
+                 - _face_centroid(src, codec, *lf))
+
+            dst[f'periodic/{pname}'] = pcon
+            dst[f'periodic/{pname}'].attrs['R'] = np.eye(ndims)
+            dst[f'periodic/{pname}'].attrs['T'] = T
 
 
 def _soln_field_groups(stats):
