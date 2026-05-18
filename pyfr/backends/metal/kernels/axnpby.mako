@@ -5,9 +5,12 @@ kernel void
 axnpby(constant ixdtype_t& ncolb, constant ixdtype_t& ldim,
        device fpdtype_t* x0,
        ${', '.join(f'device const fpdtype_t* x{i}' for i in range(1, nv)) + ',' if nv > 1 else ''}
-       ${', '.join(f'constant fpdtype_t& a{i}' for i in range(nv))},
+       constant fpdtype_t* _a,
        uint2 ji [[thread_position_in_grid]])
 {
+% for i in range(nv):
+    fpdtype_t a${i} = _a[${i}];
+% endfor
 % if in_scale:
     const fpdtype_t _in[] = ${pyfr.carray(in_scale)};
 % endif

@@ -1,4 +1,4 @@
-from ctypes import sizeof
+from ctypes import Array, sizeof
 
 import numpy as np
 
@@ -70,7 +70,10 @@ class MetalKernelProvider(BaseKernelProvider):
                 cce.setBuffer_offset_atIndex_(*args[i], i)
 
             for i, val, sz in sargs:
-                val.value = args[i]
+                if isinstance(val, Array):
+                    val[:] = args[i]
+                else:
+                    val.value = args[i]
                 cce.setBytes_length_atIndex_(val, sz, i)
 
             cce.dispatchThreads_threadsPerThreadgroup_(MTLSizeMake(*grid),

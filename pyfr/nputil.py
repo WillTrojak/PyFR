@@ -2,7 +2,7 @@ import contextlib
 import ctypes as ct
 import functools as ft
 import itertools as it
-from math import erf
+from math import erf, prod
 from pathlib import Path
 import re
 import sys
@@ -237,7 +237,12 @@ def npdtype_to_ctypestype(dtype):
     if dtype is None:
         return None
 
-    return _ctypestype_map[np.dtype(dtype).type]
+    dt = np.dtype(dtype)
+    ctype = _ctypestype_map[dt.base.type]
+    if dt.shape:
+        ctype = ctype*prod(dt.shape)
+
+    return ctype
 
 
 class BLASThreadCtrl:
