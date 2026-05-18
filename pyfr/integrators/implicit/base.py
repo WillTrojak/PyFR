@@ -1,3 +1,5 @@
+import numpy as np
+
 from pyfr.integrators.base import (BaseIntegrator, _common_plugin_prop,
                                    kernel_getter)
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
@@ -54,10 +56,10 @@ class BaseImplicitIntegrator(BaseIntegrator):
 
     @_common_plugin_prop('_curr_dt_soln')
     def dt_soln(self):
-        soln = self.soln
+        soln = [np.require(s, requirements='O') for s in self.soln]
 
         self.system.rhs(self.tcurr, self.idxcurr, self.idxcurr)
-        dt_soln = self.system.ele_scal_upts(self.idxcurr)
+        dt_soln = [np.require(s, requirements='O') for s in self.soln]
 
         # Reset current register with original contents
         for e, s in zip(self.system.ele_banks, soln):
