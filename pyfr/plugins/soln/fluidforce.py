@@ -220,3 +220,6 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
                 pvals.update(zip(vn, fm[-1]))
 
             self._publish(intg, **pvals)
+
+    def trigger_write(self, intg):
+        self(intg)

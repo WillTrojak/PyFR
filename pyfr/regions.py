@@ -78,7 +78,8 @@ class BaseRegion:
         eset = {}
         for etype, spts in mesh.spts.items():
             inside = self._mask(spts, np.mean(spts, axis=0))
-            eset[etype] = inside.nonzero()[0].tolist()
+            if len(eidxs := np.flatnonzero(inside)):
+                eset[etype] = eidxs.tolist()
 
         return {k: sorted(v) for k, v in eset.items()}
 
@@ -191,8 +192,8 @@ class TagRegion(BaseRegion):
         tags = [c for c in mesh.codec if c.startswith('tag/')]
         tbit = np.uint64(1 << tags.index(f'tag/{self.tname}'))
 
-        return {et: np.flatnonzero(t & tbit).tolist()
-                for et, t in mesh.tags.items()}
+        return {et: eidxs.tolist() for et, t in mesh.tags.items()
+                if len(eidxs := np.flatnonzero(t & tbit))}
 
 
 class BoundaryRegion(BaseRegion):
