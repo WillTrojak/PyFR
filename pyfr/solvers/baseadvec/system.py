@@ -55,6 +55,10 @@ class BaseAdvectionSystem(BaseSystem):
 
         super().commit()
 
+        # Populate the per-element wavespeed
+        if self._needs_cfl:
+            self.compute_max_wavespeed(0)
+
     @memoize
     def _rhs_graphs(self, uinbank, foutbank):
         m = self._mpireqs
