@@ -73,6 +73,9 @@ class BaseVTKWriter(BaseWriter):
         # Classify aux fields by shape
         pshapes = self._extra_point_shapes(self._extra_etype)
         for dt in self.soln.dtypes.values():
+            if 'aux' not in dt.names:
+                continue
+
             for name in dt['aux'].names:
                 adtype = dt['aux'][name].base
                 shape = dt['aux'][name].shape

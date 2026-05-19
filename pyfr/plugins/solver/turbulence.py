@@ -292,9 +292,9 @@ class TurbulencePlugin(BaseSolverPlugin):
         )
 
         # Wire up tinit and state as broadcast-column externals
-        eles._set_external('tinit', f'in broadcast-col fpdtype_t[{nvmax}]',
-                           value=vdata.tinit)
-        eles._set_external('state', f'in broadcast-col uint32_t[{nvmax}]',
-                           value=vdata.state)
+        eles.set_external('tinit', f'in broadcast-col fpdtype_t[{nvmax}]',
+                          value=vdata.tinit)
+        eles.set_external('state', f'in broadcast-col uint32_t[{nvmax}]',
+                          value=vdata.state)
 
         return vdata
