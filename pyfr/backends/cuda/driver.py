@@ -589,10 +589,13 @@ class CUDA:
     def mem_alloc(self, nbytes, stream=None):
         return CUDADevAlloc(self, nbytes, stream)
 
+    def pagelocked(self, nbytes):
+        return CUDAHostAlloc(self, nbytes)
+
     def pagelocked_empty(self, shape, dtype):
         nbytes = np.prod(shape)*np.dtype(dtype).itemsize
 
-        alloc = CUDAHostAlloc(self, nbytes)
+        alloc = self.pagelocked(nbytes)
         alloc.__array_interface__ = {
             'version': 3,
             'typestr': np.dtype(dtype).str,
@@ -632,38 +635,29 @@ class CUDA:
     def create_graph(self):
         return CUDAGraph(self)
 
-    def set_tensormap(self, tm_addr, a, tile, interleave=None, swizzle=None,
-                      l2_promotion=None, oob_fill=None):
-        lib = self.lib
+    def set_tensormap(self, tm, a, dims, ld, tile, tile_stride=None,
+                      interleave=None, swizzle=None, l2_promotion=None,
+                      oob_fill=None):
         a_ptr = a.data
 
-        dtype = 0
         if a.dtype == np.float64:
-            dtype = lib.TENSOR_MAP_DATA_TYPE_FLOAT64
+            dtype = self.lib.TENSOR_MAP_DATA_TYPE_FLOAT64
         elif a.dtype == np.float32:
-            dtype = lib.TENSOR_MAP_DATA_TYPE_FLOAT32
+            dtype = self.lib.TENSOR_MAP_DATA_TYPE_FLOAT32
         else:
-            raise AttributeError(f"Type {a.dtype} tensor map not supported")
+            raise ValueError(f"Type {a.dtype} tensor map not supported")
 
-        ndims = 2
-        dims = (c_ulonglong * ndims)(*(a.ncol, a.nrow))
-        ld = c_ulonglong(a.leaddim * a.itemsize)
-        tile_dim = (c_uint * ndims)(*tile)
-        tile_stride = (c_uint * ndims)(*([1] * ndims))
+        ndims = len(dims)
+        dims = (c_ulonglong*ndims)(*dims)
+        ld = (c_ulonglong*(ndims - 1))(*ld)
+        tile = (c_uint * ndims)(*tile)
+        tile_stride = (c_uint * ndims)(*(tile_stride or [1]*ndims))
 
-        interleave = interleave or lib.TENSOR_MAP_INTERLEAVE_NONE
-        swizzle = swizzle or lib.TENSOR_MAP_SWIZZLE_NONE
-        l2_promotion = l2_promotion or lib.TENSOR_MAP_L2_PROMOTION_NONE
-        oob_fill = oob_fill or lib.TENSOR_MAP_FLOAT_OOB_FILL_NONE
+        interleave = interleave or self.lib.TENSOR_MAP_INTERLEAVE_NONE
+        swizzle = swizzle or self.lib.TENSOR_MAP_SWIZZLE_NONE
+        l2_promotion = l2_promotion or self.lib.TENSOR_MAP_L2_PROMOTION_NONE
+        oob_fill = oob_fill or self.lib.TENSOR_MAP_FLOAT_OOB_FILL_NONE
 
-        align = 64
-        raw = create_string_buffer(128 + align)
-        aligned = (addressof(raw) + align - 1) & ~(align - 1)
-        host_tm = (c_char * 128).from_address(aligned)
-
-        lib.cuTensorMapEncodeTiled(host_tm, dtype, ndims, a_ptr, dims, ld,
-                                   tile_dim, tile_stride, interleave, swizzle,
-                                   l2_promotion, oob_fill)
-
-        dst = tm_addr.value if hasattr(tm_addr, 'value') else int(tm_addr)
-        lib.cuMemcpy(dst, addressof(host_tm), 128)
+        self.lib.cuTensorMapEncodeTiled(tm, dtype, ndims, a_ptr, dims, ld,
+                                        tile, tile_stride, interleave,
+                                        swizzle, l2_promotion, oob_fill)
