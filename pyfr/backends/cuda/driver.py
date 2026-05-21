@@ -204,10 +204,6 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
         (c_int, 'cuModuleGetGlobal_v2', POINTER(c_void_p), POINTER(c_size_t),
          c_void_p, c_char_p),
-        (c_int, 'cuTensorMapEncodeTiled',
-         c_void_p, c_int, c_uint, c_void_p, POINTER(c_ulonglong),
-         POINTER(c_ulonglong), POINTER(c_uint), POINTER(c_uint), c_int, c_int,
-         c_int, c_int),
         (c_int, 'cuLaunchKernel', c_void_p, c_uint, c_uint, c_uint, c_uint,
          c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p),
         (c_int, 'cuFuncGetAttribute', POINTER(c_int), c_int, c_void_p),
@@ -234,6 +230,13 @@ class CUDAWrappers(LibWrapper):
          POINTER(CUDAKernelNodeParams)),
         (c_int, 'cuGraphExecDestroy', c_void_p),
         (c_int, 'cuGraphLaunch', c_void_p, c_void_p)
+    ]
+
+    _weak_functions = [
+        (c_int, 'cuTensorMapEncodeTiled',
+         c_void_p, c_int, c_uint, c_void_p, POINTER(c_ulonglong),
+         POINTER(c_ulonglong), POINTER(c_uint), POINTER(c_uint), c_int, c_int,
+         c_int, c_int)
     ]
 
     def _transname(self, name):
