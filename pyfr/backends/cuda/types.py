@@ -19,7 +19,7 @@ class _CUDAMatrixCommon:
         tile_stride = (1, 1)
         args = (dims, ld, tile, tile_stride, interleave, swizzle, l2_promotion,
                 oob_fill)
-        tm = self.backend.cuda.pagelocked(128)
+        tm = self.backend.cuda.pagelocked_empty((128,), np.uint8)
         self.backend.cuda.set_tensormap(tm, self, *args)
         return tm
 

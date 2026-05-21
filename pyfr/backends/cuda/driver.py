@@ -58,7 +58,17 @@ class CUDAKernelNodeParams(Structure):
         self.kernel_params = self._arg_ptrs
 
     def set_arg(self, i, v):
-        self._args[i].value = getattr(v, '_as_parameter_', v)
+        # Handle implicit tensormap inputs
+        if isinstance(v, tuple):
+            a, tile, *other = v
+            if tile is not None:
+                kwargs = other[0] if other else {}
+                tm = a.tensormap(tile, **kwargs)
+                self._args[i].value = tm.ctypes.data
+            else:
+                self._args[i].value = getattr(a, '_as_parameter_', a)
+        else:
+            self._args[i].value = getattr(v, '_as_parameter_', v)
 
     def set_args(self, *kargs, start=0):
         for i, v in enumerate(kargs, start=start):
@@ -130,9 +140,7 @@ class CUDAWrappers(LibWrapper):
         '*': CUDAError
     }
 
-    # Constants
-    COMPUTE_CAPABILITY_MAJOR = 75
-    COMPUTE_CAPABILITY_MINOR = 76
+    # Driver Enums
     EVENT_DEFAULT = 0
     EVENT_DISABLE_TIMING = 2
     FUNC_ATTR_SHARED_SIZE_BYTES = 1
@@ -143,19 +151,19 @@ class CUDAWrappers(LibWrapper):
     MEMORYTYPE_UNIFIED = 4
     MULTIPROCESSOR_COUNT = 16
 
+    # Driver Attribute Enums
+    MAX_SHARED_MEMORY_PER_BLOCK = 8
+    COMPUTE_CAPABILITY_MAJOR = 75
+    COMPUTE_CAPABILITY_MINOR = 76
+    MAX_SHARED_MEMORY_PER_BLOCK_OPTIN = 97
+
+    # Tensor Map Enums
     TENSOR_MAP_DATA_TYPE_FLOAT32 = 7
     TENSOR_MAP_DATA_TYPE_FLOAT64 = 8
     TENSOR_MAP_INTERLEAVE_NONE = 0
     TENSOR_MAP_SWIZZLE_NONE = 0
-    TENSOR_MAP_SWIZZLE_32B = 1
-    TENSOR_MAP_SWIZZLE_64B = 2
-    TENSOR_MAP_SWIZZLE_128B = 3
     TENSOR_MAP_L2_PROMOTION_NONE = 0
-    TENSOR_MAP_L2_PROMOTION_64B = 1
-    TENSOR_MAP_L2_PROMOTION_128B = 2
-    TENSOR_MAP_L2_PROMOTION_256B = 3
     TENSOR_MAP_FLOAT_OOB_FILL_NONE = 0
-    TENSOR_MAP_FLOAT_OOB_FILL_NAN = 1
 
     # Functions
     _functions = [
@@ -351,12 +359,6 @@ class CUDAModule(_CUDABase):
 
     def get_function(self, name, argspec):
         return CUDAFunction(self.cuda, self, name, argspec)
-
-    def get_global(self, name):
-        ptr = c_void_p()
-        nbytes = c_size_t()
-        self.cuda.lib.cuModuleGetGlobal(ptr, nbytes, self, name.encode())
-        return ptr, nbytes
 
 
 class CUDAFunction(_CUDABase):
@@ -581,6 +583,16 @@ class CUDA:
                                       self.dev)
         return count.value
 
+    def smem_info(self):
+        dev, lib = self.dev, self.lib
+
+        max_static, max_dynamic = c_int(), c_int()
+        lib.cuDeviceGetAttribute(max_static, lib.MAX_SHARED_MEMORY_PER_BLOCK,
+                                 dev)
+        lib.cuDeviceGetAttribute(max_dynamic,
+                                 lib.MAX_SHARED_MEMORY_PER_BLOCK_OPTIN, dev)
+        return max_static.value, max_dynamic.value
+
     def mem_info(self):
         free, total = c_size_t(), c_size_t()
         self.lib.cuMemGetInfo(free, total)
@@ -589,13 +601,10 @@ class CUDA:
     def mem_alloc(self, nbytes, stream=None):
         return CUDADevAlloc(self, nbytes, stream)
 
-    def pagelocked(self, nbytes):
-        return CUDAHostAlloc(self, nbytes)
-
     def pagelocked_empty(self, shape, dtype):
         nbytes = np.prod(shape)*np.dtype(dtype).itemsize
 
-        alloc = self.pagelocked(nbytes)
+        alloc = CUDAHostAlloc(self, nbytes)
         alloc.__array_interface__ = {
             'version': 3,
             'typestr': np.dtype(dtype).str,
@@ -639,13 +648,14 @@ class CUDA:
                       interleave=None, swizzle=None, l2_promotion=None,
                       oob_fill=None):
         a_ptr = a.data
+        tm_ptr = tm.ctypes.data
 
         if a.dtype == np.float64:
             dtype = self.lib.TENSOR_MAP_DATA_TYPE_FLOAT64
         elif a.dtype == np.float32:
             dtype = self.lib.TENSOR_MAP_DATA_TYPE_FLOAT32
         else:
-            raise ValueError(f"Type {a.dtype} tensor map not supported")
+            raise ValueError(f'Type {a.dtype} tensor map not supported')
 
         ndims = len(dims)
         dims = (c_ulonglong*ndims)(*dims)
@@ -658,6 +668,6 @@ class CUDA:
         l2_promotion = l2_promotion or self.lib.TENSOR_MAP_L2_PROMOTION_NONE
         oob_fill = oob_fill or self.lib.TENSOR_MAP_FLOAT_OOB_FILL_NONE
 
-        self.lib.cuTensorMapEncodeTiled(tm, dtype, ndims, a_ptr, dims, ld,
-                                        tile, tile_stride, interleave,
-                                        swizzle, l2_promotion, oob_fill)
+        self.lib.cuTensorMapEncodeTiled(tm_ptr, dtype, ndims, a, dims, ld, tile,
+                                        tile_stride, interleave, swizzle,
+                                        l2_promotion, oob_fill)
