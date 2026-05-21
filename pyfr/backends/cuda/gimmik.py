@@ -94,8 +94,6 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         params = kern.make_params(grid, block, dshared)
 
         # Set the input args using tensormaps if needed
-        #params.set_args((b, tm['b_tile'], {'l2_promotion': 1}), (out,
-        #        tm['out_tile'], {'l2_promotion': 1}))
         params.set_args((b, tm['b_tile']), (out, tm['out_tile']))
 
         class MulKernel(CUDAKernel):
@@ -135,8 +133,6 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                 # Setup input args using tensor maps if required
                 tm = {'b_tile': meta.get('ws_b_tile'),
                       'out_tile': meta.get('ws_out_tile')}
-                #params.set_args((b, tm['b_tile'], {'l2_promotion': 1}), (out,
-                #tm['out_tile'], {'l2_promotion': 1}))
                 params.set_args((b, tm['b_tile']), (out, tm['out_tile']))
 
                 # Obtain the runtime
