@@ -58,17 +58,7 @@ class CUDAKernelNodeParams(Structure):
         self.kernel_params = self._arg_ptrs
 
     def set_arg(self, i, v):
-        # Handle implicit tensormap inputs
-        if isinstance(v, tuple):
-            a, tile, *other = v
-            if tile is not None:
-                kwargs = other[0] if other else {}
-                tm = a.tensormap(tile, **kwargs)
-                self._args[i].value = tm.ctypes.data
-            else:
-                self._args[i].value = getattr(a, '_as_parameter_', a)
-        else:
-            self._args[i].value = getattr(v, '_as_parameter_', v)
+        self._args[i].value = getattr(v, '_as_parameter_', v)
 
     def set_args(self, *kargs, start=0):
         for i, v in enumerate(kargs, start=start):

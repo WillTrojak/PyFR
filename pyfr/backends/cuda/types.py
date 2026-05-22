@@ -16,11 +16,10 @@ class _CUDAMatrixCommon:
                   l2_promotion=None, oob_fill=None):
         dims = (self.ncol, self.nrow)
         ld = (self.leaddim * self.itemsize,)
-        tile_stride = (1, 1)
-        args = (dims, ld, tile, tile_stride, interleave, swizzle, l2_promotion,
-                oob_fill)
         tm = self.backend.cuda.pagelocked_empty((128,), np.uint8)
-        self.backend.cuda.set_tensormap(tm, self, *args)
+        self.backend.cuda.set_tensormap(tm, self, dims, ld, tile, (1, 1),
+                                        interleave, swizzle, l2_promotion,
+                                        oob_fill)
         return tm
 
 

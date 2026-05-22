@@ -12,7 +12,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         super().__init__(backend)
 
         # Maximum number of kernels to consider
-        self.nkerns = backend.cfg.getint('backend-cuda', 'gimmik-nkerns', 8)
+        self.nkerns = backend.cfg.getint('backend-cuda', 'gimmik-nkerns', 10)
 
         # Number of benchmarking runs
         self.nbench = backend.cfg.getint('backend-cuda', 'gimmik-nbench', 5)
@@ -94,7 +94,10 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         params = kern.make_params(grid, block, dshared)
 
         # Set the input args using tensormaps if needed
-        params.set_args((b, tm['b_tile']), (out, tm['out_tile']))
+        b_args = CUDAGiMMiKKernels._arg_pointer(b, tm.get('b_tile'))
+        out_args = CUDAGiMMiKKernels._arg_pointer(out,
+                                                  tm.get('out_tile'))
+        params.set_args(b_args, out_args)
 
         class MulKernel(CUDAKernel):
             def add_to_graph(self, graph, deps):
@@ -131,9 +134,14 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                                           sharedb)
 
                 # Setup input args using tensor maps if required
-                tm = {'b_tile': meta.get('ws_b_tile'),
-                      'out_tile': meta.get('ws_out_tile')}
-                params.set_args((b, tm['b_tile']), (out, tm['out_tile']))
+                tm = {
+                    'b_tile': meta.get('ws_b_tile'),
+                    'out_tile': meta.get('ws_out_tile')
+                }
+                b_args = CUDAGiMMiKKernels._arg_pointer(b, tm.get('b_tile'))
+                out_args = CUDAGiMMiKKernels._arg_pointer(out,
+                                                          tm.get('out_tile'))
+                params.set_args(b_args, out_args)
 
                 # Obtain the runtime
                 dt = self._benchmark(
@@ -153,7 +161,16 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                 }
         except StopIteration:
             pass
+
         return best_kern
+
+    @staticmethod
+    def _arg_pointer(a, tile=None, **kwargs):
+        if tile is not None:
+            tm = a.tensormap(tile, **kwargs)
+            return tm.ctypes.data
+        else:
+            return a
 
     @staticmethod
     def _trim_f64_low32(x):
