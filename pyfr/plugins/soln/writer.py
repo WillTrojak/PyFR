@@ -49,7 +49,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         self._writer = NativeWriter.from_integrator(intg, basedir, basename,
                                                     'soln')
         self._writer.set_shapes_eidxs(ershapes, erdata, field_groups,
-                                      self._aux_fields, ndims=self.ndims)
+                                      self._aux_fields)
 
         # Asynchronous output options
         self._async_timeout = self.cfg.getfloat(cfgsect, 'async-timeout', 60)

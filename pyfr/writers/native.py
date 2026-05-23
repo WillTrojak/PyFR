@@ -34,6 +34,7 @@ class NativeWriter:
         comm, rank, root = get_comm_rank_root()
 
         self.cfg = cfg
+        self.ndims = mesh.ndims
         self.prefix = prefix
         self.fpdtype = fpdtype
 
@@ -61,8 +62,12 @@ class NativeWriter:
         self.fstype = self._get_fstype(basedir)
 
         # Determine if to perform serial or parallel writes
-        if self.fstype == 'lustre':
+        if (self.fstype == 'lustre' and
+            'PYFR_FORCE_SERIAL_IO' not in os.environ):
             self._get_writefn = self._get_writefn_parallel
+
+            # Stripe auto-configuration
+            self._auto_stripe = 'PYFR_DISABLE_LUSTRE_STRIPE' not in os.environ
         else:
             self._get_writefn = self._get_writefn_serial
 
@@ -96,9 +101,9 @@ class NativeWriter:
         return None
 
     def _create_file(self, path):
-        comm, rank, root = get_comm_rank_root()
+        _, rank, root = get_comm_rank_root()
 
-        if self.fstype == 'lustre' and rank == root:
+        if self.fstype == 'lustre' and self._auto_stripe and rank == root:
             # Lustre pool name
             pool = None
 
@@ -135,13 +140,12 @@ class NativeWriter:
             except OSError:
                 pass
 
-    def set_shapes_eidxs(self, shapes, eidxs, field_groups,
-                         aux_fields=None, *, ndims=0):
+    def set_shapes_eidxs(self, shapes, eidxs, field_groups, aux_fields={}):
         comm, _, _ = get_comm_rank_root()
 
         # Merge aux_fields across ranks
         aux_fields = {k: v
-                      for a in comm.allgather(aux_fields or {})
+                      for a in comm.allgather(aux_fields)
                       for k, v in a.items()}
 
         # Prepare the element information
@@ -170,24 +174,23 @@ class NativeWriter:
                 upts = get_quadrule(etype, rname, shape[2]).pts
 
                 # Build nested compound dtype for this element type
-                dtype = self._build_dtype(field_groups, shape[2], ndims,
+                dtype = self._build_dtype(field_groups, shape[2],
                                           aux_fields.get(etype, []))
 
                 ek = f'p{order}-{etype}'
-                self._einfo[ek] = (gatherer, subset, etype, dtype,
-                                   shape[0], upts)
+                self._einfo[ek] = (gatherer, subset, etype, dtype, shape[0],
+                                   upts)
 
                 # Create a persistent future for this element type
                 self._futures[ek] = gatherer.future((), dtype)
 
-    def _build_dtype(self, field_groups, nupts, ndims, aux):
+    def _build_dtype(self, field_groups, nupts, aux):
         groups = []
 
         # Data field groups
         for gname, fnames in field_groups.items():
-            fshape = (ndims, nupts) if gname == 'grad' else (nupts,)
-            groups.append((gname, [(f, self.fpdtype, fshape)
-                                   for f in fnames]))
+            fshape = (self.ndims, nupts) if gname == 'grad' else (nupts,)
+            groups.append((gname, [(f, self.fpdtype, fshape) for f in fnames]))
 
         # Auxiliary group
         afields = [('part-id', np.int64)]
@@ -226,7 +229,7 @@ class NativeWriter:
     def write(self, data, tcurr, metadata=None, timeout=0, callback=None,
               aux=None):
         async_ = bool(timeout)
-        comm, rank, root = get_comm_rank_root()
+        _, rank, root = get_comm_rank_root()
 
         # Wait for any existing write operations to finish
         if self._awriter is not None:
@@ -425,7 +428,7 @@ class _AsyncCompleter:
         self.start = time.monotonic()
 
     def _test_with_timeout(self, timeout):
-        comm, rank, root = get_comm_rank_root()
+        comm, _, _ = get_comm_rank_root()
 
         if not self.done:
             if time.monotonic() - self.start >= timeout:
