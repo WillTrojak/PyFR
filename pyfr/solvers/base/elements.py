@@ -254,12 +254,12 @@ class BaseElements:
 
         # Allocate space if needed for interfaces
         if 'comm_fpts' in sbufs:
-            self._comm_fpts = salloc('comm_fpts', nfpts)
+            self._comm_fpts = salloc('vect_fpts', nfpts)
         elif 'vect_fpts' in sbufs:
             self._comm_fpts = self._vect_fpts.slice(0, self.nfpts)
 
         if 'grad_upts' in sbufs and self.grad_fusion:
-            self._grad_upts = valloc('grad_upts', nupts)
+            self._grad_upts = valloc('vect_fpts', nupts)
         elif hasattr(self, '_vect_upts'):
             self._grad_upts = self._vect_upts
 
