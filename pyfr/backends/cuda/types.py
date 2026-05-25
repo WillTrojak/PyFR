@@ -84,7 +84,7 @@ class CUDAGraph(base.Graph):
         self.stale_kparams = {}
         self.mpi_events = []
 
-    def _add_mpi_req(self, req, deps):
+    def _add_mpi_req(self, req, deps=[]):
         super()._add_mpi_req(req, deps)
 
         if deps:

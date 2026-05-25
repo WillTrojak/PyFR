@@ -58,7 +58,7 @@ class MetalGraph(base.Graph):
         self.klist = []
         self.mpi_idxs = defaultdict(list)
 
-    def _add_mpi_req(self, req, deps):
+    def _add_mpi_req(self, req, deps=[]):
         super()._add_mpi_req(req, deps)
 
         if deps:

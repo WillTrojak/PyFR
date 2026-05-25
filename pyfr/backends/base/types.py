@@ -381,8 +381,8 @@ class Graph:
             self._waitall = mpi.Prequest.Waitall
 
     def _alldeps(self, k):
-        yield from self.kdeps.get(k, [])
-        yield from self.kpdeps.get(k, [])
+        yield from self.kdeps.get(k, ())
+        yield from self.kpdeps.get(k, ())
 
     def add(self, kern, deps=[], pdeps=[]):
         if self.committed:
@@ -416,25 +416,32 @@ class Graph:
         self._pgroups.append((list(kerns), list(subs)))
 
     def _build_dag(self):
-        # Collapse groups: map each kernel to its group head
-        groups = [kerns for kerns, _ in self._pgroups]
-        grouped = {}
-        for g in groups:
-            grouped |= dict.fromkeys(g, g[0])
+        # Collapse groups into super-nodes for backends which use
+        # cache blocking; other backends treat each kernel individually
+        # so that pseudo-deps can always be honoured
+        if self.backend.blocks:
+            groups = [kerns for kerns, _ in self._pgroups]
+            grouped = {}
+            for g in groups:
+                grouped |= dict.fromkeys(g, g[0])
 
-        to_super = lambda k: grouped.get(k, k)
-        gmembers = {g[0]: g for g in groups}
+            gmembers = {g[0]: g for g in groups}
+            to_super = lambda k: grouped.get(k, k)
+            depfn = lambda sk: self.kdeps.get(sk, ())
+        else:
+            grouped, gmembers = {}, {}
+            to_super = lambda k: k
+            depfn = self._alldeps
 
-        # Super-node set: ungrouped kernels + group heads
-        snodes = [k for k in self.kdeps if k not in grouped or grouped[k] == k]
+        # Super-node set
+        snodes = [k for k in self.kdeps if grouped.get(k, k) == k]
 
-        # Build adjacency list and in-degree counts using only hard
-        # dependencies; pseudo-deps are handled via priority ordering
+        # Build adjacency list and in-degree counts
         succs, indeg = defaultdict(list), {}
         for sn in snodes:
             seen = {sn}
-            for sk in gmembers.get(sn, [sn]):
-                for d in self.kdeps.get(sk, []):
+            for sk in gmembers.get(sn, (sn,)):
+                for d in depfn(sk):
                     if (dsn := to_super(d)) not in seen:
                         seen.add(dsn)
                         succs[dsn].append(sn)
@@ -481,9 +488,10 @@ class Graph:
 
         return result
 
-    def _add_mpi_req(self, req, deps):
+    def _add_mpi_req(self, req, deps=[]):
         self.mpi_reqs.append(req)
         self.mpi_req_deps.append(deps)
+        self.depk.update(deps)
 
     def _group(self, kerns, subs):
         pass
@@ -506,18 +514,21 @@ class Graph:
                 mpi_at[max(kern_pos[d] for d in deps)].append((req, deps))
             else:
                 self.mpi_root_reqs.append(req)
-                self._add_mpi_req(req, deps)
+                self._add_mpi_req(req)
 
         # Replay kernel adds in sorted order, interleaving MPI sends
         for i, kern in enumerate(sorted_kerns):
-            ad = [d for d in self._alldeps(kern) if d in self.knodes]
-            self.knodes[kern] = kern.add_to_graph(
-                self, [self.knodes[d] for d in ad]
-            )
+            # Filter pdeps to only those honoured by the topological sort
+            self.kpdeps[kern] = [d for d in self.kpdeps.get(kern, ())
+                                 if d in self.knodes]
+
+            ad = list(self._alldeps(kern))
+            self.knodes[kern] = kern.add_to_graph(self,
+                                                  [self.knodes[d] for d in ad])
             self.depk.update(ad)
 
             # Insert MPI sends whose deps are now satisfied
-            for req, deps in mpi_at.get(i, []):
+            for req, deps in mpi_at.get(i, ()):
                 self._add_mpi_req(req, deps)
 
         # Replay groups (after all kernels are added)

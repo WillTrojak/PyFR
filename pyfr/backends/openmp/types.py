@@ -79,7 +79,7 @@ class OpenMPGraph(base.Graph):
     def _get_nblocks(self, idxs):
         return max(self.klist[i].runargs.b.nblocks for i in idxs)
 
-    def _add_mpi_req(self, req, deps):
+    def _add_mpi_req(self, req, deps=[]):
         super()._add_mpi_req(req, deps)
 
         rra = OpenMPRegularRunArgs(fun=mpi.funcs.Start, args=mpi.addrof(req))
