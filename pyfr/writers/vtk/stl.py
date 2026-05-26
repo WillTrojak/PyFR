@@ -1,7 +1,6 @@
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.postproc.adapters import PostProcData
 from pyfr.points import PointLocator, PointSampler
 from pyfr.polys import TriPolyBasis
 from pyfr.shapes import TriShape
@@ -182,9 +181,7 @@ class VTKSTLWriter(BaseVTKWriter):
             svars = self._pre_proc_fields(samps[:nsoln].astype(self.dtype))
 
             # Run postproc plugins at welded sample points
-            adapter = PostProcData(self.soln, svars, spts.T)
-            for pp in self.pp_plugins:
-                pp.run(adapter)
+            pp_fields = self.pp_runner.run_samples(self.soln.config, svars)
 
             # Rebuild tri vertices from (possibly transformed) welded verts
             pts = spts[pinv].reshape(pts.shape)
@@ -202,7 +199,7 @@ class VTKSTLWriter(BaseVTKWriter):
                 off += n
 
             # Unpack postproc fields onto STL triangles
-            for name, data in adapter.fields.items():
+            for name, data in pp_fields.items():
                 a = data[pinv]
                 if a.ndim == 1:
                     pointf[name] = a.reshape(*pts.shape[:2])

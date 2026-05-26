@@ -79,18 +79,6 @@ def polyfit(context, f, a, b, n, var, nqpts=500):
     return f'({pfexpr})'
 
 
-def _strip_parens(s):
-    out, depth = [], 0
-
-    for c in s:
-        depth += (c in '{(') - (c in ')}')
-
-        if depth == 0 and c not in ')}':
-            out.append(c)
-
-    return ''.join(out)
-
-
 def _locals(body):
     # First, strip away any comments
     body = re.sub(r'//.*?\n', '', body)
@@ -102,7 +90,7 @@ def _locals(body):
     decls = re.findall(r'(?:[A-Za-z_]\w*)\s+([A-Za-z_]\w*[^;]*?);', body)
 
     # Strip anything inside () or {}
-    decls = [_strip_parens(d) for d in decls]
+    decls = [util.strip_parens(d) for d in decls]
 
     # A statement can define multiple variables, so split by ','
     decls = it.chain.from_iterable(d.split(',') for d in decls)

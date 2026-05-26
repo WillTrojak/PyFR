@@ -177,14 +177,26 @@ def match_paired_paren(delim, n=5):
     return lft*n + mid + rgt*n
 
 
-def file_path_gen(basedir, basename, restore=False):
+def paren_depths(s, opens='([{', closes=')]}'):
+    depth = 0
+    for c in s:
+        depth += (c in opens) - (c in closes)
+        yield c, depth
+
+
+def strip_parens(s):
+    return ''.join(c for c, d in paren_depths(s, '({', '})')
+                   if d == 0 and c not in ')}')
+
+
+def file_path_gen(basedir, basename, restore=False, extn=''):
     def g():
         ns = 0
 
         # See if the basename appears to depend on {n}
         if restore and re.search('{n[^}]*}', basename):
-            # Quote and substitute
-            bn = re.escape(basename)
+            # Quote and substitute; extn is added by the consumer at write
+            bn = re.escape(basename + extn)
             bn = re.sub(r'\\{n[^}]*\\}', r'(\\s*\\d+\\s*)', bn)
             bn = re.sub(r'\\{t[^}]*\\}', r'(?:.*?)', bn) + '$'
             for f in os.listdir(basedir):
