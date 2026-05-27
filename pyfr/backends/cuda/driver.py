@@ -192,8 +192,6 @@ class CUDAWrappers(LibWrapper):
          POINTER(c_int), POINTER(c_void_p)),
         (c_int, 'cuModuleUnload', c_void_p),
         (c_int, 'cuModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
-        (c_int, 'cuModuleGetGlobal_v2', POINTER(c_void_p), POINTER(c_size_t),
-         c_void_p, c_char_p),
         (c_int, 'cuLaunchKernel', c_void_p, c_uint, c_uint, c_uint, c_uint,
          c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p),
         (c_int, 'cuFuncGetAttribute', POINTER(c_int), c_int, c_void_p),

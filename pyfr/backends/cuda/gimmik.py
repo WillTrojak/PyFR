@@ -37,14 +37,14 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         if 'const' not in a.tags:
             raise NotSuitableError('GiMMiK requires a constant a matrix')
 
+        # Dimensions
+        ldb, ldc = b.leaddim, out.leaddim
+
         # Alignment
         if 'align' in b.tags and 'align' in out.tags:
             aligne = self.backend.alignb // b.itemsize
         else:
             aligne = None
-
-        # Dimensions
-        ldb, ldc = b.leaddim, out.leaddim
 
         # Cache key
         ckey = (a.mid, alpha, beta, aligne, ldb, ldc)
@@ -174,6 +174,8 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
     @staticmethod
     def _trim_f64_low32(x):
-        a = np.ascontiguousarray(np.asarray(x, dtype=np.float64)).copy()
-        a.view(np.uint64)[...] &= np.uint64(0xFFFFFFFF00000000)
+        if x.dtype != np.float64:
+            raise ValueError("Trim low32 only support for float64")
+        a = np.asarray(x).copy()
+        a.view(np.uint64)[...] &= 0xFFFFFFFF00000000
         return a
