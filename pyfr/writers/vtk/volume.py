@@ -1,7 +1,6 @@
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.plugins.postproc.adapters import PostProcData
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
@@ -85,12 +84,8 @@ class VTKVolumeWriter(BaseVTKWriter):
         vsoln = interpolate_pts(soln_vtu_op, soln)
 
         # Run postproc plugins at svpts (views into vsoln/vpts)
-        adapter = PostProcData(self.soln, vsoln.transpose(1, 0, 2),
-                               vpts.transpose(2, 0, 1))
-        for pp in self.pp_plugins:
-            pp.run(adapter)
-        for fname, arr in adapter.fields.items():
-            pointf[fname] = arr
+        samples = vsoln.transpose(1, 0, 2)
+        pointf.update(self.pp_runner.run_samples(self.soln.config, samples))
 
         # Append dummy z dimension for points in 2D (post-pp)
         if self.ndims == 2:

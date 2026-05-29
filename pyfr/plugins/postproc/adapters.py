@@ -6,52 +6,59 @@ from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
 
-class PostProcData:
-    def __init__(self, soln, pris, ploc):
-        self.soln = soln
-        self.nvars = len(soln.fields)
-        self.ndims = len(ploc)
-        self._pris = pris
-        self.ploc = ploc
+def split_samples(samples, nvars):
+    # Primitives are the first nvars rows; remaining rows form grad blocks
+    pris = list(samples[:nvars])
+    if samples.shape[0] > nvars:
+        return pris, np.split(samples[nvars:], nvars)
+    else:
+        return pris, None
+
+
+class VolumePostProcData:
+    def __init__(self, cfg, pris, grad_pris=None):
+        self.cfg = cfg
+        self.pris = pris
+        self.grad_pris = grad_pris
         self.fields = {}
 
     @property
+    def nvars(self):
+        return len(self.pris)
+
+    @property
     def has_grads(self):
-        return len(self._pris) > self.nvars
-
-    @cached_property
-    def pris(self):
-        return list(self._pris[:self.nvars])
-
-    @cached_property
-    def grad_pris(self):
-        return np.split(self._pris[self.nvars:], self.nvars)
+        return self.grad_pris is not None
 
 
-class BoundaryPostProcData(PostProcData):
-    def __init__(self, soln, pris, ploc, elementscls, spts, finfo):
-        super().__init__(soln, pris, ploc)
-
-        self._elementscls = elementscls
+class BoundaryPostProcData(VolumePostProcData):
+    def __init__(self, cfg, pris, spts, etype, fidx, svpts, grad_pris=None):
+        super().__init__(cfg, pris, grad_pris=grad_pris)
         self._spts = spts
-        self._finfo = finfo
+        self._etype = etype
+        self._fidx = fidx
+        self._svpts = svpts
+
+    @cached_property
+    def _elementscls(self):
+        from pyfr.solvers.base import BaseSystem
+        sname = self.cfg.get('solver', 'system')
+        return subclass_where(BaseSystem, name=sname).elementscls
 
     @cached_property
     def _shape(self):
-        return subclass_where(BaseShape, name=self._finfo.etype)(
-            len(self._spts), self.soln.config
-        )
+        cls = subclass_where(BaseShape, name=self._etype)
+        return cls(len(self._spts), self.cfg)
 
     @cached_property
     def _eles(self):
-        return self._elementscls(type(self._shape), self._spts,
-                                 self.soln.config)
+        return self._elementscls(type(self._shape), self._spts, self.cfg)
 
     @cached_property
     def pnorm(self):
-        svpts = self._finfo.svpts
-        norm_tiled = np.tile(self._finfo.norm, (len(svpts), 1))
-        pn = self._eles.pnorm_at(svpts, norm_tiled)
+        _, _, norm = self._shape.faces[self._fidx]
+        norm_tiled = np.tile(norm, (len(self._svpts), 1))
+        pn = self._eles.pnorm_at(self._svpts, norm_tiled)
 
         return pn.transpose(2, 0, 1)
 
@@ -62,7 +69,7 @@ class BoundaryPostProcData(PostProcData):
     @cached_property
     def min_upt_wall_dist_approx(self):
         shape = self._shape
-        _, proj, norm = shape.faces[self._finfo.fidx]
+        _, proj, norm = shape.faces[self._fidx]
         upts = shape.upts
 
         norm /= np.linalg.norm(norm)

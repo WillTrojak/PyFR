@@ -15,7 +15,7 @@ class TauWallPostProc(BasePostProcPlugin):
         normals = data.normals
         mu = data.fields['_mu']
 
-        grad_vel = np.stack(data.grad_pris[1:data.ndims + 1])
+        grad_vel = np.stack(data.grad_pris[1:self.ndims + 1])
         sij = grad_vel + grad_vel.swapaxes(0, 1)
         tau_n = mu * np.einsum('ijkl,jkl->ikl', sij, normals)
 

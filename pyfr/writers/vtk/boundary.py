@@ -1,18 +1,14 @@
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 
 import numpy as np
 
 from pyfr.cache import memoize
 from pyfr.nputil import search_unsorted
-from pyfr.plugins.postproc.adapters import BoundaryPostProcData
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape, proj_pts
 from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
 from pyfr.writers.vtk.shapes import get_vtk_shape
-
-
-FaceInfo = namedtuple('FaceInfo', 'etype fidx svpts norm')
 
 
 class VTKBoundaryWriter(BaseVTKWriter):
@@ -70,7 +66,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
         shape = self._get_shape(etype, cfg)
 
         # Get the information about our face
-        itype, proj, norm = shape.faces[fidx]
+        itype, proj, _ = shape.faces[fidx]
 
         # Obtain the visualisation points on this face
         svpts = proj_pts(proj, self._svpts(itype))
@@ -83,9 +79,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
         lbasis = get_polybasis(etype, 1, linspts)
         lin_op = lbasis.nodal_basis_at(svpts)
 
-        finfo = FaceInfo(etype, fidx, svpts, norm)
-
-        return itype, mesh_op, soln_op, lin_op, finfo
+        return itype, mesh_op, soln_op, lin_op, etype, fidx, svpts
 
     @memoize
     def _svpts(self, itype):
@@ -102,10 +96,10 @@ class VTKBoundaryWriter(BaseVTKWriter):
         cnodes = {}
         for itype, groups in self._surface_info.items():
             pieces = []
-            for *_, finfo, idxs in groups:
-                shapecls = subclass_where(BaseShape, name=finfo.etype)
-                spts_nodes = self.mesh.spts_nodes[finfo.etype]
-                cidxs = shapecls.face_corner_pts_idxs(finfo.fidx,
+            for *_, etype, fidx, _, idxs in groups:
+                shapecls = subclass_where(BaseShape, name=etype)
+                spts_nodes = self.mesh.spts_nodes[etype]
+                cidxs = shapecls.face_corner_pts_idxs(fidx,
                                                       spts_nodes.shape[1])
                 pieces.append(spts_nodes[np.ix_(idxs, cidxs)])
 
@@ -126,8 +120,8 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
     def _itype_point_shapes(self, itype):
         shapes = set()
-        for *_, finfo, _ in self._surface_info[itype]:
-            shapes.update(self._extra_point_shapes(finfo.etype))
+        for *_, etype, _, _, _ in self._surface_info[itype]:
+            shapes.update(self._extra_point_shapes(etype))
         return shapes
 
     def _prepare_pts(self, itype):
@@ -135,8 +129,8 @@ class VTKBoundaryWriter(BaseVTKWriter):
         cellf, pointf = defaultdict(list), defaultdict(list)
 
         pshapes = self._itype_point_shapes(itype)
-        for mesh_op, soln_op, lin_op, finfo, idxs in self._surface_info[itype]:
-            etype = finfo.etype
+        for *ops, etype, fidx, svpts, idxs in self._surface_info[itype]:
+            mesh_op, soln_op, lin_op = ops
             spts = self.mesh.spts[etype][:, idxs]
             soln = self.soln.data[etype][..., idxs]
             soln = soln.swapaxes(0, 1).astype(self.dtype)
@@ -170,15 +164,11 @@ class VTKBoundaryWriter(BaseVTKWriter):
                     interpolate_pts(op, np.moveaxis(data, 0, 1))
                 )
 
-            soln_t = face_vsoln.transpose(1, 0, 2)
-            ploc = face_vpts.transpose(2, 0, 1)
-
-            adapter = BoundaryPostProcData(self.soln, soln_t, ploc,
-                                           self.elementscls, spts, finfo)
-            for pp in self.pp_plugins:
-                pp.run(adapter)
-
-            for fname, arr in adapter.fields.items():
+            samples = face_vsoln.transpose(1, 0, 2)
+            bdy = (spts, etype, fidx, svpts)
+            got = self.pp_runner.run_samples(self.soln.config, samples,
+                                             boundary=bdy)
+            for fname, arr in got.items():
                 pointf[fname].append(arr)
 
         # Concatenate extra fields

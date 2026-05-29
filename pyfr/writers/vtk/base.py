@@ -5,7 +5,7 @@ import numpy as np
 
 from pyfr.cache import clear_memoize, memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.postproc.base import get_pp_plugins
+from pyfr.plugins.postproc.runner import PostProcRunner
 from pyfr.shapes import BaseShape
 from pyfr.util import first, subclass_where
 from pyfr.writers import BaseWriter
@@ -91,12 +91,11 @@ class BaseVTKWriter(BaseWriter):
 
         # Resolve postproc plugins and register fields
         cfg = self._pp_cfg or self.cfg
-        self.pp_plugins = get_pp_plugins(self._pp_plugin_names,
-                                         self.ndims, cfg, self.type)
-        for pp in self.pp_plugins:
-            for fname, varnames in pp.fields.items():
-                meta = FieldMeta('point', len(varnames), np.dtype(self.dtype))
-                self._extra_fields[fname] = meta
+        self.pp_runner = PostProcRunner(self._pp_plugin_names, self.ndims, cfg,
+                                        self.type)
+        for fname, varnames in self.pp_runner.fields().items():
+            meta = FieldMeta('point', len(varnames), np.dtype(self.dtype))
+            self._extra_fields[fname] = meta
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls

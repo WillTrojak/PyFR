@@ -11,8 +11,7 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
-from pyfr.plugins.postproc.adapters import PostProcData
-from pyfr.plugins.postproc.base import get_pp_plugins
+from pyfr.plugins.postproc.runner import PostProcRunner
 from pyfr.points import PointLocator, PointSampler
 from pyfr.readers.native import NativeReader
 from pyfr.util import subclass_where
@@ -291,8 +290,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
         # Resolve postproc plugins + dependencies in topological order
         pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else soln.config
-        pp_plugins = get_pp_plugins(args.pp_plugins, mesh.ndims, pp_cfg,
-                                    'volume')
+        runner = PostProcRunner(args.pp_plugins, mesh.ndims, pp_cfg, 'volume')
 
         # Construct and configure the point sampler
         sampler = PointSampler(mesh, pts, locs)
@@ -304,18 +302,13 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         # Have the root rank post-process and write the samples
         if rank == root:
             # Run any requested post-processing plugins
-            if pp_plugins:
-                adapter = PostProcData(soln, samps.T, pts.T)
-                pp_field_map = {}
-                for pp in pp_plugins:
-                    pp.run(adapter)
-                    pp_field_map.update(pp.fields)
+            if runner:
+                pp_field_map = runner.fields(public_only=True)
+                public = runner.run_samples(soln.config, samps.T,
+                                            public_only=True)
 
                 extra_cols = []
-                for name, arr in adapter.fields.items():
-                    if name.startswith('_'):
-                        continue
-
+                for name, arr in public.items():
                     fields.extend(pp_field_map[name])
                     extra_cols.append(np.atleast_2d(arr.T).T)
 
