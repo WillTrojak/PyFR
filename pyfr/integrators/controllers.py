@@ -46,6 +46,11 @@ class PIControllerMixin:
     controller_needs_cfl = False
     controller_has_variable_dt = True
 
+    # Multiplicative factors for auto-dt-max inference
+    _dtmax_backoff = 0.8
+    _dtmax_probe = 1.02
+    _dtmax_confirm = 50
+
     def _init_pi_controller(self, initsoln):
         sect = 'solver-time-integrator'
         f = lambda k, d=None: self.cfg.getfloat(sect, k, d)
@@ -88,6 +93,11 @@ class PIControllerMixin:
         self._pi_alpha = f('pi-alpha', 0.7)
         self._pi_beta = f('pi-beta', 0.4)
 
+        # If to attempt to infer dt-max from rejected step information
+        self._auto_dtmax = self.cfg.getbool(sect, 'auto-dt-max', False)
+        self._dtlim = self.dtmax
+        self._nstable = 0
+
         # If restarting attempt to restore our state
         if initsoln and (sd := initsoln.state.get('intg/ctrl')) is not None:
             self.dt, self._errprev = sd
@@ -100,6 +110,18 @@ class PIControllerMixin:
         # Register our serialiser
         self.serialiser.register('intg/ctrl',
                                  lambda: [self.dt, self._errprev])
+
+    def _update_dtlim(self, dt, accepted):
+        # If the step was accepted then consider raising the dt limit
+        if accepted:
+            self._nstable += 1
+            if self._nstable >= self._dtmax_confirm:
+                self._dtlim *= self._dtmax_probe
+                self._nstable = 0
+        # Otherwise reduce it
+        else:
+            self._dtlim = self._dtmax_backoff*dt
+            self._nstable = 0
 
     def _errest(self, rcurr, rerr):
         comm, rank, root = get_comm_rank_root()

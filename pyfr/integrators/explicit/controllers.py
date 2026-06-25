@@ -85,7 +85,7 @@ class ExplicitPIController(PIControllerMixin, BaseExplicitController):
 
         while self.tcurr < t and self.tcurr < self.tend:
             # Decide on the time step
-            dt = self._clamp_dt(min(self.dt, self.dtmax), t)
+            dt = self._clamp_dt(min(self.dt, self._dtlim, self.dtmax), t)
 
             # Take the step
             (icurr, iprev, ierr), wtime = self._timed_step(self.tcurr, dt)
@@ -106,3 +106,7 @@ class ExplicitPIController(PIControllerMixin, BaseExplicitController):
                 self._accept_step(dt, icurr, wtime, err=err)
             else:
                 self._reject_step(dt, iprev, wtime, err=err)
+
+            # Update the learned stability limit from this step
+            if self._dtmax_learn:
+                self._update_dtlim(dt, err < 1.0)

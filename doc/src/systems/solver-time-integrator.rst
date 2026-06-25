@@ -96,6 +96,11 @@ For explicit time-stepping (``formulation = explicit`` or omitted):
 
         *float*
 
+    - ``auto-dt-max`` --- attempt to learn ``dt-max`` from rejected
+        time step information
+
+        ``true`` | ``false`` (default: ``false``)
+
     and ``cfl`` works with all explicit schemes and computes the
     time-step from the CFL condition as
     ``dt = cfl / (max_wavespeed * (2*order + 1))``. It requires
