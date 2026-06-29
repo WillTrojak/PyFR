@@ -85,8 +85,8 @@ class BaselinePartitioner(BasePartitioner):
         self._rng = np.random.default_rng(self.opts['seed'])
 
     def _partition_graph(self, graph, partwts):
-        nv = len(graph.vtab) - 1
-        self._idxdtype = idt = np.int32 if nv < 2**31 else np.int64
+        nv, ne = len(graph.vtab) - 1, len(graph.etab)
+        self._idxdtype = idt = np.int32 if max(nv, ne) < 2**31 else np.int64
 
         vtab = graph.vtab.astype(idt)
         etab = graph.etab.astype(idt)
@@ -951,7 +951,7 @@ class BaselinePartitioner(BasePartitioner):
         parts_etab = parts[etab]
         nbr_dtype = np.int8 if degrees.max() <= 127 else np.int16
         nbr_cnt = np.zeros((nv, nparts), dtype=nbr_dtype)
-        flat = edge_src*nparts + parts_etab
+        flat = edge_src.astype(np.int64, copy=False)*nparts + parts_etab
         cnt = np.bincount(flat, minlength=nv*nparts)
         nbr_cnt[:] = cnt.reshape(nv, nparts)
 
