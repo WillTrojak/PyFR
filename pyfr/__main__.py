@@ -17,9 +17,9 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.partitioners import (BasePartitioner, get_partitioner,
                                reconstruct_partitioning, write_partitioning)
-from pyfr.plugins import BaseCLIPlugin, BasePlugin
+from pyfr.plugins import BaseCLIPlugin
 from pyfr.progress import (NullProgressSequence, ProgressBar,
-                           ProgressSequenceAction, format_dofs)
+                           ProgressSequenceAction)
 from pyfr.readers import BaseReader, get_reader_by_extn, get_reader_by_name
 from pyfr.readers.native import NativeReader
 from pyfr.readers.stl import read_stl
@@ -567,29 +567,6 @@ def process_resample(args):
                      None, metadata)
 
 
-class _ProgressBarPlugin(BasePlugin):
-    name = 'progress'
-
-    def __init__(self, pbar, gndofs):
-        self._pbar = pbar
-        self._gndofs = gndofs
-        self._info = None
-        self._last_wtime = 0
-
-    def __call__(self, intg):
-        wtime = self._pbar.walltime
-
-        if wtime - self._last_wtime >= 1.0:
-            if intg.controller_has_variable_dt and int(wtime) // 10 % 2:
-                self._info = f'dt = {intg.dt:.2e}'
-            else:
-                self._info = format_dofs(self._gndofs*intg.nrhsevals / wtime)
-
-            self._last_wtime = wtime
-
-        self._pbar(intg.tcurr, info=self._info)
-
-
 def _process_common(args, soln, cfg):
     # Manually initialise MPI
     init_mpi()
@@ -614,13 +591,9 @@ def _process_common(args, soln, cfg):
     # Construct the solver
     solver = get_solver(backend, mesh, soln, cfg)
 
-    # If we are running interactively then create a progress bar
+    # Retain a progress bar when running interactively
     if args.progress and rank == root:
-        pbar = ProgressBar()
-        pbar.start(solver.tend, start=solver.tstart, curr=solver.tcurr)
-
-        # Wrap as a lightweight plugin
-        solver.plugins.append(_ProgressBarPlugin(pbar, solver.gndofs))
+        solver.progress = ProgressBar()
 
     # Execute!
     solver.run()

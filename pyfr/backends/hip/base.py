@@ -59,14 +59,15 @@ class HIPBackend(BaseBackend):
         if self.mpitype not in {'standard', 'hip-aware'}:
             raise ValueError('Invalid HIP backend MPI type')
 
-        from pyfr.backends.hip import (blasext, gimmik, packing, provider,
-                                       rocblas, types)
+        from pyfr.backends.hip import (blasext, gimmik, packing, linalg,
+                                       provider, rocblas, types)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.HIPConstMatrix
         self.graph_cls = types.HIPGraph
         self.matrix_cls = types.HIPMatrix
         self.matrix_slice_cls = types.HIPMatrixSlice
+        self.tiled_matrix_cls = types.HIPTiledMatrix
         self.view_cls = types.HIPView
         self.xchg_matrix_cls = types.HIPXchgMatrix
         self.xchg_view_cls = types.HIPXchgView
@@ -76,6 +77,7 @@ class HIPBackend(BaseBackend):
         # Instantiate the base kernel providers
         kprovs = [provider.HIPPointwiseKernelProvider,
                   blasext.HIPBlasExtKernels,
+                  linalg.HIPLinalgKernels,
                   packing.HIPPackingKernels,
                   gimmik.HIPGiMMiKKernels,
                   rocblas.HIPRocBLASKernels]
@@ -138,3 +140,12 @@ class HIPBackend(BaseBackend):
         self.hip.memset(data, 0, nbytes)
 
         return data
+
+    def optimal_tile_shape(self, block_size, dtype):
+        tcols = 16 if np.dtype(dtype).itemsize == 2 else 8
+
+        # large blocks: wavefront-tall tile coalesces apply reads; else square
+        if block_size >= 256:
+            return (self.props['warp_size'], tcols)
+        else:
+            return (tcols, tcols)

@@ -12,6 +12,7 @@ from pyfr.integrators.registers import (RegisterMeta, ScalarRegister,
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.plugins import get_plugin
 from pyfr.plugins.triggers import TriggerManager
+from pyfr.progress import NullProgressBar, format_dofs
 from pyfr.writers.serialise import Serialiser
 
 
@@ -103,6 +104,22 @@ class BaseIntegrator(metaclass=RegisterMeta):
 
         # Trigger manager for conditional plugin execution
         self.triggers = TriggerManager()
+
+        # Progress bar; the CLI installs a real one when running interactively
+        self.progress = NullProgressBar()
+
+    def _setup_progress(self):
+        if self.controller_has_variable_dt:
+            self.progress.add_status_field(lambda: f'dt = {self.dt:.2e}')
+
+        def dofs():
+            wtime = time.perf_counter() - self._wstart
+            if wtime > 0:
+                return format_dofs(self.gndofs*self.nrhsevals / wtime)
+            else:
+                return None
+
+        self.progress.add_status_field(dofs)
 
     def _rhs(self, t, uin, uout):
         self.system.rhs(t, uin, uout)
@@ -226,6 +243,9 @@ class BaseIntegrator(metaclass=RegisterMeta):
 
             wtimes[plugin.name, plugin.suffix] += dt
 
+        # Update the progress bar
+        self.progress(self.tcurr)
+
         # Abort if plugins request it
         self._check_abort()
 
@@ -317,6 +337,9 @@ class BaseIntegrator(metaclass=RegisterMeta):
         pass
 
     def run(self):
+        self._setup_progress()
+        self.progress.start(self.tend, start=self.tstart, curr=self.tcurr)
+
         for t in self.tlist:
             self.advance_to(t)
 
@@ -425,6 +448,15 @@ class BaseIntegrator(metaclass=RegisterMeta):
 
     def _add(self, *args, in_scale=(), in_scale_idxs=(), out_scale=()):
         self._addv(args[::2], args[1::2], in_scale, in_scale_idxs, out_scale)
+
+    def _addv_nz(self, out_reg, pairs):
+        consts, regidxs = [0], [out_reg]
+        for c, r in pairs:
+            if c:
+                consts.append(c)
+                regidxs.append(r)
+
+        self._addv(consts, regidxs)
 
     def _size_register(self, reg, n):
         if not reg.dynamic:

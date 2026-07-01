@@ -30,7 +30,7 @@ class MetalBackend(BaseBackend):
         self.csubsz = self.soasz
 
         from pyfr.backends.metal import (blasext, compiler, gimmik, mps,
-                                         packing, provider, types)
+                                         packing, linalg, provider, types)
 
         # Create the compiler
         self.compiler = compiler.MetalCompiler(self)
@@ -40,6 +40,7 @@ class MetalBackend(BaseBackend):
         self.graph_cls = types.MetalGraph
         self.matrix_cls = types.MetalMatrix
         self.matrix_slice_cls = types.MetalMatrixSlice
+        self.tiled_matrix_cls = types.MetalTiledMatrix
         self.view_cls = types.MetalView
         self.xchg_matrix_cls = types.MetalXchgMatrix
         self.xchg_view_cls = types.MetalXchgView
@@ -49,6 +50,7 @@ class MetalBackend(BaseBackend):
         # Instantiate the base kernel providers
         kprovs = [provider.MetalPointwiseKernelProvider,
                   blasext.MetalBlasExtKernels,
+                  linalg.MetalLinalgKernels,
                   packing.MetalPackingKernels,
                   gimmik.MetalGiMMiKKernels,
                   mps.MetalMPSKernels]
@@ -73,6 +75,12 @@ class MetalBackend(BaseBackend):
     @property
     def platform_id(self):
         return str(self.dev.name())
+
+    def optimal_tile_shape(self, block_size, dtype):
+        if np.dtype(dtype).itemsize == 2:
+            return (16, 16)
+        else:
+            return super().optimal_tile_shape(block_size, dtype)
 
     def new_command_buffer(self):
         return self.queue.commandBufferWithDescriptor_(self._cbuf_desc)
@@ -111,12 +119,17 @@ class MetalBackend(BaseBackend):
         free = total - self.dev.currentAllocatedSize()
         return mi._replace(free=free, total=total)
 
+    def mem_alloc(self, nbytes):
+        from Metal import MTLResourceStorageModeShared
+
+        return call_(self.dev, 'newBufferWith', length=nbytes,
+                     options=MTLResourceStorageModeShared)
+
     def _malloc_impl(self, nbytes):
-        from Metal import MTLResourceStorageModeShared, NSMakeRange
+        from Metal import NSMakeRange
 
         # Allocate the device buffer
-        buf = call_(self.dev, 'newBufferWith', length=nbytes,
-                    options=MTLResourceStorageModeShared)
+        buf = self.mem_alloc(nbytes)
 
         # Zero the buffer
         cbuf = self.new_command_buffer()

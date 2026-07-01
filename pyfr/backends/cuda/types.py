@@ -53,6 +53,13 @@ class CUDAView(base.View): pass
 class CUDAXchgView(base.XchgView): pass
 
 
+class CUDATiledMatrix(_CUDAMatrixCommon, base.TiledMatrix):
+    def onalloc(self, basedata, offset):
+        self.basedata = basedata
+        self.data = int(self.basedata) + offset
+        self.offset = offset
+
+
 class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
     def __init__(self, backend, dtype, ioshape, initval, extent, tags):
         # Call the standard matrix constructor

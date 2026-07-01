@@ -5,5 +5,5 @@ from pyfr.backends.base.provider import (BaseKernelProvider,
                                          BaseUnorderedMetaKernel, Kernel,
                                          NotSuitableError, NullKernel)
 from pyfr.backends.base.types import (ConstMatrix, Extent, Graph, Matrix,
-                                      MatrixBase, MatrixSlice, StorageRegion,
+                                      MatrixBase, MatrixSlice, TiledMatrix,
                                       View, XchgMatrix, XchgView)

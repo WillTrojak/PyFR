@@ -66,6 +66,17 @@ class OpenCLView(base.View): pass
 class OpenCLXchgView(base.XchgView): pass
 
 
+class OpenCLTiledMatrix(_OpenCLMatrixCommon, base.TiledMatrix):
+    def onalloc(self, basedata, offset):
+        self.basedata = basedata
+        self.offset = offset
+
+        if offset:
+            self.data = basedata.slice(offset, self.nbytes)
+        else:
+            self.data = basedata
+
+
 class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
     def __init__(self, backend, dtype, ioshape, initval, extent, tags):
         super().__init__(backend, dtype, ioshape, initval, extent, tags)

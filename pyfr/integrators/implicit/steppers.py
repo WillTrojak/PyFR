@@ -1,7 +1,7 @@
 import numpy as np
 
 from pyfr.integrators.implicit.base import BaseImplicitIntegrator
-from pyfr.integrators.implicit.newton import NewtonSolver, StageStats
+from pyfr.integrators.implicit.nonlinear import StageStats
 from pyfr.integrators.registers import (DynamicScalarRegister,
                                         DynamicVectorRegister, VectorRegister)
 
@@ -10,7 +10,7 @@ class BaseImplicitStepper(BaseImplicitIntegrator):
     pass
 
 
-class BaseSDIRKStepper(BaseImplicitStepper, NewtonSolver):
+class BaseSDIRKStepper(BaseImplicitStepper):
     A = []
     b = []
     bhat = []
@@ -64,12 +64,11 @@ class BaseSDIRKStepper(BaseImplicitStepper, NewtonSolver):
         return weights
 
     def _compute_stage_residual(self, u_n, r_f_prev, u_i, f_i, dt, result):
-        coeffs = [0, result, 1, u_i, -1, u_n, -dt*self._gamma, f_i]
-        for Aij, fj in zip(self.A[len(r_f_prev)], r_f_prev):
-            if Aij != 0:
-                coeffs.extend([-dt*Aij, fj])
+        pairs = [(1, u_i), (-1, u_n), (-dt*self._gamma, f_i)]
+        pairs += [(-dt*Aij, fj)
+                  for Aij, fj in zip(self.A[len(r_f_prev)], r_f_prev)]
 
-        self._addv(coeffs[::2], coeffs[1::2])
+        self._addv_nz(result, pairs)
 
     def _compute_stage_initial_guess(self, stage, u_n, f_prev_list, dt,
                                      u_i_reg):
@@ -86,11 +85,9 @@ class BaseSDIRKStepper(BaseImplicitStepper, NewtonSolver):
             self._add(0, u_i_reg, 1, u_n, c_i*adt, self._r_f[-1])
         # Lagrange interpolation: u = u_n + c_i * dt * sum_j(w_j * f_j)
         else:
-            coeffs = [0, u_i_reg, 1, u_n]
-            for wj, fj in zip(w, f_prev_list):
-                if wj:
-                    coeffs.extend([wj*c_i*adt, fj])
-            self._addv(coeffs[::2], coeffs[1::2])
+            pairs = [(1, u_n)]
+            pairs += [(wj*c_i*adt, fj) for wj, fj in zip(w, f_prev_list)]
+            self._addv_nz(u_i_reg, pairs)
 
     def step(self, t, dt):
         r_f = self._r_f
@@ -120,7 +117,7 @@ class BaseSDIRKStepper(BaseImplicitStepper, NewtonSolver):
                 def initial_guess_fn(u, stage=i, un=r_un, fprev=f_prev):
                     self._compute_stage_initial_guess(stage, un, fprev, dt, u)
 
-                stats = self._newton_stage_solve(
+                stats = self._stage_solve(
                     t_i, r_ui, f_reg, residual_fn, initial_guess_fn,
                     self._gamma*dt
                 )
@@ -142,12 +139,8 @@ class BaseSDIRKStepper(BaseImplicitStepper, NewtonSolver):
         return r_ui
 
     def _compute_error_estimate(self, dt, r_f):
-        coeffs = [0, self._r_err]
-        for ei, fi in zip(self._err_coeffs, r_f):
-            if ei != 0:
-                coeffs.extend([dt * ei, fi])
-
-        self._addv(coeffs[::2], coeffs[1::2])
+        pairs = [(dt*ei, fi) for ei, fi in zip(self._err_coeffs, r_f)]
+        self._addv_nz(self._r_err, pairs)
 
 
 class ImplicitEulerStepper(BaseSDIRKStepper):

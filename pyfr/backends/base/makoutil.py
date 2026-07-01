@@ -27,6 +27,20 @@ def npdtype_to_ctype(context, dtype):
     return nputil.npdtype_to_ctype(dtype)
 
 
+def fpcast(context, expr, src, dst):
+    if src == dst:
+        return expr
+
+    # Route conversions through float: decode a bf16 source, then encode
+    if src == 'bf16':
+        expr = f'bf16_to_f32({expr})'
+
+    if dst == 'bf16':
+        return f'f32_to_bf16({expr})'
+    else:
+        return f'({dst})({expr})'
+
+
 def dot(context, a_, b_=None, /, **kwargs):
     ix, nd = util.first(kwargs.items())
     ab = '({})*({})'.format(a_, b_ or a_)
@@ -235,6 +249,32 @@ def fp_precise(context):
 
 
 @supports_caller
+def gpukernel(context, name, bounds=None, kargs=None, **kwargs):
+    body = capture(context, context['caller'].body)
+
+    if kargs:
+        specs = [s.strip().rsplit(None, 1) for s in kargs.split(',')]
+        args = [(n, *s.split(None, 1)) for s, n in specs]
+    else:
+        args = [(n, *s.split(None, 1)) for n, s in kwargs.items()]
+
+    ns = context['local']
+    pctx = ns.context
+
+    decl = capture(pctx, ns._kdecl, name, bounds).strip()
+    decls = [capture(pctx, ns._karg, intent, dtype, argname).strip()
+             for argname, intent, dtype in args]
+
+    if hasattr(ns, '_kextra'):
+        extra = capture(pctx, ns._kextra, body).strip()
+        if extra:
+            decls.append(extra)
+
+    astr = ',\n    '.join(decls)
+    return f'{decl}(\n    {astr})\n{{\n{body}\n}}'
+
+
+@supports_caller
 def kernel(context, name, ndim, **kwargs):
     extrns = context['_extrns']
 
@@ -269,3 +309,11 @@ def kernel(context, name, ndim, **kwargs):
 def alias(context, name, func):
     context['_macros'][name] = context['_macros'][func]
     return ''
+
+
+def tiled_idx(context, e, r, c, trows, tcols, padr, padc):
+    telem = trows*tcols
+    rowblk = (padc // tcols)*telem
+    return (f'(ixdtype_t){e}*{padr*padc} + ({r} / {trows})*{rowblk}'
+            f' + ({c} / {tcols})*{telem} + ({r} % {trows})*{tcols}'
+            f' + ({c} % {tcols})')

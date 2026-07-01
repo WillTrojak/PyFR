@@ -59,6 +59,9 @@ class ProgressBar:
         self.dps = dps
         self.fmt = fmt
 
+        # Registered (fn, hold) pairs for the rotating info display
+        self._fields = []
+
         self._ncol = shutil.get_terminal_size().columns - len(prefix)
 
     def start(self, end, *, start=0, curr=None):
@@ -70,6 +73,10 @@ class ProgressBar:
         self._last_len = 0
         self._last_wallt = 0.0
         self.info = None
+
+        # Seed the sim time so a render may occur before the first call
+        self.stcurr = self.strtrt
+        self.stelap = 0
 
         self._nbarcol = self._ncol - 24 - 2*len(f'{end:.{self.dps}f}')
 
@@ -88,7 +95,7 @@ class ProgressBar:
 
         self.stcurr = min(t, self.stend)
         self.stelap = self.stcurr - self.strtrt
-        self.info = info
+        self.info = info if info is not None else self._current_info()
 
         self._render()
 
@@ -98,6 +105,28 @@ class ProgressBar:
     @property
     def walltime(self):
         return time.monotonic() - self._wstart
+
+    def add_status_field(self, fn, *, hold=10.0):
+        self._fields.append((fn, hold))
+
+    def _current_info(self):
+        active = [(s, hold) for fn, hold in self._fields
+                  if (s := fn()) is not None]
+
+        if active:
+            # Time-multiplex the active fields by their hold durations
+            pos = self.walltime % sum(hold for _, hold in active)
+            for s, hold in active:
+                if pos < hold:
+                    return s
+                else:
+                    pos -= hold
+        else:
+            return None
+
+    @contextlib.contextmanager
+    def task(self, name, total):
+        yield _BarTask(self, name, total)
 
     def _bar(self, n, rfrac):
         nfull = int(rfrac*n)
@@ -161,6 +190,26 @@ class ProgressBar:
         self._last_wallt = wallt
 
 
+class _BarTask:
+    def __init__(self, bar, name, total):
+        self._bar = bar
+        self._name = name
+        self._total = total
+        self._width = len(str(total))
+        self._done = 0
+
+    def advance(self, n=1):
+        self._done += n
+        done = f'{self._done:>{self._width}}'
+        self._bar.info = f'{self._name} {done}/{self._total}'
+        self._bar._render()
+
+
+class _NullBarTask:
+    def advance(self, n=1):
+        pass
+
+
 class NullProgressBar(ProgressBar):
     def __init__(self):
         pass
@@ -170,6 +219,13 @@ class NullProgressBar(ProgressBar):
 
     def __call__(self, t=None, info=None):
         pass
+
+    def add_status_field(self, fn, *, hold=10.0):
+        pass
+
+    @contextlib.contextmanager
+    def task(self, name, total):
+        yield _NullBarTask()
 
 
 class ProgressSpinner:

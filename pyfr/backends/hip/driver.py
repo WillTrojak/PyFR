@@ -106,6 +106,8 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipMemGetInfo', POINTER(c_size_t), POINTER(c_size_t)),
         (c_int, 'hipMalloc', POINTER(c_void_p), c_size_t),
         (c_int, 'hipFree', c_void_p),
+        (c_int, 'hipMallocAsync', POINTER(c_void_p), c_size_t, c_void_p),
+        (c_int, 'hipFreeAsync', c_void_p, c_void_p),
         (c_int, 'hipHostMalloc', POINTER(c_void_p), c_size_t, c_uint),
         (c_int, 'hipHostFree', c_void_p),
         (c_int, 'hipMemcpy', c_void_p, c_void_p, c_size_t, c_int),
@@ -130,6 +132,8 @@ class HIPWrappers(LibWrapper):
          c_uint, c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p),
          c_void_p),
         (c_int, 'hipFuncGetAttribute', POINTER(c_int), c_int, c_void_p),
+        (c_int, 'hipModuleOccupancyMaxActiveBlocksPerMultiprocessor',
+         POINTER(c_int), c_void_p, c_int, c_size_t),
         (c_int, 'hipGraphCreate', POINTER(c_void_p), c_uint),
         (c_int, 'hipGraphDestroy', c_void_p),
         (c_int, 'hipGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
@@ -177,9 +181,9 @@ class _HIPBase:
         self._as_parameter_ = ptr.value
 
     def __del__(self):
-        if self._destroyfn:
+        if (p := getattr(self, '_as_parameter_', None)) and self._destroyfn:
             try:
-                getattr(self.hip.lib, self._destroyfn)(self)
+                getattr(self.hip.lib, self._destroyfn)(p)
             except AttributeError:
                 pass
 
@@ -190,13 +194,20 @@ class _HIPBase:
 class HIPDevAlloc(_HIPBase):
     _destroyfn = 'hipFree'
 
-    def __init__(self, hip, nbytes):
+    def __init__(self, hip, nbytes, stream=None):
         self.nbytes = nbytes
 
         ptr = c_void_p()
-        hip.lib.hipMalloc(ptr, nbytes)
+        if stream is None:
+            hip.lib.hipMalloc(ptr, nbytes)
+        else:
+            hip.lib.hipMallocAsync(ptr, nbytes, stream)
 
         super().__init__(hip, ptr)
+
+    def free_async(self, stream):
+        self.hip.lib.hipFreeAsync(self, stream)
+        del self._as_parameter_
 
 
 class HIPHostAlloc(_HIPBase):
@@ -298,6 +309,16 @@ class HIPFunction(_HIPBase):
         self.hip.lib.hipModuleLaunchKernel(self, *params.grid, *params.block,
                                            params.shared_mem_bytes, stream,
                                            params.kernel_params, None)
+
+    def max_active_blocks(self, nthreads, dynsmem=0):
+        n = c_int()
+        self.hip.lib.hipModuleOccupancyMaxActiveBlocksPerMultiprocessor(
+            byref(n), self, nthreads, dynsmem
+        )
+        return n.value
+
+    def resident_blocks(self, nthreads, ncu, dynsmem=0):
+        return max(1, self.max_active_blocks(nthreads, dynsmem)*ncu)
 
 
 class HIPGraph(_HIPBase):
@@ -413,10 +434,12 @@ class HIP:
         buf = create_string_buffer(2048)
         self.lib.hipGetDeviceProperties(buf, devid)
 
+        cint = lambda off: cast(buf[off:], POINTER(c_int)).contents.value
         return {
             'name': cast(buf, c_char_p).value.decode(),
             'gcn_arch_name': cast(buf[1160:], c_char_p).value.decode(),
-            'warp_size': cast(buf[308:], POINTER(c_int)).contents.value
+            'warp_size': cint(308),
+            'multiprocessor_count': cint(388)
         }
 
     def device_uuid(self, devid):
@@ -433,8 +456,8 @@ class HIP:
         self.lib.hipMemGetInfo(free, total)
         return free.value, total.value
 
-    def mem_alloc(self, nbytes):
-        return HIPDevAlloc(self, nbytes)
+    def mem_alloc(self, nbytes, stream=None):
+        return HIPDevAlloc(self, nbytes, stream)
 
     def pagelocked_empty(self, shape, dtype):
         nbytes = np.prod(shape)*np.dtype(dtype).itemsize

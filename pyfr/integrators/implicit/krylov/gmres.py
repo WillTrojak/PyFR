@@ -1,25 +1,23 @@
 import numpy as np
 
-from pyfr.integrators.implicit.krylov import BaseKrylovSolver
-from pyfr.integrators.implicit.tolerance import get_krylov_tol_controller
+from pyfr.integrators.implicit.krylov.base import BaseLinearSolver
 from pyfr.integrators.registers import DynamicVectorRegister
 
 
-class GMRESMixin(BaseKrylovSolver):
-    krylov_name = 'gmres'
-    _krylov = DynamicVectorRegister(rhs=False)
+class GMRESMixin(BaseLinearSolver):
+    linear_name = 'gmres'
+    _krylov = DynamicVectorRegister(rhs=False, extent='solve')
 
     def __init__(self, backend, systemcls, mesh, initsoln, cfg):
-        sect = 'solver-time-integrator'
-
-        self._gmres_nmax = cfg.getint(sect, 'krylov-max-iter', 10)
+        # Obtain the matvec budget
+        nmax = cfg.getint('solver-time-integrator', 'linear-max-iter', 10)
 
         # Restart size; 0 means no restart (single cycle of nmax)
-        m = cfg.getint(sect, 'gmres-restart', 0)
-        self._gmres_m = min(m, self._gmres_nmax) if m else self._gmres_nmax
+        m = cfg.getint('solver-gmres', 'restart', 0)
+        self._gmres_m = min(m, nmax) if m else nmax
 
         # Arnoldi method
-        match cfg.get(sect, 'gmres-arnoldi', 'cgs').lower():
+        match cfg.get('solver-gmres', 'arnoldi', 'cgs').lower():
             case 'cgs':
                 self._arnoldi = self._arnoldi_cgs
             case 'mgs':
@@ -31,11 +29,6 @@ class GMRESMixin(BaseKrylovSolver):
         self._size_register(self._krylov, self._gmres_m + 1)
 
         super().__init__(backend, systemcls, mesh, initsoln, cfg)
-
-        # Tolerance controller; created after super().__init__ so the
-        # serialiser is available for the GP controller to register state
-        self._tol_controller = get_krylov_tol_controller(cfg, self.serialiser,
-                                                         initsoln)
 
         # Allocate storage for the Arnoldi process
         self._H = np.empty((self._gmres_m + 1, self._gmres_m))
@@ -78,44 +71,45 @@ class GMRESMixin(BaseKrylovSolver):
         # Also apply to beta
         beta[j:j + 2] = cs[j]*beta[j], -sn[j]*beta[j]
 
-    def _krylov_solve(self, matvec, residual, out_reg, precond_apply=None,
-                      accumulate=True, accumulate_scale=()):
-        v, m, nmax = self._krylov, self._gmres_m, self._gmres_nmax
+    def _krylov_solve(self, matvec, residual, out_reg, precond=None, *,
+                      rtol, accumulate=True, accumulate_scale=()):
+        v, m, nmax = self._krylov, self._gmres_m, self._krylov_nmax
 
-        niters = nprecond = 0
+        niters = ncycles = 0
 
         # Compute initial residual norm and first Krylov vector
-        r0_norm = self._norm2(residual)
-        self._add(0, v[0], -1/r0_norm, residual)
-        restart_r_norm = r0_norm
+        r0norm = self._norm2(residual)
+        self._add(0, v[0], -1/r0norm, residual)
+        rnorm = r0norm
 
         while niters < nmax:
             self._reset_gmres_arrays()
-            self._beta[0] = restart_r_norm
+            self._beta[0] = rnorm
 
             budget = min(m, nmax - niters)
 
             # Arnoldi process with incremental Givens rotations
             for j, w_reg in enumerate(v[1:budget + 1]):
-                # Right preconditioning: w = A * M^{-1} * v[j]
-                if precond_apply:
-                    precond_apply(v[j], self._precond_temp)
+                # Right preconditioning: w = A·M⁻¹·v[j]
+                if precond:
+                    precond(v[j], self._precond_temp)
                     matvec(self._precond_temp, w_reg)
                 else:
-                    matvec(v[j], w_reg)
+                    # v[j] is a unit Arnoldi vector, so ‖v[j]‖ = 1
+                    matvec(v[j], w_reg, 1.0)
 
                 # Arnoldi orthogonalization
                 self._arnoldi(w_reg, v, self._H, j)
 
-                # Compute h_{j+1,j} = ||w||
+                # Compute h_{j+1,j} = ‖w‖
                 self._H[j + 1, j] = h_jp1_j = self._norm2(w_reg)
 
                 # Apply Givens rotations
                 self._apply_givens(self._H, self._beta, self._cs, self._sn, j)
 
                 # Check for convergence or breakdown
-                err = abs(self._beta[j + 1]) / r0_norm
-                if err < self._krylov_rtol or h_jp1_j < self._breakdown_tol:
+                err = abs(self._beta[j + 1]) / r0norm
+                if err < rtol or h_jp1_j < self._breakdown_tol:
                     break
 
                 # Normalize to get v_{j+1} = w / h_{j+1,j}
@@ -123,20 +117,18 @@ class GMRESMixin(BaseKrylovSolver):
                     self._add(1/h_jp1_j, v[j + 1])
 
             niters += j + 1
-            if precond_apply:
-                nprecond += j + 2
+            ncycles += 1
 
             # Backward substitution to solve for y
             y = np.linalg.solve(self._H[:j + 1, :j + 1], self._beta[:j + 1])
 
-            # Compute solution update; first cycle honours the
-            # caller's accumulate flag, subsequent cycles always add
+            # Solution update; first cycle honours accumulate, rest add
             first = niters == j + 1
-            acc = int(accumulate) if first else 1
+            acc = float(accumulate) if first else 1.0
 
-            if precond_apply:
+            if precond:
                 self._addv([0, *y.tolist()], [self._precond_temp, *v[:j + 1]])
-                precond_apply(self._precond_temp, v[0])
+                precond(self._precond_temp, v[0])
                 self._add(acc, out_reg, 1, v[0], in_scale=accumulate_scale,
                           in_scale_idxs=(1,) if accumulate_scale else ())
             else:
@@ -144,14 +136,13 @@ class GMRESMixin(BaseKrylovSolver):
                 self._addv([acc, *y.tolist()], [out_reg, *v[:j + 1]],
                            in_scale=accumulate_scale, in_scale_idxs=sidxs)
 
-            if (err < self._krylov_rtol or h_jp1_j < self._breakdown_tol or
-                    niters >= nmax):
+            if err < rtol or h_jp1_j < self._breakdown_tol or niters >= nmax:
                 break
 
-            # Restart: recover residual direction from the Arnoldi
-            # relation r_m = beta[j+1] * v_{j+1} / h_{j+1,j}
-            restart_r_norm = abs(self._beta[j + 1])
+            # Restart: recover residual via r_m = beta[j+1]*v_{j+1}/h_{j+1,j}
+            rnorm = abs(self._beta[j + 1])
             s = np.copysign(1 / h_jp1_j, self._beta[j + 1])
             self._add(0, v[0], s, v[j + 1])
 
-        return niters, nprecond
+        # Each matvec applies M⁻¹ once; recovery adds one more per cycle
+        return niters, niters + ncycles if precond else 0
