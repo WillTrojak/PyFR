@@ -53,7 +53,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
 
         # Check the kernel cache
         try:
-            kern, block, dt = self._mul_kerns[ckey]
+            kern, block, width, dt = self._mul_kerns[ckey]
         except KeyError:
             ifac = self.backend.autotune_ifac
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
@@ -74,7 +74,9 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                     src, meta = kgen.send(kdata)
                     kern = self._build_kernel(kname, src, 'iPiPi')
 
-                    grid = get_grid_for_block(meta['block'], n)
+                    width = meta.get('width', 1)
+                    vn = -(-n // width)
+                    grid = get_grid_for_block(meta['block'], vn)
                     params = kern.make_params(grid, meta['block'])
                     params.set_args(n, b, ldb, out, ldc)
 
@@ -85,7 +87,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                     )
 
                     if best_kern is None or dt < ifac*best_kern[-1]:
-                        best_kern = kern, meta['block'], dt
+                        best_kern = kern, meta['block'], width, dt
 
                     kdata = {
                         'runtime': dt,
@@ -99,11 +101,12 @@ class HIPGiMMiKKernels(HIPKernelProvider):
             getattr(out, 'parent', out).set(out_np)
 
             # Update the cache
-            self._mul_kerns[ckey] = kern, block, dt = best_kern
+            self._mul_kerns[ckey] = kern, block, width, dt = best_kern
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters
-        grid = get_grid_for_block(block, n)
+        vn = -(-n // width)
+        grid = get_grid_for_block(block, vn)
         params = kern.make_params(grid, block)
         params.set_args(n, b, ldb, out, ldc)
 
