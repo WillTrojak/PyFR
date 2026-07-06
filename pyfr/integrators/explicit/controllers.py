@@ -108,5 +108,5 @@ class ExplicitPIController(PIControllerMixin, BaseExplicitController):
                 self._reject_step(dt, iprev, wtime, err=err)
 
             # Update the learned stability limit from this step
-            if self._dtmax_learn:
+            if self._auto_dtmax:
                 self._update_dtlim(dt, err < 1.0)

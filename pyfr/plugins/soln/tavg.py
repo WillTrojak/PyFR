@@ -229,9 +229,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, BackendMixin, TavgMixin,
     def _init_accumex(self, intg):
         self.tstart_acc = self.prevt = intg.tcurr
 
-        # Don't change tout_last if we are restarting past tstart
-        if self._started or self.tout_last is None:
-            self.tout_last = intg.tcurr
+        # Reset the output clock to when averaging actually begins
+        self.tout_last = intg.tcurr
 
         # Initialize host arrays for output processing
         nexprs = len(self.aexprs)
