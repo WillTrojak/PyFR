@@ -48,7 +48,7 @@ def format_s(delta):
 
 class ProgressBar:
     _blocks = ' ▏▎▍▌▋▊▉█'
-    _dispfmt = '{:7.1%} ▐{}▌ {:.{dps}f}/{:.{dps}f} ela: {} rem: {}'
+    _dispfmt = '{:7.1%} [{}] {:.{dps}f}/{:.{dps}f} ela: {} rem: {}'
 
     # Minimum time in seconds between updates
     _mindelta = 0.1
@@ -70,7 +70,6 @@ class ProgressBar:
         self.stend = end
 
         self._wstart = time.monotonic()
-        self._last_len = 0
         self._last_wallt = 0.0
         self.info = None
 
@@ -182,11 +181,10 @@ class ProgressBar:
         s = self._dispfmt.format(frac, bar, cu, en, wela, wrem, dps=self.dps)
 
         # Erase any existing bar and write the new bar
-        sys.stderr.write(f'\x1b[{self._last_len}D\x1b[0K{s}')
+        sys.stderr.write(f'\x1b[2K\x1b[G{self.prefix}{s}')
         sys.stderr.flush()
 
-        # Update the last bar length and render time
-        self._last_len = len(s) - len(bar) + n
+        # Update the last render time
         self._last_wallt = wallt
 
 
@@ -232,19 +230,19 @@ class ProgressSpinner:
     # Minimum time in seconds between updates
     _mindelta = 0.08
 
-    def __init__(self, n=8):
+    def __init__(self, n=8, prefix=''):
+        self._prefix = prefix
+
         # Spinner character sequence
-        seq = [f'▐{" "*i}●{" "*(n - i - 1)}▌' for i in range(n)]
+        seq = [f'[{" "*i}●{" "*(n - i - 1)}]' for i in range(n)]
         self._schar_cycle = it.cycle(seq + seq[-2:0:-1])
 
         self._last_wallt = 0
-        self._last_nchar = 0
 
         self()
 
     def erase(self):
-        if self._last_nchar:
-            sys.stderr.write(f'\x1b[{self._last_nchar}D\x1b[0K')
+        sys.stderr.write('\x1b[2K\x1b[G')
 
     def __call__(self, v=None):
         wallt = time.monotonic()
@@ -261,12 +259,11 @@ class ProgressSpinner:
             c = f'{c} {v}'
 
         self.erase()
-        sys.stderr.write(c)
+        sys.stderr.write(f'{self._prefix}{c}')
         sys.stderr.flush()
 
-        # Update the last render time and output character
+        # Update the last render time
         self._last_wallt = wallt
-        self._last_nchar = len(c)
 
     def wrap_file_lines(self, iter, n):
         nb = 0
@@ -334,9 +331,7 @@ class ProgressSequence:
     def start_with_spinner(self, phase):
         prefix, tstart = self._start_phase(phase)
 
-        sys.stderr.write(prefix)
-
-        yield ProgressSpinner()
+        yield ProgressSpinner(prefix=prefix)
 
         self._finish_phase(phase, prefix, tstart)
 
