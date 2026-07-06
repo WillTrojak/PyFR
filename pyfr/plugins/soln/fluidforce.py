@@ -145,8 +145,9 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
                 rfpts_mat = None
 
             self._efaces.append({
-                'idx': self._etype_map[etype], 'eidxs': eidxs, 'm0': m0,
+                'idx': self._etype_map[etype], 'eidxs': eidxs,
                 'nupts': nupts, 'nfpts': nfpts,
+                'm0': backend.const_matrix(m0, tags={'align'}),
                 'wnorms': backend.const_matrix(wnorms, tags={'align'}),
                 'rfpts': rfpts_mat,
                 'pf': backend.matrix((self._nout, neles), tags={'align'})
@@ -164,7 +165,7 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
                 'ndims': self.ndims, 'nvars': self.nvars, 'nupts': nupts,
                 'nfpts': nfpts, 'nout': self._nout, 'viscous': self._viscous,
                 'visc_corr': self._viscorr, 'mcomp': self._mcomp,
-                'c': self._constants, 'm0': ef['m0']
+                'c': self._constants
             }
 
             # Solution view into scal_upts[uidx]
@@ -180,7 +181,8 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
 
             kerns.append(self.backend.pointwise.fluidforce(
                 tplargs=tplargs, dims=[len(eidxs)], u=u, gradu=gradu,
-                wnorms=ef['wnorms'], rfpts=ef['rfpts'], pf=ef['pf']
+                m0=ef['m0'], wnorms=ef['wnorms'], rfpts=ef['rfpts'],
+                pf=ef['pf']
             ))
 
         return kerns

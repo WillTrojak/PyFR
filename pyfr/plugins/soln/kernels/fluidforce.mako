@@ -4,32 +4,35 @@
 <%pyfr:kernel name='fluidforce' ndim='1'
               u='in view fpdtype_t[${str(nupts)}][${str(nvars)}]'
               gradu='in view fpdtype_t[${str(ndims*nupts)}][${str(nvars)}]'
+              m0='in broadcast fpdtype_t[${str(nfpts)}][${str(nupts)}]'
               wnorms='in fpdtype_t[${str(nfpts)}][${str(ndims)}]'
               rfpts='in fpdtype_t[${str(nfpts)}][${str(ndims)}]'
               pf='out fpdtype_t[${str(nout)}]'>
     fpdtype_t pf_acc[${nout}] = {};
 
-% for fpt in range(nfpts):
+    for (int fpt = 0; fpt < ${nfpts}; fpt++)
     {
-        // Interpolate conservative solution to fpt ${fpt}
+        // Interpolate conservative solution to this face point
         fpdtype_t ufpt[${nvars}] = {};
+        for (int k = 0; k < ${nupts}; k++)
+        {
+            fpdtype_t w = m0[fpt][k];
+        % for v in range(nvars):
+            ufpt[${v}] += w*u[k][${v}];
+        % endfor
+        }
     % if viscous:
         fpdtype_t dufpt[${ndims}][${nvars}] = {};
-    % endif
-    % for upt, w in enumerate(m0[fpt]):
-    % if w:
+        % for dd in range(ndims):
+        for (int k = 0; k < ${nupts}; k++)
         {
+            fpdtype_t w = m0[fpt][k];
         % for v in range(nvars):
-            ufpt[${v}] += ${w}*u[${upt}][${v}];
+            dufpt[${dd}][${v}] += w*gradu[${dd*nupts} + k][${v}];
         % endfor
-    % if viscous:
-        % for dd, v in pyfr.ndrange(ndims, nvars):
-            dufpt[${dd}][${v}] += ${w}*gradu[${dd*nupts + upt}][${v}];
-        % endfor
-    % endif
         }
+        % endfor
     % endif
-    % endfor
 
         // Compute pressure
         fpdtype_t invrho = 1.0/ufpt[0];
@@ -42,20 +45,20 @@
     % endif
     % for d in range(ndims):
     % if mcomp:
-        pf_acc[${d}] += fp[${d}] = p*wnorms[${fpt}][${d}];
+        pf_acc[${d}] += fp[${d}] = p*wnorms[fpt][${d}];
     % else:
-        pf_acc[${d}] += p*wnorms[${fpt}][${d}];
+        pf_acc[${d}] += p*wnorms[fpt][${d}];
     % endif
     % endfor
 
     % if mcomp:
         // Pressure moment: r x F_p
     % if ndims == 3:
-        pf_acc[${ndims}] += rfpts[${fpt}][1]*fp[2] - rfpts[${fpt}][2]*fp[1];
-        pf_acc[${ndims + 1}] += rfpts[${fpt}][2]*fp[0] - rfpts[${fpt}][0]*fp[2];
-        pf_acc[${ndims + 2}] += rfpts[${fpt}][0]*fp[1] - rfpts[${fpt}][1]*fp[0];
+        pf_acc[${ndims}] += rfpts[fpt][1]*fp[2] - rfpts[fpt][2]*fp[1];
+        pf_acc[${ndims + 1}] += rfpts[fpt][2]*fp[0] - rfpts[fpt][0]*fp[2];
+        pf_acc[${ndims + 2}] += rfpts[fpt][0]*fp[1] - rfpts[fpt][1]*fp[0];
     % else:
-        pf_acc[${ndims}] += rfpts[${fpt}][0]*fp[1] - rfpts[${fpt}][1]*fp[0];
+        pf_acc[${ndims}] += rfpts[fpt][0]*fp[1] - rfpts[fpt][1]*fp[0];
     % endif
     % endif
 
@@ -96,7 +99,7 @@
 %>\
             fpdtype_t tau${k} = -mu_c*invrho*(dv${d}_d${k} + dv${k}_d${d})${bulk};
         % endfor
-            fpdtype_t vf = ${pyfr.dot('tau{k}', f'wnorms[{fpt}][{{k}}]', k=ndims)};
+            fpdtype_t vf = ${pyfr.dot('tau{k}', 'wnorms[fpt][{k}]', k=ndims)};
             pf_acc[${ndims + mcomp + d}] += vf;
         % if mcomp:
             fv[${d}] = vf;
@@ -107,16 +110,15 @@
     % if mcomp:
         // Viscous moment: r x F_v
     % if ndims == 3:
-        pf_acc[${2*ndims + mcomp}] += rfpts[${fpt}][1]*fv[2] - rfpts[${fpt}][2]*fv[1];
-        pf_acc[${2*ndims + mcomp + 1}] += rfpts[${fpt}][2]*fv[0] - rfpts[${fpt}][0]*fv[2];
-        pf_acc[${2*ndims + mcomp + 2}] += rfpts[${fpt}][0]*fv[1] - rfpts[${fpt}][1]*fv[0];
+        pf_acc[${2*ndims + mcomp}] += rfpts[fpt][1]*fv[2] - rfpts[fpt][2]*fv[1];
+        pf_acc[${2*ndims + mcomp + 1}] += rfpts[fpt][2]*fv[0] - rfpts[fpt][0]*fv[2];
+        pf_acc[${2*ndims + mcomp + 2}] += rfpts[fpt][0]*fv[1] - rfpts[fpt][1]*fv[0];
     % else:
-        pf_acc[${2*ndims + mcomp}] += rfpts[${fpt}][0]*fv[1] - rfpts[${fpt}][1]*fv[0];
+        pf_acc[${2*ndims + mcomp}] += rfpts[fpt][0]*fv[1] - rfpts[fpt][1]*fv[0];
     % endif
     % endif
     % endif
     }
-% endfor
 
     // Write per-element contributions
 % for i in range(nout):
