@@ -13,18 +13,24 @@ class EntropyFilter:
         backend.pointwise.register(f'{kprefix}.entropylocal')
         backend.pointwise.register(f'{kprefix}.entropyfilter')
 
+        # Owned extents for the entropy-filter buffers (self-committed)
+        self._entmin_ext = backend.extent()
+        self._ef_ext = backend.extent()
+
         # Per-element-type setup
         self._entmin = {}
         for etype, eles in system.ele_map.items():
             if eles.basis.order > 0:
-                self._setup_etype(etype, eles, cfg, system.nonce)
+                self._setup_etype(etype, eles, cfg)
 
-        backend.commit()
+        # Commit the entropy buffers so interface views can be built
+        backend.commit_extent(self._entmin_ext)
+        backend.commit_extent(self._ef_ext)
 
         # Create interface views and register comm_entropy kernels
         self._setup_interfaces(system, int_inters, mpi_inters, bc_inters)
 
-    def _setup_etype(self, etype, eles, cfg, nonce):
+    def _setup_etype(self, etype, eles, cfg):
         be = self._be
         nfaces = len(eles.nfacefpts)
         neles = eles.neles
@@ -33,14 +39,12 @@ class EntropyFilter:
         entmin_int = np.full((nfaces, neles), -be.fpdtype_max,
                              dtype=be.fpdtype)
         entmin = be.matrix((nfaces, neles), tags={'align'},
-                            extent=nonce + 'entmin_int',
+                            extent=self._entmin_ext,
                             initval=entmin_int)
         self._entmin[etype] = entmin
 
         # Allocate space for filter strength (1 = no filter, 0 = max)
-        ef_filter = be.matrix((1, neles),
-                               extent=nonce + 'ef_filter',
-                               tags={'align'})
+        ef_filter = be.matrix((1, neles), extent=self._ef_ext, tags={'align'})
 
         # Register exportable field for filter strength
         eles.export_fields.append(ExportableField(

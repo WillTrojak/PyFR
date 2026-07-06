@@ -21,7 +21,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             )
 
             # Commit to allocate AV matrices before creating views
-            self.backend.commit()
+            self.backend.commit_extent(self._av._fpts_ext)
 
             # Create artvisc_fpts views on interfaces for comm_flux
             artvisc_fpts = {et: e.artvisc_fpts

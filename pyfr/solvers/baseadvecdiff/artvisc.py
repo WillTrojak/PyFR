@@ -28,11 +28,16 @@ class ArtificialViscosity:
         self._be = backend
         self._mesh = mesh
 
+        # Owned extents for the AV buffers (self-committed, not global)
+        self._vtx_ext = backend.extent()
+        self._fpts_ext = backend.extent()
+
         # Allocate vertex buffer
-        self._vtx_buf = backend.matrix((1, len(mesh.node_idxs)), extent='vtx')
+        self._vtx_buf = backend.matrix((1, len(mesh.node_idxs)),
+                                       extent=self._vtx_ext)
 
         # Commit to give vtx_buf basedata (needed for view creation)
-        backend.commit()
+        backend.commit_extent(self._vtx_ext)
 
         # Register kernel templates
         kprefix = 'pyfr.solvers.baseadvecdiff.kernels'
@@ -63,7 +68,7 @@ class ArtificialViscosity:
         # Allocate artvisc at fpts (populated by avfill kernel)
         artvisc_fpts = be.matrix(
             (eles.nfpts, eles.neles), tags={'align'},
-            extent='artvisc_fpts'
+            extent=self._fpts_ext
         )
         eles.artvisc_fpts = artvisc_fpts
 

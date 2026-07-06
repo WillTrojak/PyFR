@@ -75,6 +75,9 @@ class BaseBackend:
     def get_extent(self, name):
         return self._extents[name]
 
+    def extent(self):
+        return Extent(self.alignb)
+
     @cached_property
     def lookup(self):
         pkg = f'pyfr.backends.{self.name}.kernels'
@@ -96,21 +99,22 @@ class BaseBackend:
             case None:
                 ext = Extent(self.alignb)
                 ext.reserve(obj)
-                ext.commit(self._malloc_checked)
-                self._track_extent(ext)
+                self.commit_extent(ext)
             case str() as name:
-                ext = self._extents.setdefault(name, Extent(self.alignb, name))
+                ext = self._extents.setdefault(name, Extent(self.alignb))
                 ext.reserve(obj)
-            case _AliasGroup() as group:
-                group.reserve(obj)
-            case storage:
-                obj.bind(storage.storage_root, storage.basedata,
-                         storage.offset)
+            case Extent() | _AliasGroup() as ext:
+                ext.reserve(obj)
+            case _:
+                raise ValueError(f'Invalid extent: {extent!r}')
+
+    def commit_extent(self, ext):
+        ext.commit(self._malloc_checked)
+        self._track_extent(ext)
 
     def commit(self):
         for ext in self._extents.values():
-            ext.commit(self._malloc_checked)
-            self._track_extent(ext)
+            self.commit_extent(ext)
         self._extents.clear()
 
     def _malloc_checked(self, nbytes):

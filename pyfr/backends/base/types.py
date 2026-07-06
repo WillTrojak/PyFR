@@ -20,7 +20,7 @@ class _StorageBase:
         self.onalloc(basedata, offset)
 
 
-class _AliasGroup:
+class _Arena:
     def __init__(self, alignb):
         self.alignb = alignb
         self.nbytes = 0
@@ -32,21 +32,16 @@ class _AliasGroup:
         self.nbytes += nbytes
 
 
-class Extent(_StorageBase):
-    def __init__(self, alignb, name=None):
-        self.alignb = alignb
-        self.name = name
-        self.offset = 0
-        self.nbytes = 0
+class _AliasGroup(_Arena):
+    pass
+
+
+class Extent(_Arena, _StorageBase):
+    def __init__(self, alignb):
+        super().__init__(alignb)
         self.basedata = None
-        self._pending = []
         self._alias_groups = []
         self._storage_root = self
-
-    def reserve(self, obj):
-        nbytes = obj.nbytes - obj.nbytes % -self.alignb
-        self._pending.append((obj, self.nbytes))
-        self.nbytes += nbytes
 
     def alias_group(self):
         g = _AliasGroup(self.alignb)
