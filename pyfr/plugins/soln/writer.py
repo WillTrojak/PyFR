@@ -152,6 +152,6 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         self._do_write(intg)
 
     def finalise(self, intg):
-        super().finalise(intg)
-
         self._writer.flush()
+
+        super().finalise(intg)

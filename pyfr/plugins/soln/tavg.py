@@ -418,6 +418,6 @@ class TavgPlugin(PostactionMixin, RegionMixin, BackendMixin, TavgMixin,
                     dst[i][:] = src.get().transpose(1, 0, 2)
 
     def finalise(self, intg):
-        super().finalise(intg)
-
         self._writer.flush()
+
+        super().finalise(intg)
