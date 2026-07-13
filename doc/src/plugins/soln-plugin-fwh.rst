@@ -2,8 +2,13 @@
 [soln-plugin-fwh]
 *****************
 
-Use Ffowcs Williams--Hawkings equation to approximate far field noise in
-a uniformly moving medium:
+Use the Ffowcs Williams--Hawkings equation to approximate the far
+field noise generated within a uniformly moving medium.  The
+formulation is a convective time-domain one which evaluates all
+surface sources at a common emission time; as such it assumes the
+integration surface is acoustically compact.  Note that in two
+dimensions the three dimensional free-space Green's function is
+employed as an approximation.
 
 #. ``dt`` --- time step between samples:
 
@@ -18,13 +23,13 @@ a uniformly moving medium:
 
     *boolean*
 
-#. ``surface`` --- a region the surface of which is saple for the FWH
-   sovler, only use a combination of the geometric shapes specified in
-   :ref:`user_guide:regions`:
+#. ``surface`` --- a region the surface of which is sampled for the
+   FWH solver; either a boundary as ``bc/name`` or a combination of
+   the geometric shapes specified in :ref:`user_guide:regions`:
 
-   ``shape(args, ...)``
+   ``bc/name`` | ``shape(args, ...)``
 
-#. ``quad-deg`` --- degree of surface quadrature rule (optional):
+#. ``quad-deg`` --- degree of surface quadrature rule:
 
     *int*
 
@@ -32,14 +37,15 @@ a uniformly moving medium:
 
     *string*
 
-#. ``observer-pts`` --- the obversation point in the far field at which
-   noise is approximated:
+#. ``observer-pts`` --- the observation points in the far field at
+   which noise is approximated; these may not lie on the surface
+   itself:
 
    ``[(x, y), (x, y), ...]`` | ``[(x, y, z), (x, y, z), ...]``
 
-#. ``rho, u, v, (w), p, (c)`` --- the constant far field properties of
-   the flow. For incompressible calculations the sound speed ``c`` and
-   the dnsity ``rho`` must be given:
+#. ``rho, u, v, (w), p`` --- the constant far field properties of the
+   flow, with the far field sound speed following from the ideal gas
+   law:
 
     *float*
 
@@ -50,7 +56,8 @@ Example:
     [soln-plugin-fwh]
     file = fwh.csv
     file-header = true
-    region = box((1, -5), (10, 5))
+    surface = box((1, -5), (10, 5))
+    quad-deg = 6
     dt = 1e-2
     observer-pts = [(1, 10), (1, 30), (1, 100), (1, 300)]
 

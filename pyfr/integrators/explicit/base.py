@@ -57,7 +57,8 @@ class BaseExplicitIntegrator(BaseIntegrator):
         soln = [np.require(s, requirements='O') for s in self.soln]
 
         self.system.rhs(self.tcurr, self.idxcurr, self.idxcurr)
-        dt_soln = [np.require(s, requirements='O') for s in self.soln]
+        dt_soln = [np.require(s, requirements='O')
+                   for s in self.system.ele_scal_upts(self.idxcurr)]
 
         # Reset current register with original contents
         for e, s in zip(self.system.ele_banks, soln):

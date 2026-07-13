@@ -47,6 +47,10 @@ class FWHIntegrator(SurfaceIntegrator):
 
         r_o = self.obsv_pts[None] - surf_pts[:, None]
         d = np.linalg.norm(r_o, axis=-1)
+
+        if d.min() < 1e-8*d.max():
+            raise ValueError('FWH observer point lies on the surface')
+
         r_o_hat = r_o / d[..., None]
 
         m_r = r_o_hat @ self.qinf['M']
@@ -75,14 +79,16 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
 
         self.elementscls = intg.system.elementscls
 
-        self.t_last = -np.inf
         self.dt = self.cfg.getfloat(cfgsect, 'dt')
         obsv_pts = np.array(self.cfg.getliteral(self.cfgsect, 'observer-pts'))
         self.nobvs = len(obsv_pts)
 
+        # Skip the restart time itself; it was sampled by the previous run
+        self.t_last = intg.tcurr if intg.isrestart else -np.inf
+
         # Initialise data file
         if rank == root:
-            header = ','.join(['t', 'x', 'y', 'z'][:self.ndims + 1] + ['mag'])
+            header = ','.join(['t', 'x', 'y', 'z'][:self.ndims + 1] + ['p'])
             self.csv = init_csv(self.cfg, cfgsect, header, nflush=self.nobvs)
 
         # Far field conditions
@@ -109,10 +115,10 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
         self.fwh_int = FWHIntegrator(self.cfg, cfgsect, self.ndims, obsv_pts,
                                      qinf, ele_map, con)
 
-        # Get boundary type info
+        # Solid boundary surfaces require the wall boundary treatment
         sname = self.cfg.get(cfgsect, 'surface')
-        if '(' not in sname:
-            self.bctype = self.cfg.get(f'soln-bcs-{sname}', 'type')
+        if sname.startswith('bc/'):
+            self.bctype = self.cfg.get(f'soln-bcs-{sname[3:]}', 'type')
         else:
             self.bctype = None
 
