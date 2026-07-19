@@ -39,12 +39,13 @@ class AndersonSolver(BaseNonlinearSolver):
         def precond(in_reg, out_reg):
             self._apply_precond(in_reg, out_reg, out_scale=self._inv_scales)
 
-        self._compute_fd_eps(u_reg)
-        initial_guess_fn(u_reg)
+        rnorm = rnorm0 = initial_guess_fn(u_reg)
+        if not math.isfinite(rnorm):
+            raise NonlinearDivergenceError('Non-finite residual')
 
-        nrhs = nprec = 0
-        rnorm = rnorm0 = self._residual_norm(t, u_reg, f_reg, residual_fn)
-        nrhs += 1
+        self._compute_fd_eps(u_reg)
+
+        nrhs, nprec = 1, 0
         tol = max(rnorm*self._nl_rtol, self._nl_atol)
 
         # Build the block preconditioner once and freeze it over the stage

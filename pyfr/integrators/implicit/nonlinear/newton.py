@@ -29,10 +29,9 @@ class NewtonSolver(BaseNonlinearSolver):
                               v, result)
 
         # Pick an initial starting guess
-        initial_guess_fn(u_reg)
+        rnorm = initial_guess_fn(u_reg)
 
         krylov_total = precond_total = 0
-        rnorm = None
 
         for i in range(self._nl_maxiter):
             # Ensure we have a valid (scaled) residual norm
@@ -53,6 +52,9 @@ class NewtonSolver(BaseNonlinearSolver):
             # After we've done at least one step check for converge
             elif rnorm < tol:
                 break
+
+            # Choose a suitable finite difference perturbation
+            self._compute_fd_eps(u_reg)
 
             # Compute the preconditioner
             self._compute_precond(t, u_reg, gamma_dt, self._rhs, f_reg,
@@ -96,9 +98,6 @@ class NewtonSolver(BaseNonlinearSolver):
                                     out_scale=self._inv_scales)
         else:
             precond = None
-
-        # Choose a suitable finite difference perturbation
-        self._compute_fd_eps(u_reg)
 
         for i in range(self._tol_controller.max_retries + 1):
             pc_built_before_retry = self._precond_computed
