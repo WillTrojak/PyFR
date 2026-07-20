@@ -1,6 +1,10 @@
 from weakref import finalize
 
-from gimmik import CUDAMatMul, PTXMatMul
+from gimmik import CUDAMatMul
+try:
+    from gimmik import PTXMatMul
+except ImportError:
+    PTXMatMul = None
 import numpy as np
 
 from pyfr.backends.base import NotSuitableError
@@ -26,7 +30,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         # GPU Properties used in generator
         self.cc = self.backend.cuda.compute_capability()
-        self.smem_info = self.backend.cuda.smem_info()
+        self.smem_max = self.backend.cuda.smem_info()
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         # Ensure the matrices are compatible
@@ -50,7 +54,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         ckey = (a.mid, alpha, beta, aligne, ldb, ldc)
 
         try:
-            kern, grid, block, dshared, tm, dt = self._mul_kerns[ckey]
+            kern, grid, block, tm, dt = self._mul_kerns[ckey]
         except KeyError:
             # Fetch the matrix, premultiply, and optionally trim
             arr = alpha*a.get()
@@ -64,7 +68,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                 aligne = None
 
             # Pick MM generator
-            if PTXMatMul.is_suitable(arr, self.cc):
+            if PTXMatMul and PTXMatMul.is_suitable(arr, self.cc):
                 kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}_ptx'
                 MMClass = PTXMatMul
             elif CUDAMatMul.is_suitable(arr):
@@ -77,21 +81,21 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             out_np = getattr(out, 'parent', out).get()
 
             # Generate and pick best kernel
-            mm = MMClass(arr, beta=beta, aligne=aligne, n=b.ncol, ldb=b.leaddim,
-                         ldc=out.leaddim)
+            mm = MMClass(arr, beta=beta, aligne=aligne, n=b.ncol,
+                         ldb=b.leaddim, ldc=out.leaddim)
             kgen = mm.kernels(arr.dtype, kname=kname,
                               compute_capability=self.cc,
-                              smem_info=self.smem_info)
+                              smem_max=self.smem_max)
             self._mul_kerns[ckey] = self._mul(kname, kgen, arr.dtype, b, out)
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
-            kern, grid, block, dshared, tm, dt = self._mul_kerns[ckey]
+            kern, grid, block, tm, dt = self._mul_kerns[ckey]
 
             # Restore the output matrix
             getattr(out, 'parent', out).set(out_np)
 
         # Set the parameters
-        params = kern.make_params(grid, block, dshared)
+        params = kern.make_params(grid, block, 0)
 
         # Set the input args using tensormaps if needed
         b_args = CUDAGiMMiKKernels._arg_pointer(b, tm.get('b_tile'))
@@ -109,7 +113,6 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         return MulKernel(mats=[a, b, out], dt=dt)
 
     def _mul(self, kname, kgen, dtype, b, out):
-        static_max = self.smem_info[0]
         ifac = self.backend.autotune_ifac
         kdata = None
         best_kern = None
@@ -124,14 +127,8 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                 if kern.local_mem and not kern.shared_mem:
                     kern.set_shared_size(carveout=0)
 
-                # If the kernel needs more than static max of shared memory
-                sharedb = meta.get('dynamic_shared', 0)
-                if sharedb > static_max:
-                    kern.set_shared_size(dynm_shared=sharedb)
-
                 # Set the parameters
-                params = kern.make_params(meta['grid'], meta['block'],
-                                          sharedb)
+                params = kern.make_params(meta['grid'], meta['block'], 0)
 
                 # Setup input args using tensor maps if required
                 tm = {
@@ -150,8 +147,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                 )
 
                 if best_kern is None or dt < ifac*best_kern[-1]:
-                    best_kern = (kern, meta['grid'], meta['block'], sharedb,
-                                 tm, dt)
+                    best_kern = (kern, meta['grid'], meta['block'], tm, dt)
 
                 kdata = {
                     'runtime': dt,

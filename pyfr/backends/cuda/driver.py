@@ -142,7 +142,6 @@ class CUDAWrappers(LibWrapper):
     MULTIPROCESSOR_COUNT = 16
 
     # Driver Attribute Enums
-    MAX_SHARED_MEMORY_PER_BLOCK = 8
     COMPUTE_CAPABILITY_MAJOR = 75
     COMPUTE_CAPABILITY_MINOR = 76
     MAX_SHARED_MEMORY_PER_BLOCK_OPTIN = 97
@@ -575,14 +574,10 @@ class CUDA:
         return count.value
 
     def smem_info(self):
-        dev, lib = self.dev, self.lib
-
-        max_static, max_dynamic = c_int(), c_int()
-        lib.cuDeviceGetAttribute(max_static, lib.MAX_SHARED_MEMORY_PER_BLOCK,
-                                 dev)
-        lib.cuDeviceGetAttribute(max_dynamic,
-                                 lib.MAX_SHARED_MEMORY_PER_BLOCK_OPTIN, dev)
-        return max_static.value, max_dynamic.value
+        attr = self.lib.MAX_SHARED_MEMORY_PER_BLOCK_OPTIN
+        max_dynamic = c_int()
+        self.lib.cuDeviceGetAttribute(max_dynamic, attr, self.dev)
+        return max_dynamic.value
 
     def mem_info(self):
         free, total = c_size_t(), c_size_t()
