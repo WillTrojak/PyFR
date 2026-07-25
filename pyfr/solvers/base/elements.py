@@ -291,12 +291,12 @@ class BaseElements:
     def smat_at_np(self, name):
         smats_mpts, _ = self._smats_djacs_mpts
 
-        # Interpolation matrix to pts
+        # Interpolation operator from mpts to our pts
         pt = getattr(self.basis, name) if isinstance(name, str) else name
-        m0 = self.basis.mbasis.nodal_basis_at(pt)
+        op = self.basis.mbasis.nodal_basis_at(pt)
 
-        # Interpolate the smats
-        smats = np.array([m0 @ smat for smat in smats_mpts])
+        # Apply and reshape
+        smats = op @ smats_mpts
         return smats.reshape(self.ndims, -1, self.ndims, self.neles)
 
     @memoize
