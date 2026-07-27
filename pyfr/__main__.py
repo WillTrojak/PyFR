@@ -492,9 +492,10 @@ def process_export(args):
 
         writer = get_writer_by_name(args.ftype or 'vtk', args.etype,
                                     args.meshf, *kargs, **kwargs)
+        fields = writer.list_fields(args.solnf)
 
         if rank == root:
-            for f, n in writer.list_fields(args.solnf).items():
+            for f, n in fields.items():
                 print(f, n, sep='\t')
 
         return
