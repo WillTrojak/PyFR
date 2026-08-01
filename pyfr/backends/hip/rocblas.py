@@ -6,6 +6,7 @@ import numpy as np
 
 from pyfr.backends.hip.provider import HIPKernel, HIPKernelProvider
 from pyfr.ctypesutil import LibWrapper
+from pyfr.util import nogc
 
 
 # Possible RocBLAS exception types
@@ -177,6 +178,7 @@ class HIPRocBLASKernels(HIPKernelProvider):
             self._mul_cache[ckey] = algo, dt = best_kern
 
         class MulKernel(HIPKernel):
+            @nogc
             def add_to_graph(self, graph, deps):
                 # Capture the execution of rocBLAS to obtain a graph
                 cstream.begin_capture()

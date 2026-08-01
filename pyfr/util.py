@@ -1,4 +1,6 @@
 from ctypes import c_void_p
+import functools as ft
+import gc
 import hashlib
 import itertools as it
 import os
@@ -72,6 +74,21 @@ class silence:
 
         os.close(self.saved_fds[0])
         os.close(self.saved_fds[1])
+
+
+def nogc(fn):
+    @ft.wraps(fn)
+    def newfn(*args, **kwargs):
+        enabled = gc.isenabled()
+        gc.disable()
+
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            if enabled:
+                gc.enable()
+
+    return newfn
 
 
 def merge_intervals(ivals, tol=1e-5):

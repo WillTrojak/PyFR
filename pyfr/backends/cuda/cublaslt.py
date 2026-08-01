@@ -6,6 +6,7 @@ import numpy as np
 
 from pyfr.backends.cuda.provider import CUDAKernel, CUDAKernelProvider
 from pyfr.ctypesutil import LibWrapper
+from pyfr.util import nogc
 
 
 # Possible CUBLASLt exception types
@@ -263,6 +264,7 @@ class CUDACUBLASLtKernels(CUDAKernelProvider):
         ws_ptr = cuda.mem_alloc(desc.ws_size) if desc.ws_size else None
 
         class MulKernel(CUDAKernel):
+            @nogc
             def add_to_graph(self, graph, deps):
                 stream = cuda.create_stream()
 
