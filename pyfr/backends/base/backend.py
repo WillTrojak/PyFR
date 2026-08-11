@@ -1,4 +1,4 @@
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from contextlib import contextmanager
 from functools import cached_property, wraps
 from itertools import count
@@ -11,6 +11,7 @@ from pyfr.backends.base.provider import NotSuitableError
 from pyfr.backends.base.makoutil import mfilttag
 from pyfr.backends.base.types import _AliasGroup, Extent
 from pyfr.template import DottedTemplateLookup
+from pyfr.util import digest
 
 
 MemoryInfo = namedtuple('MemoryInfo', ['current', 'peak', 'free', 'total'])
@@ -64,6 +65,9 @@ class BaseBackend:
         # Allocated matrices
         self.mats = WeakValueDictionary()
         self._mat_counter = count()
+
+        # Constant matrix deduplication candidates
+        self._const_cache = defaultdict(WeakSet)
 
         # Extents
         self._extents = {}
@@ -140,14 +144,18 @@ class BaseBackend:
     def const_matrix(self, initval, dtype=None, tags=set()):
         dtype = dtype or self.fpdtype
 
-        # See if we have previously allocated an identical matrix
-        for m in self.mats.values():
-            if (isinstance(m, self.const_matrix_cls) and
-                m.dtype == dtype and m.ioshape == initval.shape and
-                tags.issubset(m.tags) and (m.get() == initval).all()):
-                return m
+        # Hash the matrix
+        key = digest(np.dtype(dtype).str, np.ascontiguousarray(initval))
 
-        return self.const_matrix_cls(self, dtype, initval, tags)
+        # See if we have previously allocated an identical matrix
+        for m in self._const_cache[key]:
+            if tags.issubset(m.tags) and (m.get() == initval).all():
+                break
+        else:
+            m = self.const_matrix_cls(self, dtype, initval, tags)
+            self._const_cache[key].add(m)
+
+        return m
 
     @recordmat
     def matrix(self, ioshape, initval=None, extent=None, tags=set(),
