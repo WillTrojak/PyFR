@@ -26,41 +26,30 @@ static inline float bf16_to_f32(bf16 b)
 % if pyfr.npdtype_to_ctype(fpdtype) == 'double':
 #pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
 #pragma OPENCL EXTENSION cl_khr_int64_extended_atomics : enable
+<% itype, ftype, atomic = 'long', 'double', 'atom' %>
+% else:
+<% itype, ftype, atomic = 'int', 'float', 'atomic' %>
 % endif
-<% ut = 'uint' if pyfr.npdtype_to_ctype(fpdtype) == 'float' else 'ulong' %>
-<% fp = 'as_float' if ut == 'uint' else 'as_double' %>
-<% cmpxchg = 'atomic_cmpxchg' if ut == 'uint' else 'atom_cmpxchg' %>
 % for aspace in ['__global', '__local']:
 % for op, op_pos, op_neg in [('min', 'min', 'max'), ('max', 'max', 'min')]:
-% if pyfr.npdtype_to_ctype(fpdtype) == 'float':
 __attribute__((overloadable))
 void atomic_${op}_fpdtype(${aspace} fpdtype_t *addr, fpdtype_t val)
 {
     if (!signbit(val))
-        atomic_${op_pos}((${aspace} int *) addr, as_int(val));
+        ${atomic}_${op_pos}((volatile ${aspace} ${itype} *) addr, as_${itype}(val));
     else
-        atomic_${op_neg}((${aspace} uint *) addr, as_uint(val));
+        ${atomic}_${op_neg}((volatile ${aspace} u${itype} *) addr, as_u${itype}(val));
 }
-% else:
-__attribute__((overloadable))
-void atomic_${op}_fpdtype(${aspace} fpdtype_t *addr, fpdtype_t val)
-{
-    if (!signbit(val))
-        atom_${op_pos}((${aspace} long *) addr, as_long(val));
-    else
-        atom_${op_neg}((${aspace} ulong *) addr, as_ulong(val));
-}
-% endif
 % endfor
 __attribute__((overloadable))
 void atomic_sum_fpdtype(${aspace} fpdtype_t *addr, fpdtype_t val)
 {
-    ${ut} o = as_${ut}(*addr), e;
+    u${itype} o = as_u${itype}(*addr), e;
 
     do
     {
         e = o;
-        o = ${cmpxchg}((${aspace} ${ut} *) addr, e, as_${ut}(${fp}(e) + val));
+        o = ${atomic}_cmpxchg((volatile ${aspace} u${itype} *) addr, e, as_u${itype}(as_${ftype}(e) + val));
     } while (o != e);
 }
 % endfor
