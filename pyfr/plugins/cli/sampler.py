@@ -414,6 +414,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         locs = PointLocator(mesh).locate(pts)
 
         # Close the mesh file so it can be reopened for writing
+        comm.barrier()
         reader.close()
 
         # Have the root rank write the point and location data out
