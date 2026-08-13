@@ -11,6 +11,3 @@ derived mach
 # Isentropic Mach number from the total pressure
 derived isen-mach requires p-total
     sqrt((2/(gamma - 1))*(pow(p-total/p, (gamma - 1)/gamma) - 1))
-
-# Vorticity from the instantaneous velocity gradients
-derived vorticity = grad_v_x - grad_u_y

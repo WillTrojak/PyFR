@@ -41,3 +41,34 @@ derived yplus
 # Wall heat flux; positive into the wall
 derived q-wall
     -((mu/Pr)*(grad_cpT_x*norm_x + grad_cpT_y*norm_y))
+
+# Vorticity from the instantaneous velocity gradients
+derived vorticity = grad_v_x - grad_u_y
+
+# Velocity-gradient tensor invariants
+
+# Frobenius norm A^2 = A_ij A_ij
+derived-hidden agrad2
+    grad_u_x*grad_u_x + grad_u_y*grad_u_y + grad_v_x*grad_v_x +
+    grad_v_y*grad_v_y
+
+# First invariant P = -a_kk
+derived invp
+    -(grad_u_x + grad_v_y)
+
+# Second invariant Q = det(A) in 2D
+derived invq
+    grad_u_x*grad_v_y - grad_u_y*grad_v_x
+
+# Normalised dilatation a_kk/A, bounded by sqrt(2) in 2D
+derived invpb = -invp/sqrt(agrad2)
+
+# Bounded second invariant q = Q/A^2, bounded by 1/2
+derived invqb = invq/agrad2
+
+# Discriminant P^2 - 4Q; negative marks a swirling point
+derived invdisc = invp*invp - 4*invq
+
+# Enstrophy
+derived enst
+    (grad_v_x - grad_u_y)*(grad_v_x - grad_u_y)

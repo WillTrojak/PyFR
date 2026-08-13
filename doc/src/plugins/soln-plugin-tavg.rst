@@ -57,8 +57,9 @@ Time average quantities. Parameterised with
     *int*
 
 #. ``avg``-*name* --- expression to time average, written as a function
-   of the primitive variables and gradients thereof; multiple
-   expressions, each with their own *name*, may be specified:
+   of the primitive variables and gradients thereof, with gradients
+   requiring a system which computes them; multiple expressions, each
+   with their own *name*, may be specified:
 
     *string*
 

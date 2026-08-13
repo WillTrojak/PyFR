@@ -24,6 +24,9 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         # Decide if gradients should be written or not
         self._write_grads = self.cfg.getbool(cfgsect, 'write-gradients', False)
 
+        if self._write_grads and not intg.system.elementscls.has_grad_soln:
+            raise ValueError('Gradients are not defined for this system')
+
         # Decide if the residual du/dt should be written or not
         self._write_resid = self.cfg.getbool(cfgsect, 'write-resid', False)
 

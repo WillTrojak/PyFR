@@ -21,7 +21,9 @@ Parameterised with
 
     *string*
 
-#. ``write-gradients`` --- if to write out gradient data:
+#. ``write-gradients`` --- if to write out gradient data.  Only
+   available for systems which compute gradients, such as
+   Navier-Stokes:
 
     *bool*
 

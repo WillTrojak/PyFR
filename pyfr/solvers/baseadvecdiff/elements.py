@@ -3,6 +3,8 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseAdvectionDiffusionElements(BaseAdvectionElements):
+    has_grad_soln = True
+
     @property
     def _scratch_bufs(self):
         bufs = {'scal_fpts', 'vect_fpts', 'vect_upts'}

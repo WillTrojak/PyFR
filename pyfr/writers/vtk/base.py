@@ -231,6 +231,9 @@ class BaseVTKWriter(BaseWriter):
             # See if our solution contains gradient or residual data
             self._gradients = bool(self.soln.grad_data)
             self._resid = bool(self.soln.resid_data)
+
+            # Gradients are only defined for systems which compute them
+            self._can_grads = self.elementscls.has_grad_soln
         # Otherwise we're dealing with simple scalar data (e.g., tavg)
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal
@@ -238,7 +241,7 @@ class BaseVTKWriter(BaseWriter):
             self._soln_fields = list(self.soln.fields)
             self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
-            self._gradients = self._resid = False
+            self._gradients = self._resid = self._can_grads = False
 
         # Classify aux + register pp output fields
         self._build_extra_fields()
@@ -248,7 +251,7 @@ class BaseVTKWriter(BaseWriter):
             self._subset_fields(want)
 
         # Synthesise corrected gradients for files without stored ones
-        if self.dataprefix == 'soln' and not self._gradients:
+        if self._can_grads and not self._gradients:
             if (any(f.startswith('grad ') for f in want) or
                 self.pp_pipe.needs_grads):
                 self._synth_grads()
@@ -268,7 +271,7 @@ class BaseVTKWriter(BaseWriter):
     def _subset_fields(self, want):
         # Validate the request against everything the file can provide
         known = self._vtk_vars.keys() | self._extra_fields.keys()
-        if self._gradients or self.dataprefix == 'soln':
+        if self._gradients or self._can_grads:
             known |= {f'grad {v}' for v in self._vtk_vars}
         if self._resid:
             known |= {f'resid {v}' for v in self._vtk_vars}

@@ -52,8 +52,8 @@ u_\infty^2)`.  Boundary export only.  Requires gradient data.  Reads
 vorticity
 =========
 
-Vorticity vector (3D) or scalar (2D).  Requires gradient data.  No
-parameters required.
+Vorticity vector (3D) or scalar (2D) for Navier-Stokes systems.
+Requires gradient data.  No parameters required.
 
 yplus
 =====

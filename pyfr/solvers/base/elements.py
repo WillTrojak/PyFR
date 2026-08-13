@@ -35,6 +35,9 @@ def inters_map(meth):
 
 
 class BaseElements:
+    # If the solver computes corrected gradients of the solution
+    has_grad_soln = False
+
     @staticmethod
     def stats_tables(cfg):
         return []

@@ -68,6 +68,9 @@ class TavgPlugin(PostactionMixin, RegionMixin, BackendMixin, BaseSolnPlugin):
         self._has_grads = any(re.search(r'\bgrad_.+?_[xyz]\b', ex)
                               for ex in self.aexprs)
 
+        if self._has_grads and not self.elementscls.has_grad_soln:
+            raise ValueError('Gradients are not defined for this system')
+
         # Time averaging parameters
         self.dtout = self.cfg.getfloat(cfgsect, 'dt-out')
         self._accum_nsteps = self.nsteps
