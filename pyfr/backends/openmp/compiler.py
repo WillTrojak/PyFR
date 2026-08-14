@@ -4,9 +4,8 @@ import os
 from pathlib import Path
 import platform
 import shlex
+from subprocess import PIPE, STDOUT, run
 import tempfile
-
-from pytools.prefork import call_capture_output
 
 from pyfr.cache import ObjectCache
 from pyfr.ctypesutil import platform_libname
@@ -27,7 +26,7 @@ class OpenMPCompiler:
         self.proc = platform.processor()
 
         # Get the compiler version string
-        self.version = call_capture_output([self.cc, '-v'])[1]
+        self.version = run([self.cc, '-v'], stdout=PIPE, stderr=STDOUT).stdout
 
         # Auto-detect the architecture-specific tuning flag
         self.marchflag = self.cc_option(['-march=native', '-mcpu=native'])
@@ -59,10 +58,8 @@ class OpenMPCompiler:
                 (tmpdir / cname).write_bytes(src.encode())
 
                 # Invoke the compiler
-                call_capture_output(
-                    self.cc_cmd(cname, lname, fast_math=fast_math),
-                    cwd=tmpdir
-                )
+                run(self.cc_cmd(cname, lname, fast_math=fast_math),
+                    cwd=tmpdir, check=True)
 
                 # Add it to the cache and load it
                 mod = self._cache_set_and_loadlib(ckey, tmpdir / lname)
@@ -107,10 +104,10 @@ class OpenMPCompiler:
             # Iterate over the provided options
             for opt in opts:
                 # Attempt to compile the program
-                ret = call_capture_output(args + [opt], error_on_nonzero=False)
+                ret = run(args + [opt], capture_output=True)
 
                 # If status is 0 and stdout/stderr are empty then return
-                if not any(ret):
+                if not (ret.returncode or ret.stdout or ret.stderr):
                     return opt
 
         # All options failed

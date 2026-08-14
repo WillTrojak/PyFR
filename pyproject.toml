@@ -28,7 +28,6 @@ dependencies = [
     "mpi4py >= 4.0.0",
     "numpy >= 2.4.2",
     "platformdirs >= 2.2.0",
-    "pytools >= 2016.2.1",
     "rtree >= 1.4.1",
 ]
 

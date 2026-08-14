@@ -1,7 +1,7 @@
 import shlex
+import subprocess
 
 import numpy as np
-from pytools import prefork
 
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.common import (init_csv, init_hdf5_series, region_data,
@@ -101,7 +101,7 @@ class PostactionMixin:
         super().__init__(*args, **kwargs)
 
         self.postact = None
-        self.postactaid = None
+        self.postactproc = None
         self.postactmode = None
 
         if self.cfg.hasopt(self.cfgsect, 'post-action'):
@@ -115,8 +115,8 @@ class PostactionMixin:
     def finalise(self, intg):
         super().finalise(intg)
 
-        if getattr(self, 'postactaid', None) is not None:
-            prefork.wait(self.postactaid)
+        if getattr(self, 'postactproc', None) is not None:
+            self.postactproc.wait()
 
     def _invoke_postaction(self, intg, **kwargs):
         comm, rank, root = get_comm_rank_root()
@@ -124,18 +124,18 @@ class PostactionMixin:
         # If we have a post-action and are the root rank then fire it
         if rank == root and self.postact:
             # If a post-action is currently running then wait for it
-            if self.postactaid is not None:
-                prefork.wait(self.postactaid)
+            if self.postactproc is not None:
+                self.postactproc.wait()
 
             # Prepare the command line
             cmdline = shlex.split(self.postact.format_map(kwargs))
 
             # Invoke
             if self.postactmode == 'blocking':
-                if (status := prefork.call(cmdline)):
+                if (status := subprocess.call(cmdline)):
                     intg.plugin_abort(status)
             else:
-                self.postactaid = prefork.call_async(cmdline)
+                self.postactproc = subprocess.Popen(cmdline)
 
 
 class RegionMixin:

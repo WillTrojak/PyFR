@@ -14,12 +14,6 @@ def init_mpi():
     import mpi4py.rc
     from mpi4py import MPI
 
-    # Prefork to allow us to exec processes after MPI is initialised
-    if hasattr(os, 'fork'):
-        from pytools.prefork import enable_prefork
-
-        enable_prefork()
-
     # Manually initialise MPI with thread support
     MPI.Init_thread()
 
