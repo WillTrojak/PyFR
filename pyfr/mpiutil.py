@@ -301,7 +301,8 @@ class Scatterer(BaseGathererScatterer):
         self.cnt = len(ridx)
 
     def _prepare_sendbuf(self, dset, out):
-        np.take(dset[self.start:self.end], self.sidx, axis=0, out=out)
+        np.take(dset[self.start:self.end], self.sidx, axis=0, out=out,
+                mode='clip')
 
     def future(self, shape, dtype):
         return AlltoallFuture(self, len(self.sidx), self.cnt, shape, dtype,
@@ -336,7 +337,7 @@ class Gatherer(BaseGathererScatterer):
         self.off = self.off if comm.rank else 0
 
     def _prepare_sendbuf(self, dset, out):
-        np.take(dset, self.sinv, axis=0, out=out)
+        np.take(dset, self.sinv, axis=0, out=out, mode='clip')
 
     def future(self, shape, dtype):
         return AlltoallFuture(self, len(self.sinv), self.cnt, shape, dtype,
@@ -393,7 +394,8 @@ class SparseScatterer(AlltoallMixin):
         self.cnt = self.rcountdisps[0].sum()
 
     def _prepare_sendbuf(self, dset, out):
-        np.take(dset[self.start:self.end], self.sidx, axis=0, out=out)
+        np.take(dset[self.start:self.end], self.sidx, axis=0, out=out,
+                mode='clip')
 
     def future(self, shape, dtype):
         return AlltoallFuture(self, len(self.sidx), self.cnt, shape, dtype,

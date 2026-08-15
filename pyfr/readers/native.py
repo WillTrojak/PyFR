@@ -43,7 +43,6 @@ class Mesh:
     # Shared nodes for C0 continuous fields
     node_idxs: np.ndarray = None
     node_valency: np.ndarray = None
-    node_locs: np.ndarray = None
     shared_nodes: object = None
 
 
@@ -395,11 +394,10 @@ class NativeReader:
         # Read in these nodes
         nodes = self._read_with_idxs(self.f['nodes'], idxs.ravel())[0]
 
-        # Store unique node indices, valency, and locations for vertices
+        # Store unique node indices and valency for vertices
         unique_idxs, first_occ = np.unique(idxs, return_index=True)
         self.mesh.node_idxs = unique_idxs
         self.mesh.node_valency = nodes['valency'][first_occ]
-        self.mesh.node_locs = nodes['location'][first_occ]
 
         # Determine where each element type is in the nodes array
         eoffs = np.cumsum([en.size for en in enodes])
