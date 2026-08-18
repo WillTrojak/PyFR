@@ -379,9 +379,8 @@ class CUDAFunction(_CUDABase):
         attr = getattr(self.cuda.lib, f'FUNC_ATTR_{attr.upper()}')
         self.cuda.lib.cuFuncSetAttribute(self, attr, val)
 
-    def set_shared_size(self, *, dynm_shared=None, carveout=None):
-        if dynm_shared is not None:
-            self._set_attr('max_dynamic_shared_size_bytes', dynm_shared)
+    def set_shared_size(self, *, dynm_shared=0, carveout=None):
+        self._set_attr('max_dynamic_shared_size_bytes', dynm_shared)
 
         if carveout is not None:
             self._set_attr('preferred_shared_memory_carveout', carveout)
@@ -630,30 +629,29 @@ class CUDA:
     def create_graph(self):
         return CUDAGraph(self)
 
-    def set_tensormap(self, tm, a, dims, ld, tile, tile_stride=None,
+    def set_tensormap(self, tm, ptr, dims, ld, tile, dtype, tile_stride=None,
                       interleave=None, swizzle=None, l2_promotion=None,
                       oob_fill=None):
-        a_ptr = a.data
         tm_ptr = tm.ctypes.data
 
-        if a.dtype == np.float64:
-            dtype = self.lib.TENSOR_MAP_DATA_TYPE_FLOAT64
-        elif a.dtype == np.float32:
-            dtype = self.lib.TENSOR_MAP_DATA_TYPE_FLOAT32
+        if dtype == np.float64:
+            tm_dtype = self.lib.TENSOR_MAP_DATA_TYPE_FLOAT64
+        elif dtype == np.float32:
+            tm_dtype = self.lib.TENSOR_MAP_DATA_TYPE_FLOAT32
         else:
-            raise ValueError(f'Type {a.dtype} tensor map not supported')
+            raise ValueError(f'Type {dtype} tensor map not supported')
 
         ndims = len(dims)
         dims = (c_ulonglong*ndims)(*dims)
         ld = (c_ulonglong*(ndims - 1))(*ld)
-        tile = (c_uint * ndims)(*tile)
-        tile_stride = (c_uint * ndims)(*(tile_stride or [1]*ndims))
+        tile = (c_uint*ndims)(*tile)
+        tile_stride = (c_uint*ndims)(*(tile_stride or [1]*ndims))
 
         interleave = interleave or self.lib.TENSOR_MAP_INTERLEAVE_NONE
         swizzle = swizzle or self.lib.TENSOR_MAP_SWIZZLE_NONE
         l2_promotion = l2_promotion or self.lib.TENSOR_MAP_L2_PROMOTION_NONE
         oob_fill = oob_fill or self.lib.TENSOR_MAP_FLOAT_OOB_FILL_NONE
 
-        self.lib.cuTensorMapEncodeTiled(tm_ptr, dtype, ndims, a, dims, ld, tile,
-                                        tile_stride, interleave, swizzle,
+        self.lib.cuTensorMapEncodeTiled(tm_ptr, tm_dtype, ndims, ptr, dims, ld,
+                                        tile, tile_stride, interleave, swizzle,
                                         l2_promotion, oob_fill)

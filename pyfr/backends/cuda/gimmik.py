@@ -22,7 +22,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         self.nbench = backend.cfg.getint('backend-cuda', 'gimmik-nbench', 5)
 
         # Trim the lower 32 bits of fp64 A constants
-        self.f64trim = backend.cfg.getbool('backend-cuda', 'gimmik-trim-fp64',
+        self.f64trim = backend.cfg.getbool('backend-cuda', 'gimmik-trim-double',
                                            False)
 
         # Kernel cache
@@ -59,7 +59,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             # Fetch the matrix, premultiply, and optionally trim
             arr = alpha*a.get()
             if a.dtype == np.float64 and self.f64trim:
-                arr = self._trim_f64_low32(arr)
+                arr = self._trim_double_low32(arr)
 
             # Alignment
             if 'align' in b.tags and 'align' in out.tags:
@@ -98,9 +98,8 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         params = kern.make_params(grid, block, 0)
 
         # Set the input args using tensormaps if needed
-        b_args = CUDAGiMMiKKernels._arg_pointer(b, tm.get('b_tile'))
-        out_args = CUDAGiMMiKKernels._arg_pointer(out,
-                                                  tm.get('out_tile'))
+        b_args = self._arg_pointer(b, tm.get('b_tile'))
+        out_args = self._arg_pointer(out, tm.get('out_tile'))
         params.set_args(b_args, out_args)
 
         class MulKernel(CUDAKernel):
@@ -169,9 +168,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             return a
 
     @staticmethod
-    def _trim_f64_low32(x):
-        if x.dtype != np.float64:
-            raise ValueError("Trim low32 only support for float64")
+    def _trim_double_low32(x):
         a = np.asarray(x).copy()
         a.view(np.uint64)[...] &= 0xFFFFFFFF00000000
         return a

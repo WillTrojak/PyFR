@@ -17,9 +17,9 @@ class _CUDAMatrixCommon:
         dims = (self.ncol, self.nrow)
         ld = (self.leaddim * self.itemsize,)
         tm = self.backend.cuda.pagelocked_empty((128,), np.uint8)
-        self.backend.cuda.set_tensormap(tm, self, dims, ld, tile, (1, 1),
-                                        interleave, swizzle, l2_promotion,
-                                        oob_fill)
+        self.backend.cuda.set_tensormap(tm, self.data, dims, ld, tile,
+                                        self.dtype, (1, 1), interleave,
+                                        swizzle, l2_promotion, oob_fill)
         return tm
 
 
