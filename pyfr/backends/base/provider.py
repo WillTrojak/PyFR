@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import itertools as it
 import re
 import types
@@ -70,6 +71,37 @@ class BaseUnorderedMetaKernel(BaseMetaKernel):
 class BaseKernelProvider:
     def __init__(self, backend):
         self.backend = backend
+
+    def _bench_rand_block(self, nbytes):
+        # Generate up to 64 MiB of random data
+        n = min(nbytes, 2**26)
+        blk = np.random.default_rng(0).integers(0, 256, n, dtype=np.uint8)
+
+        # Ensure that the data can be interpreted as floating point values
+        blk[(blk & 0x7c) == 0x7c] &= 0x7b
+
+        return blk
+
+    @contextmanager
+    def _bench_data(self, save=[], rand=[]):
+        self.backend.wait()
+
+        # Resolve any slices to their parent matrices
+        mats = [getattr(m, 'parent', m) for m in [*save, *rand]]
+
+        # Save the operands
+        saved = [(m, self._bench_save(m)) for m in mats]
+
+        # Fill with random entries
+        for m in mats[len(save):]:
+            self._bench_fill_random(m)
+
+        try:
+            yield
+        finally:
+            # Restore the saved operands
+            for m, buf in saved:
+                self._bench_restore(m, buf)
 
 
 class BasePointwiseKernelProvider(BaseKernelProvider):

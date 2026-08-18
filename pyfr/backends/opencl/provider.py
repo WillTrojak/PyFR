@@ -1,3 +1,5 @@
+import numpy as np
+
 from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
                                 BasePointwiseKernelProvider,
                                 BaseUnorderedMetaKernel, Kernel)
@@ -53,6 +55,23 @@ class OpenCLKernelProvider(BaseKernelProvider):
         queue.finish()
 
         return (end_evt.end_time - start_evt.start_time) / nbench
+
+    def _bench_save(self, m):
+        buf = np.empty(m.nbytes, dtype=np.uint8)
+        self.backend.cl.memcpy(self.backend.cl.qdflt, buf, m.data, m.nbytes,
+                               blocking=True)
+        return buf
+
+    def _bench_restore(self, m, buf):
+        self.backend.cl.memcpy(self.backend.cl.qdflt, m.data, buf, m.nbytes,
+                               blocking=True)
+
+    def _bench_fill_random(self, m):
+        blk = self._bench_rand_block(m.nbytes)
+        for off in range(0, m.nbytes, blk.nbytes):
+            self.backend.cl.memcpy(self.backend.cl.qdflt, m.data, blk,
+                                   min(blk.nbytes, m.nbytes - off),
+                                   blocking=True, dstoff=off)
 
     @memoize
     def _build_program(self, src):

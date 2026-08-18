@@ -235,27 +235,22 @@ class CUDACUBLASLtKernels(CUDAKernelProvider):
                 self.nkerns, heurs, byref(nreturn)
             )
 
-            # Save a copy of the contents of the output matrix
-            out_np = getattr(out, 'parent', out).get()
-
-            # Benchmark the kernel
+            # Benchmark the kernels
             best_kern = None
-            for heur in heurs[:nreturn.value]:
-                desc = GEMMDesc(
-                    mm_desc, a_desc, b_desc, c_desc, heur.algo,
-                    heur.workspace_size
-                )
+            with self._bench_data(save=[out], rand=[b]):
+                for heur in heurs[:nreturn.value]:
+                    desc = GEMMDesc(
+                        mm_desc, a_desc, b_desc, c_desc, heur.algo,
+                        heur.workspace_size
+                    )
 
-                try:
-                    dt = self._benchmark(gemm)
-                except CUBLASLtStatusNotSupported:
-                    continue
+                    try:
+                        dt = self._benchmark(gemm)
+                    except CUBLASLtStatusNotSupported:
+                        continue
 
-                if best_kern is None or dt < ifac*best_kern[-1]:
-                    best_kern = desc, dt
-
-            # Restore the output matrix
-            getattr(out, 'parent', out).set(out_np)
+                    if best_kern is None or dt < ifac*best_kern[-1]:
+                        best_kern = desc, dt
 
             # Update the cache
             self._mul_cache[ckey] = desc, dt = best_kern

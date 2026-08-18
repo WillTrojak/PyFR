@@ -158,21 +158,16 @@ class HIPRocBLASKernels(HIPKernelProvider):
             else:
                 candidates = [None]
 
-            # Save a copy of the contents of the output matrix
-            out_np = getattr(out, 'parent', out).get()
-
             best_kern = None
-            for algo in candidates:
-                try:
-                    dt = self._benchmark(lambda s: gemm(s, algo))
-                    if best_kern is None or dt < ifac*best_kern[-1]:
-                        best_kern = algo, dt
-                # In the case of invalid values raised by rocblas
-                except RocBLASInvalidValue:
-                    pass
-
-            # Restore the output matrix
-            getattr(out, 'parent', out).set(out_np)
+            with self._bench_data(save=[out], rand=[b]):
+                for algo in candidates:
+                    try:
+                        dt = self._benchmark(lambda s: gemm(s, algo))
+                        if best_kern is None or dt < ifac*best_kern[-1]:
+                            best_kern = algo, dt
+                    # In the case of invalid values raised by rocblas
+                    except RocBLASInvalidValue:
+                        pass
 
             # Update the cache
             self._mul_cache[ckey] = algo, dt = best_kern

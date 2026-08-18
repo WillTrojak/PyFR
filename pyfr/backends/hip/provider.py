@@ -1,5 +1,7 @@
 from weakref import WeakKeyDictionary
 
+import numpy as np
+
 from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
                                 BasePointwiseKernelProvider,
                                 BaseUnorderedMetaKernel, Kernel)
@@ -61,6 +63,20 @@ class HIPKernelProvider(BaseKernelProvider):
         stream.synchronize()
 
         return stop_evt.elapsed_time(start_evt) / nbench
+
+    def _bench_save(self, m):
+        buf = np.empty(m.nbytes, dtype=np.uint8)
+        self.backend.hip.memcpy(buf, m.data, m.nbytes)
+        return buf
+
+    def _bench_restore(self, m, buf):
+        self.backend.hip.memcpy(m.data, buf, m.nbytes)
+
+    def _bench_fill_random(self, m):
+        blk = self._bench_rand_block(m.nbytes)
+        for off in range(0, m.nbytes, blk.nbytes):
+            self.backend.hip.memcpy(m.data + off, blk,
+                                    min(blk.nbytes, m.nbytes - off))
 
 
 class HIPPointwiseKernelProvider(HIPKernelProvider,
