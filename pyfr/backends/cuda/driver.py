@@ -1,6 +1,6 @@
-from ctypes import (POINTER, Structure, addressof, byref, create_string_buffer,
-                    c_char, c_char_p, c_float, c_int, c_size_t, c_uint,
-                    c_ulonglong, c_void_p)
+from ctypes import (POINTER, Structure, addressof, byref, cast,
+                    create_string_buffer, c_char, c_char_p, c_float, c_int,
+                    c_size_t, c_uint, c_ulonglong, c_void_p)
 from uuid import UUID
 
 import numpy as np
@@ -13,8 +13,10 @@ class CUDAError(Exception): pass
 class CUDAInvalidValue(CUDAError): pass
 class CUDAOutofMemory(CUDAError): pass
 class CUDANotInitalized(CUDAError): pass
+class CUDADeinitalized(CUDAError): pass
 class CUDANoDevice(CUDAError): pass
 class CUDAInvalidDevice(CUDAError): pass
+class CUDAInvalidContext(CUDAError): pass
 class CUDAECCUncorrectable(CUDAError): pass
 class CUDAErrorInvalidPTX(CUDAError): pass
 class CUDAErrorUnsupportedPTXVersion(CUDAError): pass
@@ -112,8 +114,10 @@ class CUDAWrappers(LibWrapper):
         1: CUDAInvalidValue,
         2: CUDAOutofMemory,
         3: CUDANotInitalized,
+        4: CUDADeinitalized,
         100: CUDANoDevice,
         101: CUDAInvalidDevice,
+        201: CUDAInvalidContext,
         214: CUDAECCUncorrectable,
         218: CUDAErrorInvalidPTX,
         222: CUDAErrorUnsupportedPTXVersion,
@@ -126,9 +130,7 @@ class CUDAWrappers(LibWrapper):
         '*': CUDAError
     }
 
-    # Constants
-    COMPUTE_CAPABILITY_MAJOR = 75
-    COMPUTE_CAPABILITY_MINOR = 76
+    # Driver Enums
     EVENT_DEFAULT = 0
     EVENT_DISABLE_TIMING = 2
     FUNC_ATTR_SHARED_SIZE_BYTES = 1
@@ -138,6 +140,19 @@ class CUDAWrappers(LibWrapper):
     FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
     MEMORYTYPE_UNIFIED = 4
     MULTIPROCESSOR_COUNT = 16
+
+    # Driver Attribute Enums
+    COMPUTE_CAPABILITY_MAJOR = 75
+    COMPUTE_CAPABILITY_MINOR = 76
+    MAX_SHARED_MEMORY_PER_BLOCK_OPTIN = 97
+
+    # Tensor Map Enums
+    TENSOR_MAP_DATA_TYPE_FLOAT32 = 7
+    TENSOR_MAP_DATA_TYPE_FLOAT64 = 8
+    TENSOR_MAP_INTERLEAVE_NONE = 0
+    TENSOR_MAP_SWIZZLE_NONE = 0
+    TENSOR_MAP_L2_PROMOTION_NONE = 0
+    TENSOR_MAP_FLOAT_OOB_FILL_NONE = 0
 
     # Functions
     _functions = [
@@ -202,6 +217,13 @@ class CUDAWrappers(LibWrapper):
          POINTER(CUDAKernelNodeParams)),
         (c_int, 'cuGraphExecDestroy', c_void_p),
         (c_int, 'cuGraphLaunch', c_void_p, c_void_p)
+    ]
+
+    _weak_functions = [
+        (c_int, 'cuTensorMapEncodeTiled',
+         c_void_p, c_int, c_uint, c_void_p, POINTER(c_ulonglong),
+         POINTER(c_ulonglong), POINTER(c_uint), POINTER(c_uint), c_int, c_int,
+         c_int, c_int)
     ]
 
     def _transname(self, name):
@@ -550,6 +572,12 @@ class CUDA:
                                       self.dev)
         return count.value
 
+    def smem_info(self):
+        attr = self.lib.MAX_SHARED_MEMORY_PER_BLOCK_OPTIN
+        max_dynamic = c_int()
+        self.lib.cuDeviceGetAttribute(max_dynamic, attr, self.dev)
+        return max_dynamic.value
+
     def mem_info(self):
         free, total = c_size_t(), c_size_t()
         self.lib.cuMemGetInfo(free, total)
@@ -600,3 +628,30 @@ class CUDA:
 
     def create_graph(self):
         return CUDAGraph(self)
+
+    def set_tensormap(self, tm, ptr, dims, ld, tile, dtype, tile_stride=None,
+                      interleave=None, swizzle=None, l2_promotion=None,
+                      oob_fill=None):
+        tm_ptr = tm.ctypes.data
+
+        if dtype == np.float64:
+            tm_dtype = self.lib.TENSOR_MAP_DATA_TYPE_FLOAT64
+        elif dtype == np.float32:
+            tm_dtype = self.lib.TENSOR_MAP_DATA_TYPE_FLOAT32
+        else:
+            raise ValueError(f'Type {dtype} tensor map not supported')
+
+        ndims = len(dims)
+        dims = (c_ulonglong*ndims)(*dims)
+        ld = (c_ulonglong*(ndims - 1))(*ld)
+        tile = (c_uint*ndims)(*tile)
+        tile_stride = (c_uint*ndims)(*(tile_stride or [1]*ndims))
+
+        interleave = interleave or self.lib.TENSOR_MAP_INTERLEAVE_NONE
+        swizzle = swizzle or self.lib.TENSOR_MAP_SWIZZLE_NONE
+        l2_promotion = l2_promotion or self.lib.TENSOR_MAP_L2_PROMOTION_NONE
+        oob_fill = oob_fill or self.lib.TENSOR_MAP_FLOAT_OOB_FILL_NONE
+
+        self.lib.cuTensorMapEncodeTiled(tm_ptr, tm_dtype, ndims, ptr, dims, ld,
+                                        tile, tile_stride, interleave, swizzle,
+                                        l2_promotion, oob_fill)

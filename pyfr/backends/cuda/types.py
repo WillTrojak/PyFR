@@ -3,12 +3,24 @@ from functools import cached_property
 import numpy as np
 
 import pyfr.backends.base as base
+from pyfr.cache import memoize
 
 
 class _CUDAMatrixCommon:
     @cached_property
     def _as_parameter_(self):
         return self.data
+
+    @memoize
+    def tensormap(self, tile, interleave=None, swizzle=None,
+                  l2_promotion=None, oob_fill=None):
+        dims = (self.ncol, self.nrow)
+        ld = (self.leaddim * self.itemsize,)
+        tm = self.backend.cuda.pagelocked_empty((128,), np.uint8)
+        self.backend.cuda.set_tensormap(tm, self.data, dims, ld, tile,
+                                        self.dtype, (1, 1), interleave,
+                                        swizzle, l2_promotion, oob_fill)
+        return tm
 
 
 class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
