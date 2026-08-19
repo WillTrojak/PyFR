@@ -97,17 +97,10 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
         return cnodes, svpts
 
-    def _itype_point_shapes(self, itype):
-        shapes = set()
-        for *_, finfo, _ in self._surface_info[itype]:
-            shapes.update(self._extra_point_shapes(finfo.etype))
-        return shapes
-
     def _prepare_pts(self, itype):
         vspts, vsoln, curved = [], [], []
         cellf, pointf = defaultdict(list), defaultdict(list)
 
-        pshapes = self._itype_point_shapes(itype)
         for mesh_op, soln_op, lin_op, finfo, idxs in self._surface_info[itype]:
             etype = finfo.etype
             spts = self.mesh.spts[etype][:, idxs]
@@ -124,24 +117,19 @@ class VTKBoundaryWriter(BaseVTKWriter):
             vsoln.append(face_vsoln)
             curved.append(self.mesh.spts_curved[etype][idxs])
 
-            # Extract aux fields
-            nupts = soln.shape[0]
-            for fname, arr in self.soln.aux.get(etype, {}).items():
-                data = arr[idxs]
-                shape = data.shape[1:]
-
-                if shape in pshapes:
-                    pshape = shape
-                elif shape[:-1] in pshapes:
-                    pshape = shape[:-1]
-                else:
-                    cellf[fname].append(data)
+            # Extract aux fields, taking their kind from the field table
+            aux = self.soln.aux.get(etype, {})
+            nlpts = lin_op.shape[1]
+            for f in self.fields_out:
+                if f.name not in aux:
                     continue
-
-                op = soln_op if pshape == (nupts,) else lin_op
-                pointf[fname].append(
-                    interp_pts(op, np.moveaxis(data, 0, 1))
-                )
+                elif f.kind == 'cell':
+                    cellf[f.name].append(aux[f.name][idxs])
+                else:
+                    data = np.moveaxis(aux[f.name][idxs], 0, 1)
+                    # At order 1 nupts == nlpts, so vertices win the tie
+                    op = lin_op if data.shape[0] == nlpts else soln_op
+                    pointf[f.name].append(interp_pts(op, data))
 
             soln_t = face_vsoln.transpose(1, 0, 2)
             ploc = face_vpts.transpose(2, 0, 1)
@@ -150,8 +138,8 @@ class VTKBoundaryWriter(BaseVTKWriter):
             for fname, arr in fields.items():
                 pointf[fname].append(arr)
 
-        # Concatenate extra fields
-        cellf = {k: np.hstack(v) for k, v in cellf.items()}
+        # Concatenate extra fields, cell data being indexed by element
+        cellf = {k: np.concatenate(v) for k, v in cellf.items()}
         pointf = {k: np.hstack(v) for k, v in pointf.items()}
 
         return (np.hstack(vspts), np.dstack(vsoln), np.hstack(curved), cellf,

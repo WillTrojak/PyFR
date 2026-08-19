@@ -91,21 +91,18 @@ class VTKVolumeWriter(BaseVTKWriter):
         if self.ndims == 2:
             vpts = np.pad(vpts, [(0, 0), (0, 0), (0, 1)], 'constant')
 
-        # Extract extra fields
-        nupts = soln.shape[0]
-        pshapes = self._extra_point_shapes(etype)
-        for fname, data in self.soln.aux.get(etype, {}).items():
-            shape = data.shape[1:]
-
-            if shape in pshapes:
-                pshape = shape
-            elif shape[:-1] in pshapes:
-                pshape = shape[:-1]
-            else:
-                cellf[fname] = data
+        # Extract extra fields, taking their kind from the field table
+        aux = self.soln.aux.get(etype, {})
+        nlpts = lin_vtu_op.shape[1]
+        for f in self.fields_out:
+            if f.name not in aux:
                 continue
-
-            op = soln_vtu_op if pshape == (nupts,) else lin_vtu_op
-            pointf[fname] = interp_pts(op, np.moveaxis(data, 0, 1))
+            elif f.kind == 'cell':
+                cellf[f.name] = aux[f.name]
+            else:
+                data = np.moveaxis(aux[f.name], 0, 1)
+                # At order 1 nupts == nlpts, so vertices win the tie
+                op = lin_vtu_op if data.shape[0] == nlpts else soln_vtu_op
+                pointf[f.name] = interp_pts(op, data)
 
         return vpts, vsoln, curved, cellf, pointf

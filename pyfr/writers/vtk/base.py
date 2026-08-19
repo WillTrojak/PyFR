@@ -4,16 +4,21 @@ from pathlib import Path
 import numpy as np
 
 from pyfr.cache import clear_memoize, memoize
-from pyfr.fields import FieldRecovery, con_block_to_pri
+from pyfr.fields import CleanToGrid, FieldRecovery, con_block_to_pri
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape, interp_pts
 from pyfr.subdiv import get_subdiv
-from pyfr.util import subclass_where
+from pyfr.util import first, subclass_where
 from pyfr.writers import BaseWriter
 from pyfr.writers.vtk.output import CleanToGridVTKOutput, DirectVTKOutput
 
 
-FieldMeta = namedtuple('FieldMeta', 'kind ncomps dtype')
+Field = namedtuple('Field', 'name vtkname kind ncomps dtype')
+
+
+def _extra_field(name, kind, ncomps, dtype):
+    vtkname = name.replace('-', ' ').title()
+    return Field(name, vtkname, kind, int(ncomps) or 1, dtype)
 
 
 class BaseVTKWriter(BaseWriter):
@@ -64,20 +69,37 @@ class BaseVTKWriter(BaseWriter):
         self._register_pp_fields()
 
     def _classify_aux_fields(self):
-        # Classify aux fields by shape
+        # Collect each aux field's shape and dtype for every element type
+        shapes, bases = defaultdict(dict), {}
         for etype, dt in self.soln.dtypes.items():
-            pshapes = self._extra_point_shapes(etype)
             for name in dt['aux'].names if 'aux' in dt.names else ():
-                shape, base = dt['aux'][name].shape, dt['aux'][name].base
+                shapes[name][etype] = dt['aux'][name].shape
+                bases[name] = dt['aux'][name].base
 
-                if shape in pshapes:
-                    meta = FieldMeta('point', 1, base)
-                elif shape[:-1] in pshapes:
-                    meta = FieldMeta('point', shape[-1], base)
-                else:
-                    meta = FieldMeta('cell', int(np.prod(shape) or 1), base)
+        for name, eshapes in shapes.items():
+            # VTK requires the array to be present on every piece
+            if len(eshapes) != len(self.soln.dtypes):
+                continue
 
-                self._extra_fields[name] = meta
+            base = bases[name]
+
+            # Floating point aux data tracks the output precision
+            if base.kind == 'f':
+                base = np.dtype(self.dtype)
+
+            # Nodal shapes track the element type, per-element ones do not
+            shape = first(eshapes.values())
+            if all(self._is_nodal(et, s) for et, s in eshapes.items()):
+                f = _extra_field(name, 'point', np.prod(shape[1:]), base)
+            elif len(set(eshapes.values())) == 1:
+                f = _extra_field(name, 'cell', np.prod(shape), base)
+            else:
+                continue
+
+            self._extra_fields[name] = f
+
+    def _is_nodal(self, etype, shape):
+        return shape[:1] in self._extra_point_shapes(etype)
 
     def _register_pp_fields(self):
         # Combine requested plugins with any defaults from the file itself
@@ -97,9 +119,10 @@ class BaseVTKWriter(BaseWriter):
         self.pp_pipe = self.source.pipeline(names, self.type, cfg, want,
                                             self.adapter_kind, provided)
 
+        dtype = np.dtype(self.dtype)
         for fname, varnames in self.pp_pipe.fields.items():
-            meta = FieldMeta('point', len(varnames), np.dtype(self.dtype))
-            self._extra_fields[fname] = meta
+            self._extra_fields[fname] = _extra_field(fname, 'point',
+                                                     len(varnames), dtype)
 
     def _postproc(self, soln_t, ploc, *extra):
         if self.pp_pipe.plugins:
@@ -156,8 +179,6 @@ class BaseVTKWriter(BaseWriter):
         return counts
 
     def _array_attrs(self):
-        vvars = self._vtk_vars
-
         # Floating point data type and size
         dtype = 'Float32' if self.dtype == np.float32 else 'Float64'
 
@@ -168,24 +189,10 @@ class BaseVTKWriter(BaseWriter):
         if self.output_curved:
             attrs.append(('Curved', 'UInt8', '1'))
 
-        cell_fields, point_fields = self._extra_field_lists()
+        fattrs = [(f.vtkname, self._vtk_dtype(f.dtype), str(f.ncomps))
+                  for f in self.fields_out]
 
-        # Extra fields as cell data
-        for fname in cell_fields:
-            adtype, _, acomps = self._field_info(fname)
-            attrs.append((fname.replace('-', ' ').title(), adtype,
-                          str(acomps)))
-
-        for fname, varnames in vvars.items():
-            attrs.append((fname.title(), dtype, str(len(varnames))))
-
-        # Extra fields as point data
-        for fname in point_fields:
-            adtype, _, acomps = self._field_info(fname)
-            attrs.append((fname.replace('-', ' ').title(), adtype,
-                          str(acomps)))
-
-        return attrs
+        return attrs + fattrs
 
     def _array_sizes(self, npts, ncells, nnodes):
         dsize = np.dtype(self.dtype).itemsize
@@ -196,19 +203,9 @@ class BaseVTKWriter(BaseWriter):
         if self.output_curved:
             sizes.append(ncells)
 
-        cell_fields, point_fields = self._extra_field_lists()
-
-        # Extra cell field sizes
-        for fname in cell_fields:
-            _, asize, _ = self._field_info(fname)
-            sizes.append(asize*ncells)
-
-        sizes.extend(len(vn)*nb for vn in self._vtk_vars.values())
-
-        # Extra point field sizes
-        for fname in point_fields:
-            _, asize, _ = self._field_info(fname)
-            sizes.append(asize*npts)
+        for f in self.fields_out:
+            n = ncells if f.kind == 'cell' else npts
+            sizes.append(f.dtype.itemsize*f.ncomps*n)
 
         return sizes
 
@@ -349,29 +346,45 @@ class BaseVTKWriter(BaseWriter):
         # Load the solution
         self._load_soln(solnf)
 
+        # Describe every output array up front
+        self.fields_out = self._build_field_table()
+
         # Prepare element data
         self._prepared = {et: self._prepare_pts(et) for et, _ in self.einfo}
-        self._output = self._output_cls(self)
+        self._output = self._make_output()
 
         if Path(outfname).suffix == '.vtu':
             self._write_vtu(outfname)
         else:
             self._write_pvtu(outfname)
 
-    def _point_field_data(self, etype):
+    def _make_output(self):
+        # Dtypes come from the table as a rank may hold no elements
+        dtypes = [f.dtype for f in self._point_fields()]
+
+        return self._output_cls(self._point_arrays, dtypes, self._make_cleaner)
+
+    def _make_cleaner(self):
+        cnodemap, svptsmap = self._output_topology()
+        shared = np.fromiter(self.mesh.shared_nodes.by_node, dtype=int)
+
+        return CleanToGrid(cnodemap, self.etypes_div, svptsmap, shared)
+
+    def _point_arrays(self, etype):
         _, vsoln, _, _, pointf = self._prepared[etype]
         nsvpts, neles = vsoln.shape[0], vsoln.shape[2]
 
-        fields = []
+        arrays = []
         for arr in self._post_proc_fields(vsoln.swapaxes(0, 1)):
             arr = arr[..., None] if arr.ndim == 2 else arr.transpose(1, 2, 0)
-            fields.append((arr, self.dtype))
+            arrays.append(arr)
 
-        for fname in self._extra_field_lists()[1]:
-            arr = pointf[fname].reshape(nsvpts, neles, -1)
-            fields.append((arr, self._extra_fields[fname].dtype))
+        # Extra point fields follow the solution ones in the table
+        for f in self._point_fields():
+            if f.name not in self._vtk_vars:
+                arrays.append(pointf[f.name].reshape(nsvpts, neles, -1))
 
-        return fields
+        return arrays
 
     def _local_counts(self):
         return [self._get_npts_ncells_nnodes(et, ne)
@@ -530,21 +543,25 @@ class BaseVTKWriter(BaseWriter):
         shape = self._get_shape(etype, self.cfg)
         return {dtype[group][0].shape[-1:], (len(shape.linspts),)}
 
-    def _extra_field_lists(self):
-        cfields, pfields = [], []
-        for name, meta in self._extra_fields.items():
-            lst = pfields if meta.kind == 'point' else cfields
-            lst.append(name)
-        return cfields, pfields
+    def _build_field_table(self):
+        extras = self._extra_fields.values()
+        soln = [Field(n, n.title(), 'point', len(v), np.dtype(self.dtype))
+                for n, v in self._vtk_vars.items()]
 
-    def _field_info(self, name):
-        meta = self._extra_fields[name]
-        asize = meta.dtype.itemsize * meta.ncomps
-        return self._vtk_dtype(meta.dtype), asize, meta.ncomps
+        cell = [f for f in extras if f.kind == 'cell']
+        point = [f for f in extras if f.kind == 'point']
+
+        # VTK array order is cell data, then solution data, then point data
+        return cell + soln + point
+
+    def _cell_fields(self):
+        return [f for f in self.fields_out if f.kind == 'cell']
+
+    def _point_fields(self):
+        return [f for f in self.fields_out if f.kind == 'point']
 
     def _write_serial_header(self, write_s, npts, ncells, nnodes, off):
-        cell_fields, _ = self._extra_field_lists()
-        ncelld = self.output_curved + len(cell_fields)
+        ncelld = self.output_curved + len(self._cell_fields())
 
         write_s(f'<Piece NumberOfPoints="{npts}" '
                 f'NumberOfCells="{ncells}">\n<Points>\n')
@@ -574,8 +591,7 @@ class BaseVTKWriter(BaseWriter):
         return off
 
     def _write_parallel_header(self, write_s):
-        cell_fields, _ = self._extra_field_lists()
-        ncelld = self.output_curved + len(cell_fields)
+        ncelld = self.output_curved + len(self._cell_fields())
         write_s('<PPoints>\n')
 
         # Write VTK DataArray headers
@@ -641,14 +657,13 @@ class BaseVTKWriter(BaseWriter):
             self._write_darray(vtu_curved, write, np.uint8)
 
         # Extra cell fields (iterate in header order)
-        cfields, _ = self._extra_field_lists()
         ncells_per_ele = len(vtu_typ) // neles
-        for fname in cfields:
-            data = cellf[fname]
-            vtu_aux = data.reshape(neles, -1)
+        for f in self._cell_fields():
+            vtu_aux = cellf[f.name].reshape(neles, -1)
             vtu_aux = np.repeat(vtu_aux, ncells_per_ele, axis=0)
-            self._write_darray(vtu_aux, write, self._extra_fields[fname].dtype)
+            self._write_darray(vtu_aux, write, f.dtype)
 
-        # Point fields
-        for arr, dtype in self._output.point_fields(etype):
-            self._write_darray(arr, write, dtype)
+        # Point fields, which the table describes in output order
+        arrays = self._output.point_arrays(etype)
+        for f, arr in zip(self._point_fields(), arrays):
+            self._write_darray(arr, write, f.dtype)

@@ -1,15 +1,13 @@
 import numpy as np
 
-from pyfr.fields import CleanToGrid
 from pyfr.mpiutil import mpi, scal_coll
-from pyfr.util import first
 
 
 class DirectVTKOutput:
     pyr_divisor_bump = 2
 
-    def __init__(self, writer):
-        self.writer = writer
+    def __init__(self, point_arrays, dtypes, make_cleaner):
+        self._point_arrays = point_arrays
 
     def npts(self, etype, neles, nsvpts):
         return neles*nsvpts
@@ -22,52 +20,39 @@ class DirectVTKOutput:
         con += (np.arange(neles)*nsvpts)[:, None]
         return con
 
-    def point_fields(self, etype):
-        for arr, dtype in self.writer._point_field_data(etype):
-            yield arr.swapaxes(0, 1), dtype
+    def point_arrays(self, etype):
+        return [arr.swapaxes(0, 1) for arr in self._point_arrays(etype)]
 
 
 class CleanToGridVTKOutput(DirectVTKOutput):
     pyr_divisor_bump = 0
 
-    def __init__(self, writer):
-        super().__init__(writer)
+    def __init__(self, point_arrays, dtypes, make_cleaner):
+        super().__init__(point_arrays, dtypes, make_cleaner)
 
-        cnodemap, svptsmap = writer._output_topology()
-        shared = np.fromiter(writer.mesh.shared_nodes.by_node, dtype=int)
-        self.cleaner = CleanToGrid(cnodemap, writer.etypes_div, svptsmap,
-                                   shared)
-        self.point_data = self._compute_fields()
+        self.cleaner = make_cleaner()
+        self.point_data = self._average(dtypes)
 
-    def _compute_fields(self):
-        comm = self.cleaner.comm
+    def _average(self, dtypes):
+        comm, etypes = self.cleaner.comm, list(self.cleaner.layouts)
 
         # Obtain the field data for each element type
-        fdata = {}
-        for etype in self.writer._prepared:
-            fdata[etype] = self.writer._point_field_data(etype)
-
-        # Agree on field count across ranks
-        nfields = len(first(fdata.values(), ()))
-        nfields = scal_coll(comm.Allreduce, nfields, op=mpi.MAX)
+        fdata = {etype: self._point_arrays(etype) for etype in etypes}
 
         # Iterate through the fields and average them
         out = []
-        for i in range(nfields):
+        for i, dtype in enumerate(dtypes):
             efields, ncomp = {}, 0
 
-            for etype, fields in fdata.items():
-                arr, dt = fields[i]
-                efields[etype] = arr.astype(dt, copy=False)
-                ncomp = max(ncomp, arr.shape[2])
+            for etype, arrays in fdata.items():
+                efields[etype] = arrays[i].astype(dtype, copy=False)
+                ncomp = max(ncomp, arrays[i].shape[2])
 
             ncomp = scal_coll(comm.Allreduce, ncomp, op=mpi.MAX)
-            avg = self.cleaner.average(efields, ncomp, self.writer.dtype)
-            out.append({et: (a, self.writer.dtype) for et, a in avg.items()})
+            out.append(self.cleaner.average(efields, ncomp, dtype))
 
         # Group by element type and return
-        return {etype: [f[etype] for f in out]
-                for etype in self.writer._prepared}
+        return {etype: [f[etype] for f in out] for etype in etypes}
 
     def npts(self, etype, neles, nsvpts):
         return len(self.cleaner.layouts[etype][1])
@@ -78,5 +63,5 @@ class CleanToGridVTKOutput(DirectVTKOutput):
     def connectivity(self, etype, nodes, neles, nsvpts):
         return self.cleaner.layouts[etype][0][:, nodes]
 
-    def point_fields(self, etype):
-        yield from self.point_data[etype]
+    def point_arrays(self, etype):
+        return self.point_data[etype]
