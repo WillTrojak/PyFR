@@ -319,8 +319,8 @@ class BasePartitioner:
         for i, p in enumerate(np.split(petype, edisps)):
             p[:] = i
 
-        # Sort by partition number, type, internal, and if curved or not
-        pidx = np.lexsort((ecurved, internal, petype, vparts))
+        # Sort by partition number, type, internal, and if linear or not
+        pidx = np.lexsort((~ecurved, internal, petype, vparts))
 
         # Apply this permutation to the various arrays
         peidx, petype, vparts = peidx[pidx], petype[pidx], vparts[pidx]
