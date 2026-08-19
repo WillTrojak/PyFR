@@ -11,6 +11,10 @@ class MetalGiMMiKKernels(MetalKernelProvider):
     # Call signatures we are able to marshal arguments for
     sigs = frozenset({SIG_BC, SIG_ABC})
 
+    # Types of the arguments a kernel can ask to be passed
+    argtypes = {'a': np.uintp, 'n': np.int32, 'b': np.uintp,
+                'ldb': np.int32, 'c': np.uintp, 'ldc': np.int32}
+
     def __init__(self, backend):
         super().__init__(backend)
 
@@ -46,7 +50,7 @@ class MetalGiMMiKKernels(MetalKernelProvider):
         arr = a.get()
 
         # Dimensions
-        ldb, ldc = b.leaddim, out.leaddim
+        n, ldb, ldc = b.ncol, b.leaddim, out.leaddim
 
         # Alignment
         if 'align' in b.tags and 'align' in out.tags:
@@ -59,14 +63,14 @@ class MetalGiMMiKKernels(MetalKernelProvider):
 
         # Check the kernel cache
         try:
-            kern, grid, tgrp, kmeta, bufs, dt = self._mul_kerns[ckey]
+            kern, mm, kmeta, bufs, dt = self._mul_kerns[ckey]
         except KeyError:
             ifac = self.backend.autotune_ifac
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
             best_kern = None
             sdata = None
 
-            mm = MetalMatMul(alpha*arr, beta=beta, aligne=aligne, n=b.ncol,
+            mm = MetalMatMul(alpha*arr, beta=beta, aligne=aligne, n=n,
                              ldb=ldb, ldc=ldc)
             kgen = mm.kernels(a.dtype, kname=kname, sigs=self.sigs,
                               gpu_family=self.gpu_family,
@@ -78,14 +82,17 @@ class MetalGiMMiKKernels(MetalKernelProvider):
                     for i in range(self.nkerns):
                         src, meta = kgen.send(sdata)
 
-                        bufs = self._operand_bufs(mm, meta)
+                        bufs = self._operand_bufs(mm, meta, n, ldb, ldc)
                         if bufs is None:
                             continue
 
-                        grid, tgrp = meta['grid'], meta['threadgroup']
-                        kargs = self._kernel_args(meta, bufs, b, out)
-                        kern = self._build_kernel(kname, src,
-                                                  [np.uintp]*len(kargs))
+                        argt = [self.argtypes[k] for k in meta['args']]
+                        kern = self._build_kernel(kname, src, argt)
+
+                        kargs = self._kernel_args(meta, bufs, n, b, ldb,
+                                                  out, ldc)
+                        grid = mm.launch_config(meta, n)['grid']
+                        tgrp = meta['threadgroup']
 
                         # Obtain the runtime
                         dt = self._benchmark(
@@ -94,7 +101,7 @@ class MetalGiMMiKKernels(MetalKernelProvider):
                         )
 
                         if best_kern is None or dt < ifac*best_kern[-1]:
-                            best_kern = kern, grid, tgrp, meta, bufs, dt
+                            best_kern = kern, mm, meta, bufs, dt
 
                         sdata = {'runtime': dt}
             except StopIteration:
@@ -105,12 +112,13 @@ class MetalGiMMiKKernels(MetalKernelProvider):
                 raise NotSuitableError('Matrix is inappropriate for GiMMiK')
 
             # Update the cache
-            self._mul_kerns[ckey] = best_kern
-            kern, grid, tgrp, kmeta, bufs, dt = best_kern
+            self._mul_kerns[ckey] = kern, mm, kmeta, bufs, dt = best_kern
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters, rebinding the operands to these matrices
-        kargs = self._kernel_args(kmeta, bufs, b, out)
+        kargs = self._kernel_args(kmeta, bufs, n, b, ldb, out, ldc)
+        grid = mm.launch_config(kmeta, n)['grid']
+        tgrp = kmeta['threadgroup']
 
         class MulKernel(MetalKernel):
             def run(self, cbuf):
@@ -118,11 +126,11 @@ class MetalGiMMiKKernels(MetalKernelProvider):
 
         return MulKernel(mats=[a, b, out], dt=dt)
 
-    def _operand_bufs(self, mm, meta):
+    def _operand_bufs(self, mm, meta, n, ldb, ldc):
         # Buffers for the operands GiMMiK asks us to prepare, else None
         bufs = {}
 
-        for name, spec in meta['operands'].items():
+        for name, spec in mm.operands(meta, n, ldb, ldc).items():
             if name != 'a' or spec['kind'] != OPERAND_BUFFER:
                 return None
 
@@ -135,7 +143,8 @@ class MetalGiMMiKKernels(MetalKernelProvider):
         return bufs
 
     @staticmethod
-    def _kernel_args(meta, bufs, b, out):
-        mats = {'b': b.data, 'c': out.data} | bufs
+    def _kernel_args(meta, bufs, n, b, ldb, out, ldc):
+        vals = {'n': n, 'b': b.data, 'ldb': ldb, 'c': out.data,
+                'ldc': ldc} | bufs
 
-        return [mats[name] for name in meta['args']]
+        return [vals[name] for name in meta['args']]

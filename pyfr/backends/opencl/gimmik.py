@@ -1,12 +1,18 @@
 from weakref import finalize
 
-from gimmik import OpenCLMatMul
+from gimmik import OpenCLMatMul, SIG_BC
 
 from pyfr.backends.base import NotSuitableError
 from pyfr.backends.opencl.provider import OpenCLKernel, OpenCLKernelProvider
 
 
 class OpenCLGiMMiKKernels(OpenCLKernelProvider):
+    # Call signatures we are able to marshal arguments for
+    sigs = frozenset({SIG_BC})
+
+    # Types of the arguments a kernel can ask to be passed
+    argtypes = {'n': 'i', 'b': 'P', 'ldb': 'i', 'c': 'P', 'ldc': 'i'}
+
     def __init__(self, backend):
         super().__init__(backend)
 
@@ -39,7 +45,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
         arr = a.get()
 
         # Dimensions
-        ldb, ldc = b.leaddim, out.leaddim
+        n, ldb, ldc = b.ncol, b.leaddim, out.leaddim
 
         # Alignment
         if 'align' in b.tags and 'align' in out.tags:
@@ -52,7 +58,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
 
         # Check the kernel cache
         try:
-            kern, gs, ls, dt = self._mul_kerns[ckey]
+            kern, mm, kmeta, dt = self._mul_kerns[ckey]
 
             # Clone the kernel so it gets its own set of arguments
             kern = kern.clone()
@@ -63,9 +69,9 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
             best_kern = None
             sdata = None
 
-            mm = OpenCLMatMul(alpha*arr, beta=beta, aligne=aligne, n=b.ncol,
+            mm = OpenCLMatMul(alpha*arr, beta=beta, aligne=aligne, n=n,
                               ldb=ldb, ldc=ldc)
-            kgen = mm.kernels(a.dtype, kname=kname,
+            kgen = mm.kernels(a.dtype, kname=kname, sigs=self.sigs,
                               local_mem_size=local_mem_size,
                               max_nnz=self.max_nnz)
 
@@ -75,13 +81,14 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
                     for i in range(self.nkerns):
                         src, meta = kgen.send(sdata)
 
-                        gs = meta['global_work_size']
-                        ls = meta['local_work_size']
-                        kern = self._build_kernel(kname, src, 'PP')
+                        argt = [self.argtypes[k] for k in meta['args']]
+                        kern = self._build_kernel(kname, src, argt)
 
                         # Set the parameters
-                        kern.set_dims(gs, ls)
-                        kern.set_args(b, out)
+                        gs = mm.launch_config(meta, n)['global_work_size']
+                        kern.set_dims(gs, meta['local_work_size'])
+                        kern.set_args(*self._kernel_args(meta, n, b, ldb,
+                                                         out, ldc))
 
                         # Obtain the runtime
                         dt = self._benchmark(
@@ -90,7 +97,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
                         )
 
                         if best_kern is None or dt < ifac*best_kern[-1]:
-                            best_kern = kern, gs, ls, dt
+                            best_kern = kern, mm, meta, dt
 
                         sdata = {'runtime': dt}
             except StopIteration:
@@ -101,15 +108,22 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
                 raise NotSuitableError('Matrix is inappropriate for GiMMiK')
 
             # Update the cache
-            self._mul_kerns[ckey] = kern, gs, ls, dt = best_kern
+            self._mul_kerns[ckey] = kern, mm, kmeta, dt = best_kern
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters
-        kern.set_dims(gs, ls)
-        kern.set_args(b, out)
+        kern.set_dims(mm.launch_config(kmeta, n)['global_work_size'],
+                      kmeta['local_work_size'])
+        kern.set_args(*self._kernel_args(kmeta, n, b, ldb, out, ldc))
 
         class MulKernel(OpenCLKernel):
             def run(self, queue, wait_for=None, ret_evt=False):
                 return kern.exec_async(queue, wait_for, ret_evt)
 
         return MulKernel(mats=[a, b, out], dt=dt)
+
+    @staticmethod
+    def _kernel_args(meta, n, b, ldb, out, ldc):
+        vals = {'n': n, 'b': b, 'ldb': ldb, 'c': out, 'ldc': ldc}
+
+        return [vals[name] for name in meta['args']]

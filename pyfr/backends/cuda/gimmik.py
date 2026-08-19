@@ -14,6 +14,10 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
     # Call signatures we are able to marshal arguments for
     sigs = frozenset({SIG_BC, SIG_BDESC_C, SIG_BDESC_CDESC})
 
+    # Types of the arguments a kernel can ask to be passed
+    argtypes = {'n': 'i', 'b': 'P', 'ldb': 'i', 'c': 'P', 'ldc': 'i',
+                'b_desc': 'P', 'c_desc': 'P'}
+
     def __init__(self, backend):
         super().__init__(backend)
 
@@ -40,7 +44,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             raise NotSuitableError('GiMMiK requires a constant a matrix')
 
         # Dimensions
-        ldb, ldc = b.leaddim, out.leaddim
+        n, ldb, ldc = b.ncol, b.leaddim, out.leaddim
 
         # Alignment
         if 'align' in b.tags and 'align' in out.tags:
@@ -52,24 +56,25 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         ckey = (a.mid, alpha, beta, aligne, ldb, ldc)
 
         try:
-            kern, grid, block, kmeta, dt = self._mul_kerns[ckey]
+            kern, mm, kmeta, dt = self._mul_kerns[ckey]
         except KeyError:
             # Fetch the matrix and premultiply
             arr = alpha*a.get()
 
             with self._bench_data(save=[out], rand=[b]):
-                best_kern = self._autotune(arr, beta, aligne, b, out)
+                best_kern = self._autotune(arr, beta, aligne, n, b, out)
 
             # GiMMiK declines an operator by offering no kernels for it
             if best_kern is None:
                 raise NotSuitableError('Matrix is inappropriate for GiMMiK')
 
-            self._mul_kerns[ckey] = kern, grid, block, kmeta, dt = best_kern
+            self._mul_kerns[ckey] = kern, mm, kmeta, dt = best_kern
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters, rebinding the operands to these matrices
-        params = kern.make_params(grid, block, 0)
-        params.set_args(*self._kernel_args(kmeta, b, out))
+        grid = mm.launch_config(kmeta, n)['grid']
+        params = kern.make_params(grid, kmeta['block'], 0)
+        params.set_args(*self._kernel_args(mm, kmeta, n, b, ldb, out, ldc))
 
         class MulKernel(CUDAKernel):
             def add_to_graph(self, graph, deps):
@@ -80,26 +85,28 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         return MulKernel(mats=[a, b, out], dt=dt)
 
-    def _autotune(self, arr, beta, aligne, b, out):
+    def _autotune(self, arr, beta, aligne, n, b, out):
         m, k = arr.shape
 
         # Consult each generator in turn, taking the first with a kernel
         for mmcls in self.matmuls:
             kname = f'gimmik_mm_{m}x{k}_{mmcls.platform}'
 
-            mm = mmcls(arr, beta=beta, aligne=aligne, n=b.ncol, ldb=b.leaddim,
+            mm = mmcls(arr, beta=beta, aligne=aligne, n=n, ldb=b.leaddim,
                        ldc=out.leaddim)
             kgen = mm.kernels(arr.dtype, kname=kname, sigs=self.sigs,
                               compute_capability=self.cc,
                               smem_max=self.smem_max)
 
-            if (best_kern := self._mul(kname, kgen, b, out)) is not None:
+            best_kern = self._mul(kname, mm, kgen, n, b, out)
+            if best_kern is not None:
                 return best_kern
 
         return None
 
-    def _mul(self, kname, kgen, b, out):
+    def _mul(self, kname, mm, kgen, n, b, out):
         ifac = self.backend.autotune_ifac
+        ldb, ldc = b.leaddim, out.leaddim
         kdata = None
         best_kern = None
 
@@ -108,17 +115,20 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             for i in range(self.nkerns):
                 src, meta = kgen.send(kdata)
 
-                if (kargs := self._kernel_args(meta, b, out)) is None:
+                kargs = self._kernel_args(mm, meta, n, b, ldb, out, ldc)
+                if kargs is None:
                     continue
 
-                kern = self._build_kernel(kname, src, 'P'*len(kargs))
+                argt = [self.argtypes[k] for k in meta['args']]
+                kern = self._build_kernel(kname, src, argt)
 
                 # If the kernel is spilling then request more L1
                 if kern.local_mem and not kern.shared_mem:
                     kern.set_shared_size(carveout=0)
 
                 # Set the parameters
-                params = kern.make_params(meta['grid'], meta['block'], 0)
+                grid = mm.launch_config(meta, n)['grid']
+                params = kern.make_params(grid, meta['block'], 0)
                 params.set_args(*kargs)
 
                 # Obtain the runtime
@@ -128,7 +138,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                 )
 
                 if best_kern is None or dt < ifac*best_kern[-1]:
-                    best_kern = (kern, meta['grid'], meta['block'], meta, dt)
+                    best_kern = (kern, mm, meta, dt)
 
                 kdata = {
                     'runtime': dt,
@@ -141,15 +151,18 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         return best_kern
 
-    def _kernel_args(self, meta, b, out):
+    def _kernel_args(self, mm, meta, n, b, ldb, out, ldc):
         # Operands describe any argument the caller has to prepare itself
-        mats, operands, kargs = {'b': b, 'c': out}, meta['operands'], []
+        mats = {'b': b, 'c': out}
+        vals = mats | {'n': n, 'ldb': ldb, 'ldc': ldc}
+        operands = mm.operands(meta, n, ldb, ldc)
+        kargs = []
 
         for name in meta['args']:
             spec = operands.get(name)
 
             if spec is None:
-                kargs.append(mats[name])
+                kargs.append(vals[name])
             elif spec['kind'] == OPERAND_TENSORMAP:
                 tm = mats[spec['operand']].tensormap(spec)
                 kargs.append(tm.ctypes.data)
