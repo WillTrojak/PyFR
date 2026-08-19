@@ -1,12 +1,19 @@
 from weakref import finalize
 
-from gimmik import HIPMatMul
+from gimmik import HIPMatMul, OPERAND_BUFFER, SIG_ABC, SIG_BC
 
 from pyfr.backends.base import NotSuitableError
 from pyfr.backends.hip.provider import HIPKernel, HIPKernelProvider
 
 
 class HIPGiMMiKKernels(HIPKernelProvider):
+    # Call signatures we are able to marshal arguments for
+    sigs = frozenset({SIG_BC, SIG_ABC})
+
+    # Types of the arguments a kernel can ask to be passed
+    argtypes = {'a': 'P', 'n': 'i', 'b': 'P', 'ldb': 'i', 'c': 'P',
+                'ldc': 'i'}
+
     def __init__(self, backend):
         super().__init__(backend)
 
@@ -46,7 +53,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
 
         # Check the kernel cache
         try:
-            kern, mm, kmeta, dt = self._mul_kerns[ckey]
+            kern, mm, kmeta, bufs, dt = self._mul_kerns[ckey]
         except KeyError:
             ifac = self.backend.autotune_ifac
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
@@ -54,7 +61,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
             best_kern = None
 
             mm = HIPMatMul(alpha*arr, beta=beta, aligne=aligne)
-            kgen = mm.kernels(a.dtype, kname=kname,
+            kgen = mm.kernels(a.dtype, kname=kname, sigs=self.sigs,
                               gcn_arch=self.backend.props['gcn_arch_name'],
                               warp_size=self.backend.props['warp_size'])
 
@@ -63,11 +70,19 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                 with self._bench_data(save=[out], rand=[b]):
                     for i in range(self.nkerns):
                         src, meta = kgen.send(kdata)
-                        kern = self._build_kernel(kname, src, 'iPiPi')
 
+                        bufs = self._operand_bufs(mm, meta)
+                        if bufs is None:
+                            continue
+
+                        argt = [self.argtypes[k] for k in meta['args']]
+                        kern = self._build_kernel(kname, src, argt)
+
+                        kargs = self._kernel_args(meta, bufs, n, b, ldb,
+                                                  out, ldc)
                         grid = mm.launch_config(meta, n)['grid']
                         params = kern.make_params(grid, meta['block'])
-                        params.set_args(n, b, ldb, out, ldc)
+                        params.set_args(*kargs)
 
                         # Obtain the runtime
                         dt = self._benchmark(
@@ -76,7 +91,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                         )
 
                         if best_kern is None or dt < ifac*best_kern[-1]:
-                            best_kern = kern, mm, meta, dt
+                            best_kern = kern, mm, meta, bufs, dt
 
                         kdata = {
                             'runtime': dt,
@@ -91,13 +106,14 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                 raise NotSuitableError('Matrix is inappropriate for GiMMiK')
 
             # Update the cache
-            self._mul_kerns[ckey] = kern, mm, kmeta, dt = best_kern
+            self._mul_kerns[ckey] = kern, mm, kmeta, bufs, dt = best_kern
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
-        # Set the parameters, resolving the geometry for this n
+        # Set the parameters, rebinding the operands to these matrices
+        kargs = self._kernel_args(kmeta, bufs, n, b, ldb, out, ldc)
         grid = mm.launch_config(kmeta, n)['grid']
         params = kern.make_params(grid, kmeta['block'])
-        params.set_args(n, b, ldb, out, ldc)
+        params.set_args(*kargs)
 
         class MulKernel(HIPKernel):
             def add_to_graph(self, graph, deps):
@@ -107,3 +123,24 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                 kern.exec_async(stream, params)
 
         return MulKernel(mats=[a, b, out], dt=dt)
+
+    def _operand_bufs(self, mm, meta):
+        # Buffers for the operands GiMMiK asks us to prepare, else None
+        bufs = {}
+
+        for name, spec in meta['operands'].items():
+            if name != 'a' or spec['kind'] != OPERAND_BUFFER:
+                return None
+
+            buf = self.backend.hip.mem_alloc(spec['nbytes'])
+            self.backend.hip.memcpy(buf, mm.pack_a(meta), spec['nbytes'])
+
+            bufs[name] = buf
+
+        return bufs
+
+    @staticmethod
+    def _kernel_args(meta, bufs, n, b, ldb, out, ldc):
+        vals = {'n': n, 'b': b, 'ldb': ldb, 'c': out, 'ldc': ldc} | bufs
+
+        return [vals[name] for name in meta['args']]
