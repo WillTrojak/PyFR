@@ -71,7 +71,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                     for i in range(self.nkerns):
                         src, meta = kgen.send(kdata)
 
-                        bufs = self._operand_bufs(mm, meta)
+                        bufs = self._operand_bufs(mm, meta, n, ldb, ldc)
                         if bufs is None:
                             continue
 
@@ -124,11 +124,11 @@ class HIPGiMMiKKernels(HIPKernelProvider):
 
         return MulKernel(mats=[a, b, out], dt=dt)
 
-    def _operand_bufs(self, mm, meta):
+    def _operand_bufs(self, mm, meta, n, ldb, ldc):
         # Buffers for the operands GiMMiK asks us to prepare, else None
         bufs = {}
 
-        for name, spec in meta['operands'].items():
+        for name, spec in mm.operands(meta, n, ldb, ldc).items():
             if name != 'a' or spec['kind'] != OPERAND_BUFFER:
                 return None
 
