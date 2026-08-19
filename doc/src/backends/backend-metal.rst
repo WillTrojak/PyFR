@@ -5,7 +5,8 @@
 Parameterises the Metal backend with
 
 #. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
-   non-zero entires in a constant matrix, defaults to 2048:
+   non-zero entires in a constant matrix, overriding the suitability
+   criteria GiMMiK applies for the GPU family in question:
 
     *int*
 

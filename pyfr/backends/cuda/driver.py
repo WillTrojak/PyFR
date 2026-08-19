@@ -1,6 +1,6 @@
-from ctypes import (POINTER, Structure, addressof, byref, cast,
-                    create_string_buffer, c_char, c_char_p, c_float, c_int,
-                    c_size_t, c_uint, c_ulonglong, c_void_p)
+from ctypes import (POINTER, Structure, addressof, byref, create_string_buffer,
+                    c_char, c_char_p, c_float, c_int, c_size_t, c_uint,
+                    c_ulonglong, c_void_p)
 from uuid import UUID
 
 import numpy as np
@@ -629,10 +629,11 @@ class CUDA:
     def create_graph(self):
         return CUDAGraph(self)
 
-    def set_tensormap(self, tm, ptr, dims, ld, tile, dtype, tile_stride=None,
-                      interleave=None, swizzle=None, l2_promotion=None,
-                      oob_fill=None):
-        tm_ptr = tm.ctypes.data
+    def _tensormap_enum(self, kind, name):
+        return getattr(self.lib, f'TENSOR_MAP_{kind}_{name.upper()}')
+
+    def set_tensormap(self, tm, ptr, spec):
+        dtype = spec['dtype']
 
         if dtype == np.float64:
             tm_dtype = self.lib.TENSOR_MAP_DATA_TYPE_FLOAT64
@@ -641,17 +642,18 @@ class CUDA:
         else:
             raise ValueError(f'Type {dtype} tensor map not supported')
 
-        ndims = len(dims)
-        dims = (c_ulonglong*ndims)(*dims)
-        ld = (c_ulonglong*(ndims - 1))(*ld)
-        tile = (c_uint*ndims)(*tile)
-        tile_stride = (c_uint*ndims)(*(tile_stride or [1]*ndims))
+        rank = spec['rank']
+        dims = (c_ulonglong*rank)(*spec['global_dim'])
+        ld = (c_ulonglong*(rank - 1))(*spec['global_stride'])
+        box = (c_uint*rank)(*spec['box'])
+        elem_stride = (c_uint*rank)(*spec['elem_stride'])
 
-        interleave = interleave or self.lib.TENSOR_MAP_INTERLEAVE_NONE
-        swizzle = swizzle or self.lib.TENSOR_MAP_SWIZZLE_NONE
-        l2_promotion = l2_promotion or self.lib.TENSOR_MAP_L2_PROMOTION_NONE
-        oob_fill = oob_fill or self.lib.TENSOR_MAP_FLOAT_OOB_FILL_NONE
+        interleave = self._tensormap_enum('INTERLEAVE', spec['interleave'])
+        swizzle = self._tensormap_enum('SWIZZLE', spec['swizzle'])
+        l2_promotion = self._tensormap_enum('L2_PROMOTION',
+                                            spec['l2_promotion'])
+        oob_fill = self._tensormap_enum('FLOAT_OOB_FILL', spec['oob_fill'])
 
-        self.lib.cuTensorMapEncodeTiled(tm_ptr, tm_dtype, ndims, ptr, dims, ld,
-                                        tile, tile_stride, interleave, swizzle,
-                                        l2_promotion, oob_fill)
+        self.lib.cuTensorMapEncodeTiled(tm.ctypes.data, tm_dtype, rank, ptr,
+                                        dims, ld, box, elem_stride, interleave,
+                                        swizzle, l2_promotion, oob_fill)

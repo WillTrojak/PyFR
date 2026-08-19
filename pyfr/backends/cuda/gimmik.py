@@ -1,17 +1,19 @@
 from weakref import finalize
 
-from gimmik import CUDAMatMul
-try:
-    from gimmik import PTXMatMul
-except ImportError:
-    PTXMatMul = None
-import numpy as np
+from gimmik import (CUDAMatMul, OPERAND_TENSORMAP, PTXMatMul, SIG_BC,
+                    SIG_BDESC_C, SIG_BDESC_CDESC)
 
 from pyfr.backends.base import NotSuitableError
 from pyfr.backends.cuda.provider import CUDAKernel, CUDAKernelProvider
 
 
 class CUDAGiMMiKKernels(CUDAKernelProvider):
+    # Generators to consult, in order of preference
+    matmuls = [PTXMatMul, CUDAMatMul]
+
+    # Call signatures we are able to marshal arguments for
+    sigs = frozenset({SIG_BC, SIG_BDESC_C, SIG_BDESC_CDESC})
+
     def __init__(self, backend):
         super().__init__(backend)
 
@@ -20,10 +22,6 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         # Number of benchmarking runs
         self.nbench = backend.cfg.getint('backend-cuda', 'gimmik-nbench', 5)
-
-        # Trim the lower 32 bits of fp64 A constants
-        self.f64trim = backend.cfg.getbool('backend-cuda', 'gimmik-trim-double',
-                                           False)
 
         # Kernel cache
         self._mul_kerns = {}
@@ -54,53 +52,24 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         ckey = (a.mid, alpha, beta, aligne, ldb, ldc)
 
         try:
-            kern, grid, block, tm, dt = self._mul_kerns[ckey]
+            kern, grid, block, kmeta, dt = self._mul_kerns[ckey]
         except KeyError:
-            # Fetch the matrix, premultiply, and optionally trim
+            # Fetch the matrix and premultiply
             arr = alpha*a.get()
-            if a.dtype == np.float64 and self.f64trim:
-                arr = self._trim_double_low32(arr)
 
-            # Alignment
-            if 'align' in b.tags and 'align' in out.tags:
-                aligne = self.backend.alignb // b.itemsize
-            else:
-                aligne = None
+            with self._bench_data(save=[out], rand=[b]):
+                best_kern = self._autotune(arr, beta, aligne, b, out)
 
-            # Pick MM generator
-            if PTXMatMul and PTXMatMul.is_suitable(arr, self.cc):
-                kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}_ptx'
-                MMClass = PTXMatMul
-            elif CUDAMatMul.is_suitable(arr):
-                kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}_cuda'
-                MMClass = CUDAMatMul
-            else:
+            # GiMMiK declines an operator by offering no kernels for it
+            if best_kern is None:
                 raise NotSuitableError('Matrix is inappropriate for GiMMiK')
 
-            # Save a copy of the contents of the output matrix
-            out_np = getattr(out, 'parent', out).get()
-
-            # Generate and pick best kernel
-            mm = MMClass(arr, beta=beta, aligne=aligne, n=b.ncol,
-                         ldb=b.leaddim, ldc=out.leaddim)
-            kgen = mm.kernels(arr.dtype, kname=kname,
-                              compute_capability=self.cc,
-                              smem_max=self.smem_max)
-            self._mul_kerns[ckey] = self._mul(kname, kgen, arr.dtype, b, out)
+            self._mul_kerns[ckey] = kern, grid, block, kmeta, dt = best_kern
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
-            kern, grid, block, tm, dt = self._mul_kerns[ckey]
-
-            # Restore the output matrix
-            getattr(out, 'parent', out).set(out_np)
-
-        # Set the parameters
+        # Set the parameters, rebinding the operands to these matrices
         params = kern.make_params(grid, block, 0)
-
-        # Set the input args using tensormaps if needed
-        b_args = self._arg_pointer(b, tm.get('b_tile'))
-        out_args = self._arg_pointer(out, tm.get('out_tile'))
-        params.set_args(b_args, out_args)
+        params.set_args(*self._kernel_args(kmeta, b, out))
 
         class MulKernel(CUDAKernel):
             def add_to_graph(self, graph, deps):
@@ -111,7 +80,25 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         return MulKernel(mats=[a, b, out], dt=dt)
 
-    def _mul(self, kname, kgen, dtype, b, out):
+    def _autotune(self, arr, beta, aligne, b, out):
+        m, k = arr.shape
+
+        # Consult each generator in turn, taking the first with a kernel
+        for mmcls in self.matmuls:
+            kname = f'gimmik_mm_{m}x{k}_{mmcls.platform}'
+
+            mm = mmcls(arr, beta=beta, aligne=aligne, n=b.ncol, ldb=b.leaddim,
+                       ldc=out.leaddim)
+            kgen = mm.kernels(arr.dtype, kname=kname, sigs=self.sigs,
+                              compute_capability=self.cc,
+                              smem_max=self.smem_max)
+
+            if (best_kern := self._mul(kname, kgen, b, out)) is not None:
+                return best_kern
+
+        return None
+
+    def _mul(self, kname, kgen, b, out):
         ifac = self.backend.autotune_ifac
         kdata = None
         best_kern = None
@@ -120,7 +107,11 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         try:
             for i in range(self.nkerns):
                 src, meta = kgen.send(kdata)
-                kern = self._build_kernel(kname, src, 'PP')
+
+                if (kargs := self._kernel_args(meta, b, out)) is None:
+                    continue
+
+                kern = self._build_kernel(kname, src, 'P'*len(kargs))
 
                 # If the kernel is spilling then request more L1
                 if kern.local_mem and not kern.shared_mem:
@@ -128,16 +119,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
                 # Set the parameters
                 params = kern.make_params(meta['grid'], meta['block'], 0)
-
-                # Setup input args using tensor maps if required
-                tm = {
-                    'b_tile': meta.get('ws_b_tile'),
-                    'out_tile': meta.get('ws_out_tile')
-                }
-                b_args = CUDAGiMMiKKernels._arg_pointer(b, tm.get('b_tile'))
-                out_args = CUDAGiMMiKKernels._arg_pointer(out,
-                                                          tm.get('out_tile'))
-                params.set_args(b_args, out_args)
+                params.set_args(*kargs)
 
                 # Obtain the runtime
                 dt = self._benchmark(
@@ -146,7 +128,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                 )
 
                 if best_kern is None or dt < ifac*best_kern[-1]:
-                    best_kern = (kern, meta['grid'], meta['block'], tm, dt)
+                    best_kern = (kern, meta['grid'], meta['block'], meta, dt)
 
                 kdata = {
                     'runtime': dt,
@@ -159,16 +141,19 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         return best_kern
 
-    @staticmethod
-    def _arg_pointer(a, tile=None, **kwargs):
-        if tile is not None:
-            tm = a.tensormap(tile, **kwargs)
-            return tm.ctypes.data
-        else:
-            return a
+    def _kernel_args(self, meta, b, out):
+        # Operands describe any argument the caller has to prepare itself
+        mats, operands, kargs = {'b': b, 'c': out}, meta['operands'], []
 
-    @staticmethod
-    def _trim_double_low32(x):
-        a = np.asarray(x).copy()
-        a.view(np.uint64)[...] &= 0xFFFFFFFF00000000
-        return a
+        for name in meta['args']:
+            spec = operands.get(name)
+
+            if spec is None:
+                kargs.append(mats[name])
+            elif spec['kind'] == OPERAND_TENSORMAP:
+                tm = mats[spec['operand']].tensormap(spec)
+                kargs.append(tm.ctypes.data)
+            else:
+                return None
+
+        return kargs

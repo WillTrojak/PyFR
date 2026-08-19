@@ -23,7 +23,7 @@ classifiers = [
 
 dependencies = [
     "boostree >= 0.1.0",
-    "gimmik >= 3.2.1",
+    "gimmik >= 4.0",
     "h5py >= 2.10",
     "mako >= 1.0.0",
     "mpi4py >= 4.0.0",

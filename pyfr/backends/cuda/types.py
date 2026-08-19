@@ -12,14 +12,9 @@ class _CUDAMatrixCommon:
         return self.data
 
     @memoize
-    def tensormap(self, tile, interleave=None, swizzle=None,
-                  l2_promotion=None, oob_fill=None):
-        dims = (self.ncol, self.nrow)
-        ld = (self.leaddim * self.itemsize,)
+    def tensormap(self, spec):
         tm = self.backend.cuda.pagelocked_empty((128,), np.uint8)
-        self.backend.cuda.set_tensormap(tm, self.data, dims, ld, tile,
-                                        self.dtype, (1, 1), interleave,
-                                        swizzle, l2_promotion, oob_fill)
+        self.backend.cuda.set_tensormap(tm, self.data, spec)
         return tm
 
 

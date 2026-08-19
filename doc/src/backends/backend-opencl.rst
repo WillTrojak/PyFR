@@ -17,7 +17,8 @@ Parameterises the OpenCL backend with
     *int* | *string* | ``local-rank`` | ``uuid``
 
 #. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
-   non-zero entires in a constant matrix, defaults to 2048:
+   non-zero entires in a constant matrix, overriding the suitability
+   criteria GiMMiK applies by default:
 
     *int*
 

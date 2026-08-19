@@ -76,6 +76,17 @@ class MetalBackend(BaseBackend):
     def platform_id(self):
         return str(self.dev.name())
 
+    @property
+    def gpu_family(self):
+        from Metal import MTLGPUFamilyApple1
+
+        # Apple families are cumulative, so count up from the first
+        i = 0
+        while self.dev.supportsFamily_(MTLGPUFamilyApple1 + i):
+            i += 1
+
+        return i or None
+
     def optimal_tile_shape(self, block_size, dtype):
         if np.dtype(dtype).itemsize == 2:
             return (16, 16)
