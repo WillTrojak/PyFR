@@ -80,8 +80,9 @@ class HIPGiMMiKKernels(HIPKernelProvider):
 
                         kargs = self._kernel_args(meta, bufs, n, b, ldb,
                                                   out, ldc)
-                        grid = mm.launch_config(meta, n)['grid']
-                        params = kern.make_params(grid, meta['block'])
+                        lcfg = mm.launch_config(meta, n)
+                        params = kern.make_params(lcfg['grid'],
+                                                  lcfg['block'])
                         params.set_args(*kargs)
 
                         # Obtain the runtime
@@ -111,8 +112,8 @@ class HIPGiMMiKKernels(HIPKernelProvider):
 
         # Set the parameters, rebinding the operands to these matrices
         kargs = self._kernel_args(kmeta, bufs, n, b, ldb, out, ldc)
-        grid = mm.launch_config(kmeta, n)['grid']
-        params = kern.make_params(grid, kmeta['block'])
+        lcfg = mm.launch_config(kmeta, n)
+        params = kern.make_params(lcfg['grid'], lcfg['block'])
         params.set_args(*kargs)
 
         class MulKernel(HIPKernel):

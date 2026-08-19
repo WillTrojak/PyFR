@@ -91,8 +91,8 @@ class MetalGiMMiKKernels(MetalKernelProvider):
 
                         kargs = self._kernel_args(meta, bufs, n, b, ldb,
                                                   out, ldc)
-                        grid = mm.launch_config(meta, n)['grid']
-                        tgrp = meta['threadgroup']
+                        lcfg = mm.launch_config(meta, n)
+                        grid, tgrp = lcfg['grid'], lcfg['threadgroup']
 
                         # Obtain the runtime
                         dt = self._benchmark(
@@ -117,8 +117,8 @@ class MetalGiMMiKKernels(MetalKernelProvider):
 
         # Set the parameters, rebinding the operands to these matrices
         kargs = self._kernel_args(kmeta, bufs, n, b, ldb, out, ldc)
-        grid = mm.launch_config(kmeta, n)['grid']
-        tgrp = kmeta['threadgroup']
+        lcfg = mm.launch_config(kmeta, n)
+        grid, tgrp = lcfg['grid'], lcfg['threadgroup']
 
         class MulKernel(MetalKernel):
             def run(self, cbuf):

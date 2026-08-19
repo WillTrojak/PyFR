@@ -85,8 +85,9 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
                         kern = self._build_kernel(kname, src, argt)
 
                         # Set the parameters
-                        gs = mm.launch_config(meta, n)['global_work_size']
-                        kern.set_dims(gs, meta['local_work_size'])
+                        lcfg = mm.launch_config(meta, n)
+                        kern.set_dims(lcfg['global_work_size'],
+                                      lcfg.get('local_work_size'))
                         kern.set_args(*self._kernel_args(meta, n, b, ldb,
                                                          out, ldc))
 
@@ -112,8 +113,9 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters
-        kern.set_dims(mm.launch_config(kmeta, n)['global_work_size'],
-                      kmeta['local_work_size'])
+        lcfg = mm.launch_config(kmeta, n)
+        kern.set_dims(lcfg['global_work_size'],
+                      lcfg.get('local_work_size'))
         kern.set_args(*self._kernel_args(kmeta, n, b, ldb, out, ldc))
 
         class MulKernel(OpenCLKernel):

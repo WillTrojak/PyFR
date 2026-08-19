@@ -72,8 +72,8 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters, rebinding the operands to these matrices
-        grid = mm.launch_config(kmeta, n)['grid']
-        params = kern.make_params(grid, kmeta['block'], 0)
+        lcfg = mm.launch_config(kmeta, n)
+        params = kern.make_params(lcfg['grid'], lcfg['block'], 0)
         params.set_args(*self._kernel_args(mm, kmeta, n, b, ldb, out, ldc))
 
         class MulKernel(CUDAKernel):
@@ -127,8 +127,8 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                     kern.set_shared_size(carveout=0)
 
                 # Set the parameters
-                grid = mm.launch_config(meta, n)['grid']
-                params = kern.make_params(grid, meta['block'], 0)
+                lcfg = mm.launch_config(meta, n)
+                params = kern.make_params(lcfg['grid'], lcfg['block'], 0)
                 params.set_args(*kargs)
 
                 # Obtain the runtime
