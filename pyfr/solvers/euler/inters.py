@@ -243,7 +243,7 @@ class MassFlowBCMixin(ControlledBCMixin):
             self._qwts_norms.append(norms*qwts[:, None])
 
     def _default_interp_c(self):
-        return self._eval_opts(['p'])[0]
+        return self._eval_opts(['init-pressure'])[0]
 
     def _measure(self, solns):
         mf = 0.0
@@ -280,7 +280,10 @@ class PressureBCMixin(ControlledBCMixin):
         self.area = scal_coll(self.bccomm.Allreduce, area, op=mpi.SUM)
 
     def _default_interp_c(self):
-        return self.target
+        if self.cfg.hasopt(self.cfgsect, 'init-pressure'):
+            return self._eval_opts(['init-pressure'])[0]
+        else:
+            return self.target
 
     def _measure(self, solns):
         p_num = 0.0

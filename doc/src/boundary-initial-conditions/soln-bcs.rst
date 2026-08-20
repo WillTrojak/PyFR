@@ -55,8 +55,8 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *float* | *string*
 
-        - ``p`` --- initial static pressure, the controller will vary this to
-          target a mass flow rate.
+        - ``init-pressure`` --- initial Riemann invariant pressure, which the 
+          controller will vary to target a mass flow rate.
 
            *float* | *string*
 
@@ -123,7 +123,12 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
            *float* | *string*
 
         - ``pressure`` --- target area-averaged static pressure on the
-          boundary. Also used as the initial Riemann invariant pressure.
+          boundary.
+
+           *float* | *string*
+
+        - ``init-pressure`` --- initial Riemann invariant pressure (optional),
+          which the controller will vary to target ``pressure``.
 
            *float* | *string*
 
