@@ -183,6 +183,19 @@ def mv(src, dst):
     shutil.move(src, dst)
 
 
+def pwrite_all(fd, off, buf):
+    # Obtain a byte-wise view of the buffer so partial writes can be resumed
+    view = memoryview(buf).cast('B')
+
+    ix = 0
+    while ix < len(view):
+        nb = os.pwrite(fd, view[ix:], off + ix)
+        if nb == 0:
+            raise OSError('Unable to write data')
+
+        ix += nb
+
+
 def match_paired_paren(delim, n=5):
     open, close = delim
     ocset = f'[^{close}{open}]'

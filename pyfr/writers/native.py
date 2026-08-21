@@ -16,7 +16,7 @@ from pyfr.ctypesutil import get_libc_function
 from pyfr.mpiutil import Gatherer, autofree, get_comm_rank_root, mpi, scal_coll
 from pyfr.quadrules import get_quadrule
 from pyfr.shapes import BaseShape
-from pyfr.util import file_path_gen, first, mv, subclass_where
+from pyfr.util import file_path_gen, first, mv, pwrite_all, subclass_where
 
 
 class NativeWriter:
@@ -309,16 +309,9 @@ class NativeWriter:
         # Callback to write out individual arrays at offsets
         def write_off(k, v, n):
             if len(v):
-                view = memoryview(np.ascontiguousarray(v))
                 off = doffs[k] + n*(v.nbytes // len(v))
 
-                ix = 0
-                while ix < len(view):
-                    nb = os.pwrite(fd, view[ix:], off + ix)
-                    if nb == 0:
-                        raise OSError('Unable to write data')
-
-                    ix += nb
+                pwrite_all(fd, off, np.ascontiguousarray(v))
 
         # Main writing function
         def write():
