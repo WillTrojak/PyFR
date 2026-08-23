@@ -1,5 +1,5 @@
 import csv
-from functools import partial
+from functools import cached_property, partial
 import io
 from pathlib import Path
 import re
@@ -34,9 +34,10 @@ class _Series:
             self.cfg = Inifile.load(cfg)
 
         # Sort by time and drop duplicates, keeping the latest samples
-        idx = np.argsort(t, kind='stable')
-        idx = idx[np.concatenate((np.diff(t[idx]) > 0, [True]))]
-        t, data = t[idx], data[idx]
+        if not (np.diff(t) > 0).all():
+            idx = np.argsort(t, kind='stable')
+            idx = idx[np.concatenate((np.diff(t[idx]) > 0, [True]))]
+            t, data = t[idx], data[idx]
 
         # Restrict to the requested time window
         mask = np.ones(len(t), dtype=bool)
@@ -45,8 +46,10 @@ class _Series:
         if tend is not None:
             mask &= t <= tend
 
-        self.t = t[mask]
-        self.data = np.ascontiguousarray(data[mask].transpose(2, 1, 0))
+        if not mask.all():
+            t, data = t[mask], data[mask]
+
+        self.t, self.data = t, data.transpose(2, 1, 0)
 
     def _load_hdf5(self, fname, dset):
         with h5py.File(fname, 'r', swmr=True, libver='latest') as f:
@@ -92,18 +95,22 @@ class _Series:
     def elementscls(self):
         return get_elementscls(self.cfg)
 
-    @property
+    @cached_property
     def namespace(self):
         # Columns as (npts, nt) arrays keyed by field name
-        return dict(zip(self.fields, self.data))
+        return dict(zip(self.fields, np.ascontiguousarray(self.data)))
 
     def columns(self, spec):
         if spec is None:
-            return list(self.fields), self.data
+            spec = list(self.fields)
 
         # Map any column indices through the recorded layout
         names = _split_spec(spec) if isinstance(spec, str) else list(spec)
         names = [self.fields[int(n)] if n.isdigit() else n for n in names]
+
+        # Recorded columns are copied out without touching the others
+        if all(n in self.fields for n in names):
+            return names, self.data[[self.fields.index(n) for n in names]]
 
         # Split unrecorded names into table quantities and expressions
         isid = lambda n: re.fullmatch(r'[^\W\d][\w-]*', n)
@@ -565,12 +572,11 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
     @cli_external
     def psd_cmd(self, args):
-        t, pts, fnames, pidxs, data = self._series_prep(args)
+        t, _, fnames, pidxs, data = self._series_prep(args)
 
         if not 0 <= args.overlap < 1:
             raise ValueError('Overlap must be in [0, 1)')
 
-        # Batch all requested channels through a single NUDFT pass
         x = data[:, pidxs].swapaxes(0, 1).reshape(-1, len(t)).T
 
         freqs, S = psd(t, x, args.twin, args.overlap)
@@ -583,7 +589,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
     @cli_external
     def tone_cmd(self, args):
-        t, pts, fnames, pidxs, data = self._series_prep(args)
+        t, _, fnames, pidxs, data = self._series_prep(args)
 
         print('point', 'field', 'f', 'amplitude', sep=args.sep)
         for p in pidxs:
@@ -631,14 +637,18 @@ class SamplerCLIPlugin(BaseCLIPlugin):
     def _twopoint_corr(self, args, t, seps, fnames, pidxs, data):
         maxlag = args.maxlag or (t[-1] - t[0])/10
 
+        rs = []
+        for d in data:
+            lags, r = xcf(t, d[args.ref], d[pidxs].T, maxlag, args.nslots)
+            rs.append(np.atleast_2d(r.T))
+
         rows, r0s = [], []
-        for p, sep in zip(pidxs, seps):
+        for i, (p, sep) in enumerate(zip(pidxs, seps)):
             row, r0 = [p, sep], []
-            for dref, dp in data[:, [args.ref, p]]:
-                lags, r = xcf(t, dref, dp, maxlag, args.nslots)
-                k = np.abs(r).argmax()
-                r0.append(r[len(lags)//2])
-                row += [r0[-1], r[k], lags[k]]
+            for r in rs:
+                k = np.abs(r[i]).argmax()
+                r0.append(r[i][len(lags) // 2])
+                row += [r0[-1], r[i][k], lags[k]]
 
             rows.append(row)
             r0s.append(r0)
@@ -661,17 +671,14 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
         freqs, cols, names = None, [], []
         for fn, d in zip(fnames, data):
-            coh = []
-            for p in pidxs:
-                x, y = d[args.ref], d[p]
-                freqs, pxx, pyy, pxy, cnt = csd(t, x, y, args.twin,
-                                                args.overlap)
+            x, y = d[args.ref], d[pidxs].T
+            freqs, pxx, pyy, pxy, cnt = csd(t, x, y, args.twin, args.overlap)
 
-                with np.errstate(divide='ignore', invalid='ignore'):
-                    coh.append(np.abs(pxy)**2/(pxx*pyy))
+            with np.errstate(divide='ignore', invalid='ignore'):
+                coh = (np.abs(pxy)**2 / (pxx[:, None]*pyy)).T
 
             # Correct for the finite window-count coherence bias
-            coh = np.clip((cnt*np.array(coh) - 1)/(cnt - 1), 0, None)
+            coh = np.clip((cnt*coh - 1) / (cnt - 1), 0, None)
 
             cols.extend(coh)
             names.extend(f'coh-{fn}-p{p}' for p in pidxs)
@@ -740,6 +747,9 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             raise ValueError('Overlap must be in [0, 1)')
 
         f, pxx, pyy, pxy, cnt = csd(t, x, y, args.twin, args.overlap)
+
+        # Just the one pair here, so drop the signal axis
+        pyy, pxy = pyy[:, 0], pxy[:, 0]
 
         # Magnitude-squared coherence and cross-spectrum phase
         with np.errstate(divide='ignore', invalid='ignore'):
