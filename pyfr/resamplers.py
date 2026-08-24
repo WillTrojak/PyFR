@@ -412,7 +412,7 @@ class BaseCloudResampler(AlltoallMixin):
         return sorter(pts), sorter(solns)
 
     def _compute_pts_tree(self, pts):
-        return RTree.from_points(pts)
+        return RTree.from_points(pts, storage='point')
 
     def _compute_bbox_trees(self, pts):
         comm, rank, root = get_comm_rank_root()

@@ -161,7 +161,7 @@ class PointLocator:
         nodes = self.mesh.raw['nodes'][start:end]['location']
 
         # Insert these points into a spatial index
-        tree = RTree.from_points(nodes)
+        tree = RTree.from_points(nodes, storage='point')
 
         return nodes, start, tree
 

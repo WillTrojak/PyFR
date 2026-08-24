@@ -116,7 +116,7 @@ Dependencies
 PyFR |release| has a hard dependency on Python 3.12+ and the following
 Python packages:
 
-#. `boostree <https://github.com/PyFR/Boostree>`_ >= 0.1.0
+#. `boostree <https://github.com/PyFR/Boostree>`_ >= 0.3.0
 #. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.2.1
 #. `h5py <https://www.h5py.org/>`_ >= 2.10
 #. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
