@@ -3,6 +3,7 @@ from functools import partial
 
 import numpy as np
 
+from pyfr.cache import memoize
 from pyfr.mpiutil import (DistributedDirectory, get_comm_rank_root, mpi,
                           scal_coll)
 from pyfr.polys import get_polybasis
@@ -57,6 +58,9 @@ class Reducer:
 
 
 class CleanToGrid:
+    # Accumulation chunk size, in items
+    CHUNK_SZ = 2**15
+
     @staticmethod
     def _class_rows(classes, nint):
         return (classes[:, None]*nint + np.arange(nint)).ravel()
@@ -153,6 +157,47 @@ class CleanToGrid:
 
         return remap, np.concatenate(kept), bpos
 
+    @memoize
+    def _scatter_plan(self, kname):
+        # Rows sharing an entry count are gathered at a common width
+        g = self.kinds[kname]
+
+        nrows, plan = len(g.keys)*g.nint, {}
+        for etype, (_, fsrc, fdst) in g.emap.items():
+            # Sorting by destination brings each row's entries together
+            counts = np.bincount(fdst, minlength=nrows)
+            sfsrc = fsrc[np.argsort(fdst, kind='stable')]
+            starts = np.cumsum(counts) - counts
+
+            plan[etype] = blocks = []
+            for nfan in np.unique(counts):
+                if nfan == 0:
+                    continue
+
+                # Here cols[i, j] is the jth entry of row rows[i]
+                rows = np.flatnonzero(counts == nfan)
+                cols = sfsrc[starts[rows][:, None] + np.arange(nfan)]
+                blocks.append((rows, cols))
+
+        return plan
+
+    def _scatter(self, psum, src, blocks, csize):
+        buf = np.empty((csize, src.shape[1]), dtype=src.dtype)
+
+        for rows, cols in blocks:
+            cuts = range(csize, len(rows), csize)
+
+            for rs, cs in zip(np.split(rows, cuts), np.split(cols, cuts)):
+                # The first slot seeds the sum and the rest add into it
+                head, *tail = cs.T
+                acc = np.take(src, head, axis=0, mode='clip')
+                tmp = buf[:len(rs)]
+                for col in tail:
+                    np.take(src, col, axis=0, out=tmp, mode='clip')
+                    acc += tmp
+
+                psum[rs] += acc
+
     def select(self, etype, values):
         _, kept, _ = self.layouts[etype]
         flat = values.swapaxes(0, 1).reshape(-1, *values.shape[2:])
@@ -164,14 +209,18 @@ class CleanToGrid:
         vdofvals = {etype: vals.swapaxes(0, 1).reshape(-1, ncomp)
                     for etype, vals in fields.items()}
 
+        # Chunking keeps the accumulator resident across the gather slots
+        csize = max(1, self.CHUNK_SZ // ncomp)
+
         out = {etype: [] for etype in fields}
-        for g in self.kinds.values():
+        for kname, g in self.kinds.items():
             psum = np.zeros((len(g.keys)*g.nint, ncomp), dtype=dtype)
+            plan = self._scatter_plan(kname)
 
             # Non-finite values from guarded ratios propagate by design
             with np.errstate(invalid='ignore'):
-                for etype, (_, fsrc, fdst) in g.emap.items():
-                    np.add.at(psum, fdst, vdofvals[etype][fsrc])
+                for etype in g.emap:
+                    self._scatter(psum, vdofvals[etype], plan[etype], csize)
 
                 rows = self._class_rows(g.defidx, g.nint)
                 vals = psum[rows].reshape(-1, g.nint, ncomp)
@@ -220,6 +269,9 @@ def con_block_to_pri(elementscls, cfg, ndims, block, *, grads=False,
 
 
 class FieldRecovery:
+    # Differentiated block chunk size, in items
+    CHUNK_SZ = 2**21
+
     def __init__(self, mesh, elementscls, cfg):
         self.order = p = cfg.getint('solver', 'order')
         self.mesh, self.cfg = mesh, cfg
@@ -234,14 +286,14 @@ class FieldRecovery:
             basis = eles.basis
             nodes = shapecls.std_ele(p)
 
-            # Gradient operator flattened for BLAS; Jacobian in the smats
-            jop = basis.ubasis.jac_nodal_basis_at(basis.upts)
-            jopf = jop.swapaxes(1, 2).reshape(-1, basis.nupts)
+            # Gradient operator flattened for BLAS; J^-1 from the smats
+            jac = basis.ubasis.jac_nodal_basis_at(basis.upts)
+            jacop = jac.swapaxes(1, 2).reshape(-1, basis.nupts)
             rcpd = eles.rcpdjac_at_np('upts')
-            smatr = eles.smat_at_np('upts')*rcpd[None, :, None, :]
+            jinv = eles.smat_at_np('upts')*rcpd[None, :, None, :]
 
             self.eles[et] = eles
-            self.gops[et] = (jopf, smatr)
+            self.gops[et] = (jacop, jinv)
             nbasis = get_polybasis(et, p, nodes)
             self.up2n[et] = basis.ubasis.nodal_basis_at(nodes)
             self.n2up[et] = nbasis.nodal_basis_at(basis.upts)
@@ -254,13 +306,6 @@ class FieldRecovery:
 
         shared = np.fromiter(mesh.shared_nodes.by_node, dtype=int)
         self.cleaner = CleanToGrid(cnodemap, divmap, nsvptsmap, shared)
-
-    def grad(self, et, f):
-        # Element-local physical gradient at the solution points
-        jopf, smatr = self.gops[et]
-
-        refg = interp_pts(jopf, f).reshape(-1, *f.shape)
-        return np.einsum('ijkm,ijlm->jlkm', smatr, refg)
 
     def average(self, fmap):
         # Node-average per-etype (nupts, ..., neles) fields across elements
@@ -351,14 +396,14 @@ class FieldRecovery:
         out = {}
         for et, f in fmap.items():
             basis = self.eles[et].basis
-            jopf, smatr = self.gops[et]
+            jacop, jinv = self.gops[et]
 
-            # Reference gradient plus the M6 lift of the deltas
-            refg = interp_pts(jopf, f).reshape(-1, *f.shape)
+            # Compute the corrected gradients in transformed space
+            refg = interp_pts(jacop, f).reshape(-1, *f.shape)
             refg += interp_pts(basis.m6, dmap[et]).reshape(refg.shape)
 
-            # Push forward to the physical gradient with the smats
-            out[et] = np.einsum('ijkm,ijlm->jlkm', smatr, refg)
+            # Transform the gradients from reference to physical space
+            out[et] = np.einsum('ijkm,ijlm->jlkm', jinv, refg)
 
         return out
 
@@ -366,9 +411,23 @@ class FieldRecovery:
         # Stabilised divergence: average, differentiate, average again
         lap = {}
         for et, g in self.average(gmap).items():
-            gg = self.grad(et, g.reshape(len(g), -1, g.shape[-1]))
-            gg = gg.reshape(*g.shape[:3], *gg.shape[2:])
-            lap[et] = np.einsum('ijkkl->ijl', gg)
+            jacop, jinv = self.gops[et]
+            nupts, neles = len(g), g.shape[-1]
+            gf = g.reshape(nupts, -1, neles)
+
+            # Chunked so the differentiated block never reaches memory
+            csize = max(1, self.CHUNK_SZ // (len(jacop)*gf.shape[1]))
+            cuts = range(csize, neles, csize)
+
+            lap[et] = np.empty((nupts, g.shape[1], neles), g.dtype)
+            lchunks = np.split(lap[et], cuts, axis=2)
+            gchunks = np.split(gf, cuts, axis=2)
+            jchunks = np.split(jinv, cuts, axis=3)
+
+            for lchunk, gchunk, jchunk in zip(lchunks, gchunks, jchunks):
+                refg = interp_pts(jacop, gchunk)
+                refg = refg.reshape(-1, *g.shape[:-1], lchunk.shape[-1])
+                np.einsum('ijkm,ijlkm->jlm', jchunk, refg, out=lchunk)
 
         return self.average(lap)
 

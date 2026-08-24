@@ -241,7 +241,7 @@ class NativeReader:
 
         def unpack(g):
             arr = s2u(esoln[g]).reshape(ne, len(dtype[g].names), -1)
-            return arr.transpose(2, 1, 0)
+            return np.ascontiguousarray(arr.transpose(2, 1, 0))
 
         # Unpack all data groups into a single array
         soln.data[etype] = np.concatenate([unpack(g) for g in dgroups], axis=1)
