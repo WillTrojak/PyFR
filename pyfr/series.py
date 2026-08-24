@@ -174,7 +174,7 @@ def _nudft_blocks(t, f0, df, nf):
 
     for lo in range(0, nf, blk):
         hi = min(lo + blk, nf)
-        yield lo, hi, c[:, None]*v[:, :hi - lo]
+        yield slice(lo, hi), c[:, None]*v[:, :hi - lo]
         c *= u
 
 
@@ -195,8 +195,8 @@ def psd(t, x, twin=None, overlap=0.5, nyqfac=0.9, gapfac=5.0):
         xs = (xs - w @ xs / w.sum())*w[:, None]
 
         nv = np.searchsorted(f, floc, side='right')
-        for lo, hi, E in _nudft_blocks(ts, 1 / twin, 1 / twin, nv):
-            acc[lo:hi] += (np.abs(xs.T @ E)**2).T
+        for sl, E in _nudft_blocks(ts, 1 / twin, 1 / twin, nv):
+            acc[sl] += (np.abs(xs.T @ E)**2).T
 
         cnt[:nv] += 1
 
@@ -225,12 +225,12 @@ def csd(t, x, y, twin=None, overlap=0.5, nyqfac=0.9, gapfac=5.0):
         ys = (ys - w @ ys / w.sum())*w[:, None]
 
         nv = np.searchsorted(f, floc, side='right')
-        for lo, hi, E in _nudft_blocks(ts, 1 / twin, 1 / twin, nv):
+        for sl, E in _nudft_blocks(ts, 1 / twin, 1 / twin, nv):
             X, Y = xs @ E, ys.T @ E
 
-            pxx[lo:hi] += np.abs(X)**2
-            pyy[lo:hi] += (np.abs(Y)**2).T
-            pxy[lo:hi] += (np.conj(X)*Y).T
+            pxx[sl] += np.abs(X)**2
+            pyy[sl] += (np.abs(Y)**2).T
+            pxy[sl] += (np.conj(X)*Y).T
 
         cnt[:nv] += 1
 
