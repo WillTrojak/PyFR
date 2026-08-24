@@ -9,16 +9,35 @@ class BaseFluidElements:
     eos_kernel_module = 'pyfr.solvers.euler.kernels.eos'
 
     @staticmethod
-    def stats_tables(cfg):
-        return ['pyfr.solvers.euler']
+    def privars(ndims, cfg):
+        if ndims == 2:
+            return ['rho', 'u', 'v', 'p']
+        elif ndims == 3:
+            return ['rho', 'u', 'v', 'w', 'p']
 
-    @classmethod
-    def eos_tplargs(cls, ndims, cfg):
-        return {
-            'ndims': ndims,
-            'nvars': len(cls.convars(ndims, cfg)),
-            'c': cfg.items_as('constants', float),
-        }
+    @staticmethod
+    def convars(ndims, cfg):
+        if ndims == 2:
+            return ['rho', 'rhou', 'rhov', 'E']
+        elif ndims == 3:
+            return ['rho', 'rhou', 'rhov', 'rhow', 'E']
+
+    dualcoeffs = convars
+
+    @staticmethod
+    def visvars(ndims, cfg):
+        if ndims == 2:
+            return {
+                'density': ['rho'],
+                'velocity': ['u', 'v'],
+                'pressure': ['p']
+            }
+        elif ndims == 3:
+            return {
+                'density': ['rho'],
+                'velocity': ['u', 'v', 'w'],
+                'pressure': ['p']
+            }
 
     @staticmethod
     def auxvars(ndims, cfg):
@@ -48,6 +67,73 @@ class BaseFluidElements:
                 aux[f'grad_T_{x}'] = f'grad_cpT_{x}/{c['cpTw']}'
 
         return resolve_aux(aux)
+
+    @staticmethod
+    def pri_to_con(pris, cfg):
+        rho, p = pris[0], pris[-1]
+
+        # Multiply velocity components by rho
+        rhovs = [rho*c for c in pris[1:-1]]
+
+        # Compute the energy
+        gamma = cfg.getfloat('constants', 'gamma')
+        E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[1:-1])
+
+        return [rho, *rhovs, E]
+
+    @staticmethod
+    def con_to_pri(cons, cfg):
+        rho, E = cons[0], cons[-1]
+
+        # Divide momentum components by rho
+        vs = [rhov/rho for rhov in cons[1:-1]]
+
+        # Compute the pressure
+        gamma = cfg.getfloat('constants', 'gamma')
+        p = (gamma - 1)*(E - 0.5*rho*sum(v**2 for v in vs))
+
+        return [rho, *vs, p]
+
+    @staticmethod
+    def diff_con_to_pri(cons, diff_cons, cfg):
+        rho, *rhouvw = cons[:-1]
+        diff_rho, *diff_rhouvw, diff_E = diff_cons
+
+        # Divide momentum components by ρ
+        uvw = [rhov / rho for rhov in rhouvw]
+
+        # Velocity gradients: ∂u⃗ = 1/ρ·[∂(ρu⃗) - u⃗·∂ρ]
+        diff_uvw = [(diff_rhov - v*diff_rho) / rho
+                    for diff_rhov, v in zip(diff_rhouvw, uvw)]
+
+        # Pressure gradient: ∂p = (γ - 1)·[∂E - 1/2*(u⃗·∂(ρu⃗) + ρu⃗·∂u⃗)]
+        gamma = cfg.getfloat('constants', 'gamma')
+        diff_p = diff_E - 0.5*(sum(u*dru for u, dru in zip(uvw, diff_rhouvw)) +
+                               sum(ru*du for ru, du in zip(rhouvw, diff_uvw)))
+        diff_p *= gamma - 1
+
+        return [diff_rho, *diff_uvw, diff_p]
+
+    @staticmethod
+    def con_is_admissible(cons, cfg):
+        rho, E = cons[0], cons[-1]
+
+        # Given a positive density p > 0 reduces to 2*rho*E > |rho*u|^2
+        msq = sum(rhov*rhov for rhov in cons[1:-1])
+
+        return (rho > 0) & (2*rho*E > msq)
+
+    @staticmethod
+    def stats_tables(cfg):
+        return ['pyfr.solvers.euler']
+
+    @classmethod
+    def eos_tplargs(cls, ndims, cfg):
+        return {
+            'ndims': ndims,
+            'nvars': len(cls.convars(ndims, cfg)),
+            'c': cfg.items_as('constants', float),
+        }
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
@@ -103,82 +189,6 @@ class BaseFluidElements:
         else:
             return wkerns[0]
 
-    @staticmethod
-    def privars(ndims, cfg):
-        if ndims == 2:
-            return ['rho', 'u', 'v', 'p']
-        elif ndims == 3:
-            return ['rho', 'u', 'v', 'w', 'p']
-
-    @staticmethod
-    def convars(ndims, cfg):
-        if ndims == 2:
-            return ['rho', 'rhou', 'rhov', 'E']
-        elif ndims == 3:
-            return ['rho', 'rhou', 'rhov', 'rhow', 'E']
-
-    dualcoeffs = convars
-
-    @staticmethod
-    def visvars(ndims, cfg):
-        if ndims == 2:
-            return {
-                'density': ['rho'],
-                'velocity': ['u', 'v'],
-                'pressure': ['p']
-            }
-        elif ndims == 3:
-            return {
-                'density': ['rho'],
-                'velocity': ['u', 'v', 'w'],
-                'pressure': ['p']
-            }
-
-    @staticmethod
-    def pri_to_con(pris, cfg):
-        rho, p = pris[0], pris[-1]
-
-        # Multiply velocity components by rho
-        rhovs = [rho*c for c in pris[1:-1]]
-
-        # Compute the energy
-        gamma = cfg.getfloat('constants', 'gamma')
-        E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[1:-1])
-
-        return [rho, *rhovs, E]
-
-    @staticmethod
-    def con_to_pri(cons, cfg):
-        rho, E = cons[0], cons[-1]
-
-        # Divide momentum components by rho
-        vs = [rhov/rho for rhov in cons[1:-1]]
-
-        # Compute the pressure
-        gamma = cfg.getfloat('constants', 'gamma')
-        p = (gamma - 1)*(E - 0.5*rho*sum(v**2 for v in vs))
-
-        return [rho, *vs, p]
-
-    @staticmethod
-    def diff_con_to_pri(cons, diff_cons, cfg):
-        rho, *rhouvw = cons[:-1]
-        diff_rho, *diff_rhouvw, diff_E = diff_cons
-
-        # Divide momentum components by ρ
-        uvw = [rhov / rho for rhov in rhouvw]
-
-        # Velocity gradients: ∂u⃗ = 1/ρ·[∂(ρu⃗) - u⃗·∂ρ]
-        diff_uvw = [(diff_rhov - v*diff_rho) / rho
-                    for diff_rhov, v in zip(diff_rhouvw, uvw)]
-
-        # Pressure gradient: ∂p = (γ - 1)·[∂E - 1/2*(u⃗·∂(ρu⃗) + ρu⃗·∂u⃗)]
-        gamma = cfg.getfloat('constants', 'gamma')
-        diff_p = diff_E - 0.5*(sum(u*dru for u, dru in zip(uvw, diff_rhouvw)) +
-                               sum(ru*du for ru, du in zip(rhouvw, diff_uvw)))
-        diff_p *= gamma - 1
-
-        return [diff_rho, *diff_uvw, diff_p]
 
 class EulerElements(BaseFluidElements, BaseAdvectionElements):
     def set_backend(self, *args, **kwargs):

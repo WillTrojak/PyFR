@@ -46,6 +46,11 @@ class BaseElements:
     def auxvars(ndims, cfg):
         return {}
 
+    @staticmethod
+    def con_is_admissible(cons, cfg):
+        # Absent an equation of state every state is admissible
+        return np.ones(np.shape(cons[0]), dtype=bool)
+
     def __init__(self, basiscls, eles, cfg):
         self._be = None
 

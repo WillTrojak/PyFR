@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser
 import csv
+from functools import partial
 import io
 from pathlib import Path
 import re
@@ -19,6 +20,7 @@ from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.partitioners import (BasePartitioner, get_partitioner,
                                reconstruct_partitioning, write_partitioning)
 from pyfr.plugins import BaseCLIPlugin
+from pyfr.plugins.common import get_elementscls
 from pyfr.progress import (NullProgressSequence, ProgressBar,
                            ProgressSequenceAction)
 from pyfr.readers import BaseReader, get_reader_by_extn, get_reader_by_name
@@ -555,11 +557,15 @@ def process_resample(args):
     if ssoln.stats.get('data', 'prefix') != 'soln':
         raise RuntimeError('Resampling is only supported for solution files')
 
+    # Obtain the target system for admissibility testing
+    elementscls = get_elementscls(tcfg)
+    is_admissible = partial(elementscls.con_is_admissible, cfg=tcfg)
+
     # Get the interpolator, auto-configuring from source order
     order = ssoln.config.getint('solver', 'order')
     opts = dict(s.split(':', 1) for s in args.iopts)
-    interp = get_interpolator(args.interpolator, smesh.ndims, opts,
-                              order=order)
+    interp = get_interpolator(args.interpolator, smesh.ndims, is_admissible,
+                              opts, order=order)
 
     # Perform the resampling
     resampler = NativeCloudResampler(smesh, ssoln, interp, progress)

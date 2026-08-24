@@ -10,9 +10,10 @@ from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
 
-def get_interpolator(name, ndims, opts, order=None):
-    return subclass_where(BaseInterpolator, name=name).from_opts(ndims, opts,
-                                                                 order=order)
+def get_interpolator(name, ndims, is_admissible, opts, order=None):
+    cls = subclass_where(BaseInterpolator, name=name)
+
+    return cls.from_opts(ndims, is_admissible, opts, order=order)
 
 
 def _ploc_op(etype, nspts, cfg):
@@ -50,7 +51,7 @@ class BaseInterpolator:
     dflt_opts = {}
 
     @classmethod
-    def from_opts(cls, ndims, opts={}, *, order=None):
+    def from_opts(cls, ndims, is_admissible, opts={}, *, order=None):
         # Normalise hyphens to underscores in user-supplied keys
         opts = {k.replace('-', '_'): v for k, v in opts.items()}
 
@@ -68,7 +69,7 @@ class BaseInterpolator:
         if order is not None:
             kwargs['order'] = order
 
-        return cls(ndims, **kwargs)
+        return cls(ndims, is_admissible, **kwargs)
 
 
 class IDWInterpolator(BaseInterpolator):
@@ -83,7 +84,8 @@ class IDWInterpolator(BaseInterpolator):
     # Default options
     dflt_opts = {'n': 0, 'rho': 0}
 
-    def __init__(self, ndims, *, order=None, n=0, rho=0):
+    def __init__(self, ndims, is_admissible, *, order=None, n=0, rho=0):
+        self.is_admissible = is_admissible
         self.n = n or 2**ndims
         self.rho = rho or ndims + 1
         self.eps = 10*np.finfo(float).eps
@@ -110,9 +112,9 @@ class WENOInterpolator(BaseInterpolator):
                  'cond': 1.0e8, 'dir_bias': 2.5, 'gamma0': 0.85,
                  'mode': 'wenoz'}
 
-    def __init__(self, ndims, *, order=None, n=0, degree=0, sub_degree=0,
-                 nsub=0, sub_n=0, rho=0, q=4, ct=1.0e-3, cond=1.0e8,
-                 dir_bias=2.5, gamma0=0.85, mode='wenoz'):
+    def __init__(self, ndims, is_admissible, *, order=None, n=0, degree=0,
+                 sub_degree=0, nsub=0, sub_n=0, rho=0, q=4, ct=1.0e-3,
+                 cond=1.0e8, dir_bias=2.5, gamma0=0.85, mode='wenoz'):
         # Auto-derive degree from the source polynomial order
         if not degree:
             degree = min(order, 3) if order else 2
@@ -125,6 +127,7 @@ class WENOInterpolator(BaseInterpolator):
         if not n:
             n = max(3*nterms, 24 if ndims == 2 else 48)
 
+        self.is_admissible = is_admissible
         self.n = n
         self.q = q
         self.ct = ct
@@ -134,7 +137,8 @@ class WENOInterpolator(BaseInterpolator):
         self.eps = 10*np.finfo(float).eps
 
         # Keep an IDW fallback for exact hits and rejected stencils
-        self._idw = IDWInterpolator(ndims, n=self.n, rho=rho or ndims + 1)
+        self._idw = IDWInterpolator(ndims, is_admissible, n=self.n,
+                                    rho=rho or ndims + 1)
 
         # Precompute the polynomial bases used by the central and side fits
         cpowers = self._monomial_powers(ndims, degree)
@@ -184,16 +188,23 @@ class WENOInterpolator(BaseInterpolator):
         # If every polynomial stencil is rejected then revert to IDW
         if not cands:
             return self._idw(p, spts, svals)
-        # If there is only one candidate fit then return it
+        # If there is only one candidate fit then take it
         elif len(cands) == 1:
-            return cands[0][0]
+            val = cands[0][0]
         # Otherwise combine the candidate fits with WENO-Z or TENO weights
         else:
             betas = np.array([c[1] for c in cands])
             vals = np.vstack([c[0] for c in cands])
 
             weights = self._nonlinear_weights(betas, central is not None)
-            return weights @ vals
+            val = weights @ vals
+
+        # Ensure the resulting state is admissible
+        if self.is_admissible(val[:, None]).all():
+            return val
+        # Otherwise, fall back to IDW interpolation
+        else:
+            return self._idw(p, spts, svals)
 
     @staticmethod
     def _monomial_powers(ndims, degree):
