@@ -201,21 +201,14 @@ class BoundaryRegion(BaseRegion):
         self.bcname = bcname
 
     def region_eles(self, mesh):
-        comm, rank, root = get_comm_rank_root()
-
         eset = defaultdict(list)
 
-        # Ensure the boundary exists
-        bcranks = comm.gather(self.bcname in mesh.bcon, root=root)
-        if rank == root and not any(bcranks):
-            raise ValueError(f'Boundary {self.bcname} does not exist')
-
         # Determine which of our elements are directly on the boundary
-        if self.bcname in mesh.bcon:
-            for etype, fidx, eidxs in mesh.bcon[self.bcname].items():
+        if (con := mesh.bcon_for(self.bcname)) is not None:
+            for etype, fidx, eidxs in con.items():
                 eset[etype].extend(eidxs.tolist())
 
-        return {k: sorted(v) for k, v in eset.items()}
+        return {k: sorted(set(v)) for k, v in eset.items()}
 
 
 class BaseGeometricRegion(BaseRegion):

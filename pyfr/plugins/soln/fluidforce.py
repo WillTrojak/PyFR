@@ -9,7 +9,8 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 
 class FluidForceIntegrator(SurfaceIntegrator):
     def __init__(self, cfg, cfgsect, system, bcname, morigin):
-        con = system.mesh.bcon.get(bcname)
+        # Fuse the boundaries in any brace enumeration into one surface
+        con = system.mesh.bcon_for(bcname)
 
         super().__init__(cfg, cfgsect, system.ele_map, con, flags='s')
 
@@ -74,19 +75,14 @@ class FluidForcePlugin(PublishMixin, SeriesWriterMixin, BackendMixin,
                 self._mcnames = ['cmr', 'cmp', 'cmy']
                 self._mcdirs = [drag, side, lift]
 
-        # See which ranks have the boundary
-        bcranks = comm.gather(suffix in intg.system.mesh.bcon, root=root)
+        # Set interpolation matrices and quadrature weights; this also
+        # validates the boundaries against the codec on every rank
+        self.ff_int = FluidForceIntegrator(self.cfg, cfgsect, intg.system,
+                                           suffix, morigin)
 
         # The root rank needs to open the output file
         if rank == root:
-            if not any(bcranks):
-                raise RuntimeError(f'Boundary {suffix} does not exist')
-
             self._init_series(intg, self._fields)
-
-        # Set interpolation matrices and quadrature weights
-        self.ff_int = FluidForceIntegrator(self.cfg, cfgsect, intg.system,
-                                           suffix, morigin)
 
         # Initialise backend infrastructure
         self._init_backend(intg)

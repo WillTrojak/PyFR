@@ -9,7 +9,7 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import (Scatterer, SparseScatterer, autofree,
                           get_comm_rank_root)
 from pyfr.readers.shared_nodes import SharedNodesFinder
-from pyfr.util import first
+from pyfr.util import expand_braces, first
 
 
 @dataclass
@@ -44,6 +44,48 @@ class Mesh:
     node_idxs: np.ndarray = None
     node_valency: np.ndarray = None
     shared_nodes: object = None
+
+    def bcon_for(self, spec):
+        # Boundaries in any brace enumeration, fused into one connectivity
+        names = list(expand_braces(spec))
+
+        # Catch double counted boundaries
+        if dup := sorted(n for n in set(names) if names.count(n) > 1):
+            raise ValueError(f'Duplicate boundaries in {spec}: {dup}')
+
+        # The codec is global, so this check is consistent across all ranks
+        if missing := [b for b in names if f'bc/{b}' not in self.codec]:
+            raise ValueError(f'Boundaries do not exist: {missing}')
+
+        cons = [c for b in names if (c := self.bcon.get(b))]
+
+        return Connectivity.fuse(cons)
+
+    def bc_sections(self, cfg, prefix='soln-bcs-'):
+        # Map each boundary onto the section which parameterises it
+        bcs = {c.removeprefix('bc/') for c in self.codec
+               if c.startswith('bc/')}
+
+        sects = {}
+        for sect in cfg.sections():
+            if not sect.startswith(prefix):
+                continue
+
+            names = set(expand_braces(sect.removeprefix(prefix)))
+
+            # Enumerated sections must name valid boundaries
+            if len(names) > 1 and (missing := names - bcs):
+                raise ValueError(f'Boundaries in [{sect}] do not exist: '
+                                 f'{sorted(missing)}')
+
+            # A boundary may be parameterised by at most one section
+            if dup := min(names & sects.keys(), default=None):
+                raise ValueError(f'Boundary {dup} is parameterised by both '
+                                 f'[{sects[dup]}] and [{sect}]')
+
+            sects |= dict.fromkeys(names & bcs, sect)
+
+        return sects
 
 
 @dataclass
@@ -94,6 +136,22 @@ class Connectivity:
         mask = new >= 0
 
         return Connectivity(self.cidxs[mask], new[mask], self.cidxmap)
+
+    @classmethod
+    def fuse(cls, cons):
+        # Fuse several connectivities, which must share a cidxmap, into one
+        cons = list(cons)
+        if not cons:
+            return None
+        elif len(cons) == 1:
+            return cons[0]
+        else:
+            cidxs = np.concatenate([c.cidxs for c in cons])
+            eidxs = np.concatenate([c.eidxs for c in cons])
+
+            sidx = np.lexsort((eidxs, cidxs))
+
+            return cls(cidxs[sidx], eidxs[sidx], first(cons).cidxmap)
 
 
 class NativeReader:

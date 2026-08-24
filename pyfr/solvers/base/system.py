@@ -271,27 +271,44 @@ class BaseSystem:
 
         prevcfg = initsoln.config if initsoln else None
 
-        # Iterate over all boundaries in the mesh
+        # Map each boundary onto its governing section
+        bcsects = mesh.bc_sections(self.cfg)
+
+        # Determine the active sections, in codec order
+        sects = []
         for c in mesh.codec:
             if not c.startswith('bc/'):
                 continue
 
-            # Construct an MPI communicator for this boundary
+            # Unclaimed boundaries fall back to their nominal section,
+            # with the resulting error coming from the config lookup
             bname = c.removeprefix('bc/')
-            localbc = bname in mesh.bcon
+            sect = bcsects.get(bname, f'soln-bcs-{bname}')
+            if sect not in sects:
+                sects.append(sect)
+
+        # Iterate over the boundary conditions
+        for cfgsect in sects:
+            # Name the constituent boundaries
+            sname = cfgsect.removeprefix('soln-bcs-')
+
+            # Fuse the boundaries
+            con = mesh.bcon_for(sname)
+
+            # Construct an MPI communicator for this BC
+            localbc = con is not None
             bccomm = autofree(comm.Split(1 if localbc else mpi.UNDEFINED))
 
             # Get the class
-            cfgsect = f'soln-bcs-{bname}'
             bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
-            # Check if there is serialised data for this boundary in initsoln
-            sdata = initsoln.state.get(f'bcs/{bname}') if initsoln else None
+            # Serialised state and kernel tags follow suffix
+            sdata = initsoln.state.get(f'bcs/{sname}') if initsoln else None
 
             # If we have this boundary then create an instance
             if localbc:
-                bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
-                                  cfgsect, self.cfg, bccomm)
+                bciface = bcclass(self.backend, con, elemap, cfgsect,
+                                  self.cfg, bccomm)
                 bciface.setup(sdata, prevcfg)
                 bc_inters.append(bciface)
             else:
@@ -299,9 +316,9 @@ class BaseSystem:
 
             # Allow the boundary to return a preparation callback
             if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
-                bc_prefns[bname] = pfn
+                bc_prefns[sname] = pfn
 
-            bcclass.serialisefn(bciface, f'bcs/{bname}', serialiser)
+            bcclass.serialisefn(bciface, f'bcs/{sname}', serialiser)
 
         return bc_inters, bc_prefns
 

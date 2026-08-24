@@ -17,7 +17,8 @@ from pyfr.plugins.postproc import get_source
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.shapes import BaseShape, proj_pts
 from pyfr.subdiv import get_subdiv
-from pyfr.util import file_path_gen, first, paren_depths, subclass_where
+from pyfr.util import (file_path_gen, first, paren_depths,
+                       subclass_where)
 
 
 def con_psolns_pgrads(elementscls, scfg, csolns, cgrads):
@@ -348,15 +349,15 @@ class _BoundaryAscentOutput(_VolumeAscentOutput):
         self.renderer = renderer
         self.sname = sname
 
-        # Accept bc/foo or foo to match mesh.bcon keys
-        bcname = region.removeprefix('bc/')
-        comm, _, _ = get_comm_rank_root()
-        if not comm.allreduce(bcname in renderer.mesh.bcon, op=mpi.LOR):
-            raise ValueError(f'Boundary {bcname} does not exist')
+        # Boundary surface sources take the form bc/<name>
+        if not region.startswith('bc/'):
+            raise ValueError(f'Invalid surface source: {region}')
+
+        conn = renderer.mesh.bcon_for(region.removeprefix('bc/'))
 
         # Per-itype patches, each a flat (eidxs, etype, mop, sop, fidx, svpts)
         self.patches = patches = defaultdict(list)
-        if (conn := renderer.mesh.bcon.get(bcname)) is not None:
+        if conn is not None:
             for etype, fidx, eidxs in conn.items():
                 itype, mop, sop, svpts = renderer.adapter.face_soln_op_vpts(
                     etype, fidx, renderer.divisor
