@@ -315,8 +315,9 @@ class WENOInterpolator(BaseInterpolator):
         coeff_var = np.sum((orders[1:, None]*coeffs[1:])**2)
 
         # Blend residual and higher-order energy into one smoothness beta
-        beta = resid / (var + 1e-14)
-        beta += 1e-2*coeff_var / (np.sum(coeffs[0]**2) + 1)
+        blend = resid + 1e-2*coeff_var
+        norm = var + 1e-14*np.sum(mean**2)
+        beta = blend / norm if norm > 0 else 0.0
 
         return coeffs[0], float(beta)
 
