@@ -48,15 +48,18 @@ def format_s(delta):
 
 class ProgressBar:
     _blocks = ' ▏▎▍▌▋▊▉█'
-    _dispfmt = '{:7.1%} [{}] {:.{dps}f}/{:.{dps}f} ela: {} rem: {}'
+    _dispfmt = '{:6.1%} [{}] {:.{dps}f}/{:.{dps}f} ela: {} rem: {}'
+    _pctfmt = '{:6.1%} [{}] ela: {} rem: {}'
 
     # Minimum time in seconds between updates
     _mindelta = 0.1
 
-    def __init__(self, *, prefix='', suffix='\n', dps=2, fmt=format_hms):
+    def __init__(self, *, prefix='', suffix='\n', dps=2, counts=True,
+                 fmt=format_hms):
         self.prefix = prefix
         self.suffix = suffix
         self.dps = dps
+        self.counts = counts
         self.fmt = fmt
 
         # Registered (fn, hold) pairs for the rotating info display
@@ -77,7 +80,10 @@ class ProgressBar:
         self.stcurr = self.strtrt
         self.stelap = 0
 
-        self._nbarcol = self._ncol - 24 - 2*len(f'{end:.{self.dps}f}')
+        if self.counts:
+            self._nbarcol = self._ncol - 24 - 2*len(f'{end:.{self.dps}f}')
+        else:
+            self._nbarcol = self._ncol - 22
 
         sys.stderr.write(self.prefix)
 
@@ -178,7 +184,11 @@ class ProgressBar:
         bar = self._bar(n, rfrac)
 
         # Render the progress bar
-        s = self._dispfmt.format(frac, bar, cu, en, wela, wrem, dps=self.dps)
+        if self.counts:
+            s = self._dispfmt.format(frac, bar, cu, en, wela, wrem,
+                                     dps=self.dps)
+        else:
+            s = self._pctfmt.format(frac, bar, wela, wrem)
 
         # Erase any existing bar and write the new bar
         sys.stderr.write(f'\x1b[2K\x1b[G{self.prefix}{s}')
@@ -320,10 +330,11 @@ class ProgressSequence:
         yield ProgressSequence(prefix=self._prefix + '  ')
 
     @contextlib.contextmanager
-    def start_with_bar(self, phase):
+    def start_with_bar(self, phase, counts=True):
         prefix, tstart = self._start_phase(phase)
 
-        yield ProgressBar(prefix=prefix, suffix='', dps=0, fmt=format_s)
+        yield ProgressBar(prefix=prefix, suffix='', dps=0, counts=counts,
+                          fmt=format_s)
 
         self._finish_phase(phase, prefix, tstart)
 
@@ -356,7 +367,7 @@ class NullProgressSequence(ProgressSequence):
         yield NullProgressSpinner()
 
     @contextlib.contextmanager
-    def start_with_bar(self, phase):
+    def start_with_bar(self, phase, counts=True):
         yield NullProgressBar()
 
 
