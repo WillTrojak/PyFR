@@ -4,8 +4,10 @@ from math import comb
 from boostree import RTree
 import numpy as np
 
-from pyfr.mpiutil import AlltoallMixin, Sorter, get_comm_rank_root, mpi
-from pyfr.nputil import morton_encode, zip_chunks
+from pyfr.mpiutil import (AlltoallMixin, SharedWorkQueue, Sorter,
+                          get_comm_rank_root, get_node_comm, mpi,
+                          mpi_progress, shared_ndarrays)
+from pyfr.nputil import morton_encode
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
@@ -513,11 +515,23 @@ class BaseCloudResampler(AlltoallMixin):
         return esolns
 
     def sample_with_pts(self, tpts, dtype):
+        comm, rank, root = get_comm_rank_root()
+
         with self.progress.start('Distribute target points'):
             tpts, tcountdisp, tidx = self._distribute_tgt_pts(tpts)
 
-        with self.progress.start('Sample target points'):
-            tsolns = self._sample_tgt_points(tpts, dtype)
+        with self.progress.start_with_sequence('Sample target points') as ps:
+            with ps.start('Find neighbours'):
+                didxs, redo, fpdata, fpcnt = self._find_tgt_neighbours(tpts)
+                comm.barrier()
+
+            with ps.start('Exchange fringe points'):
+                self._exchange_fringe_pts(fpdata, fpcnt)
+                comm.barrier()
+
+            with ps.start_with_bar('Interpolate points', counts=False) as pbar:
+                tsolns = self._interp_tgt_pts(tpts, didxs, redo, dtype, pbar)
+                comm.barrier()
 
         with self.progress.start('Distribute target samples'):
             return self._distribute_tgt_samples(tsolns, tcountdisp, tidx)
@@ -539,70 +553,88 @@ class BaseCloudResampler(AlltoallMixin):
 
         return *rbuf, np.argsort(tidx)
 
-    def _interp_blocks(self, pts, idxs):
-        out = np.empty((len(pts), self.nvars))
-
-        # Chunked as the gathered stencils are much larger than the points
-        for ochunk, pchunk, ichunk in zip_chunks(self.BLK_SZ, out, pts, idxs):
-            ochunk[:] = self.interp(pchunk, self.pts[ichunk],
-                                    self.solns[ichunk])
-
-        return out
-
-    def _sample_tgt_points(self, pts, dtype):
+    def _find_tgt_neighbours(self, pts):
         comm, rank, root = get_comm_rank_root()
-
-        # Allocate the interpolated solution array
-        solns = np.empty((len(pts), self.nvars), dtype=dtype)
 
         nn = self.interp.n
-        deferred, off = [], 0
-        fpreqs = [[] for i in range(comm.size)]
 
         # Determine the nearest points to each sample point
-        nidxs, ndists = self.pts_tree.knn(pts, nn)
+        didxs, ndists = self.pts_tree.knn(pts, nn)
         ndists = ndists[:, -1]
 
-        # Compute the associated bounding boxes
-        pmins, pmaxs = pts - ndists[:, None], pts + ndists[:, None]
+        # Narrow the indices as this list lives until the interpolation
+        didxs = didxs.astype(np.int32)
 
-        # Determine which ranks intersect with these bounding boxes
+        # Determine which peers hold points near each sample point
+        pmins, pmaxs = pts - ndists[:, None], pts + ndists[:, None]
         iranks, icounts = self.ebbox_tree.intersect(pmins, pmaxs)
 
-        for i, (p, count) in enumerate(zip(pts, icounts)):
-            # If any other ranks intersect then defer
-            if count:
-                deferred.append(i)
-                for j in np.unique(iranks[off:off + count]):
-                    fpreqs[j].append([*p, ndists[i]])
+        # Pair each intersecting rank with the point which found it
+        pidx = np.repeat(np.arange(len(pts)), icounts.astype(int))
 
-                off += count
+        # A rank may own several intersecting tiles, so deduplicate
+        pairs = np.unique(np.stack([iranks, pidx], axis=1), axis=0)
 
-        # Points which no peer rank can contribute to are done locally
-        if len(local := np.flatnonzero(icounts == 0)):
-            solns[local] = self._interp_blocks(pts[local], nidxs[local])
+        # Sorting by rank leaves the requests grouped ready to exchange
+        fpi = pairs[:, 1]
+        fpcnt = np.bincount(pairs[:, 0], minlength=comm.size)
 
-        self._exchange_fringe_pts(fpreqs, nn)
+        # Only the points which ask for data can gain new neighbours
+        redo = np.unique(fpi)
 
-        # Process the deferred points
-        if len(dpts := pts[deferred]):
-            didxs = self.pts_tree.knn(dpts, nn)[0]
-            solns[deferred] = self._interp_blocks(dpts, didxs)
+        # Assemble the fringe point requests
+        fpdata = np.hstack([pts[fpi], ndists[fpi, None]])
 
-        comm.barrier()
+        return didxs, redo, fpdata, fpcnt
 
-        # Return the interpolated solution values
-        return solns
-
-    def _exchange_fringe_pts(self, frboxes, nn):
+    def _interp_tgt_pts(self, pts, didxs, redo, dtype, pbar):
         comm, rank, root = get_comm_rank_root()
 
-        # Tally up how many requests we have for each rank
-        scount = np.array([len(fr) for fr in frboxes])
-        if scount.any():
-            sbuf = np.vstack([fr for fr in frboxes if fr])
-        else:
-            sbuf = np.empty((0, self.ndims + 1))
+        nn = self.interp.n
+
+        # Fringe insertions can alter any kNN, so query the augmented tree
+        if len(redo):
+            didxs[redo] = self.pts_tree.knn(pts[redo], nn)[0]
+
+        # Communicator for the ranks on our node
+        ncomm = get_node_comm(comm)
+        wins = []
+
+        # Stage an array into a node-shared window
+        def share(arr):
+            win, views = shared_ndarrays(ncomm, arr.shape, arr.dtype)
+            views[ncomm.rank][:] = arr
+            wins.append(win)
+
+            return views
+
+        pts_v, didxs_v = share(pts), share(didxs)
+        spts_v, ssolns_v = share(self.pts), share(self.solns)
+
+        # Allocate the interpolated solution array
+        owin, solns_v = shared_ndarrays(ncomm, (len(pts), self.nvars), dtype)
+        wins.append(owin)
+
+        # Node-local queue which lets idle ranks steal peer blocks
+        queue = SharedWorkQueue(ncomm, len(pts), self.BLK_SZ)
+
+        # Interpolate the points in blocks, tracking global progress
+        with queue, mpi_progress(comm, pbar, len(pts)) as tick:
+            while (blk := queue.claim()) is not None:
+                r, sl = blk
+                idxs = didxs_v[r][sl]
+
+                solns_v[r][sl] = self.interp(pts_v[r][sl], spts_v[r][idxs],
+                                             ssolns_v[r][idxs])
+                tick(sl.stop - sl.start)
+
+        # Copy our own segment out of the shared window
+        return solns_v[ncomm.rank].copy()
+
+    def _exchange_fringe_pts(self, sbuf, scount):
+        comm, rank, root = get_comm_rank_root()
+
+        nn = self.interp.n
 
         # Exchange the requests
         rdata, (_, rdisps) = self._alltoallcv(comm, sbuf, scount)
