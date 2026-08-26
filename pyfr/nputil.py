@@ -183,6 +183,12 @@ def iter_struct(arr, n=1000, axis=0):
         yield from c.tolist()
 
 
+def zip_chunks(n, *arrs, axis=0):
+    cuts = range(n, arrs[0].shape[axis], n)
+
+    yield from zip(*(np.split(a, cuts, axis) for a in arrs))
+
+
 bfloat16 = np.dtype('u2', metadata={'pyfr_bf16': True})
 
 

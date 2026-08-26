@@ -6,6 +6,7 @@ import numpy as np
 from pyfr.cache import memoize
 from pyfr.mpiutil import (DistributedDirectory, get_comm_rank_root, mpi,
                           scal_coll)
+from pyfr.nputil import zip_chunks
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape, interp_pts
 from pyfr.subdiv import get_subdiv
@@ -185,9 +186,7 @@ class CleanToGrid:
         buf = np.empty((csize, src.shape[1]), dtype=src.dtype)
 
         for rows, cols in blocks:
-            cuts = range(csize, len(rows), csize)
-
-            for rs, cs in zip(np.split(rows, cuts), np.split(cols, cuts)):
+            for rs, cs in zip_chunks(csize, rows, cols):
                 # The first slot seeds the sum and the rest add into it
                 head, *tail = cs.T
                 acc = np.take(src, head, axis=0, mode='clip')
@@ -417,14 +416,11 @@ class FieldRecovery:
 
             # Chunked so the differentiated block never reaches memory
             csize = max(1, self.CHUNK_SZ // (len(jacop)*gf.shape[1]))
-            cuts = range(csize, neles, csize)
 
             lap[et] = np.empty((nupts, g.shape[1], neles), g.dtype)
-            lchunks = np.split(lap[et], cuts, axis=2)
-            gchunks = np.split(gf, cuts, axis=2)
-            jchunks = np.split(jinv, cuts, axis=3)
+            chunks = zip_chunks(csize, lap[et], gf, jinv, axis=-1)
 
-            for lchunk, gchunk, jchunk in zip(lchunks, gchunks, jchunks):
+            for lchunk, gchunk, jchunk in chunks:
                 refg = interp_pts(jacop, gchunk)
                 refg = refg.reshape(-1, *g.shape[:-1], lchunk.shape[-1])
                 np.einsum('ijkm,ijlkm->jlm', jchunk, refg, out=lchunk)
