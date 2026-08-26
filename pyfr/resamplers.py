@@ -141,6 +141,10 @@ class WENOInterpolator(BaseInterpolator):
         self.gamma0 = gamma0
         self.eps = 10*np.finfo(float).eps
 
+        # Gram ridge and Cholesky screening threshold; ridge << screen**2
+        self.ridge = 1.0e-10
+        self.screen = 1.0e-2
+
         # Keep an IDW fallback for exact hits and rejected stencils
         self._idw = IDWInterpolator(ndims, is_admissible, n=self.n,
                                     rho=rho or ndims + 1)
@@ -282,6 +286,47 @@ class WENOInterpolator(BaseInterpolator):
 
             return dirs[:nsub]
 
+    def _solve_fits(self, amat, rhs):
+        # Scale each column to unit norm to improve the conditioning
+        cnorm = np.linalg.norm(amat, axis=1)
+
+        # Skip columns which are negligible, as scaling them amplifies noise
+        cmax = cnorm.max(axis=1, keepdims=True)
+        cnorm = np.where(cnorm > 1e-12*cmax, cnorm, 1)
+
+        # Apply the scaling, consuming amat as the caller does not reuse it
+        amat /= cnorm[:, None, :]
+
+        # Form the normal equations
+        gram, grhs = amat.mT @ amat, amat.mT @ rhs
+
+        # Apply a ridge so rank deficient systems can be factored
+        gdiag = np.einsum('...ii->...i', gram)
+        gdiag += self.ridge
+
+        # Take the Cholesky diagonal as a cheap conditioning estimate
+        ldiag = np.einsum('...ii->...i', np.linalg.cholesky(gram))
+
+        # Normal equations square the conditioning, so screen well inside it
+        ill = ldiag.min(axis=1) < self.screen
+
+        coeffs = np.linalg.solve(gram, grhs)
+        ok = np.ones(len(gram), dtype=bool)
+
+        # Redo the ill-conditioned fits with a singular value decomposition
+        if ill.any():
+            u, sval, vh = np.linalg.svd(amat[ill], full_matrices=False)
+            ok[ill] = sval[:, 0] <= self.cond*sval[:, -1]
+
+            # Truncate modes below the condition limit rather than inverting
+            svs = np.where(sval*self.cond > sval[:, :1], sval, np.inf)
+            coeffs[ill] = vh.mT @ ((u.mT @ rhs[ill]) / svs[:, :, None])
+
+        # Undo the scaling to recover the monomial basis coefficients
+        coeffs /= cnorm[:, :, None]
+
+        return coeffs, ok
+
     def _fit_stencils(self, x, svals, power_data):
         _, _, orders = power_data
 
@@ -300,13 +345,8 @@ class WENOInterpolator(BaseInterpolator):
         amat = sqrtw[:, :, None]*vdm
         rhs = sqrtw[:, :, None]*svals
 
-        # A single SVD gives both the condition estimate and the solve
-        u, sval, vh = np.linalg.svd(amat, full_matrices=False)
-        ok = sval[:, 0] <= self.cond*sval[:, -1]
+        coeffs, ok = self._solve_fits(amat, rhs)
 
-        svs = np.where(sval > 0, sval, 1)
-        urhs = (u.mT @ rhs) / svs[:, :, None]
-        coeffs = vh.mT @ urhs
         fit = vdm @ coeffs
 
         # Weighted variance and residual, aggregated across all nvars
