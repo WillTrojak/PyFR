@@ -7,7 +7,7 @@ import numpy as np
 from pyfr.mpiutil import (AlltoallMixin, SharedWorkQueue, Sorter,
                           get_comm_rank_root, get_node_comm, mpi,
                           mpi_progress, shared_ndarrays)
-from pyfr.nputil import morton_encode
+from pyfr.nputil import morton_encode, zip_chunks
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
@@ -392,6 +392,9 @@ class BaseCloudResampler(AlltoallMixin):
     # Interpolation block size, in points
     BLK_SZ = 2**12
 
+    # Peer pre-filter block size, in points
+    PREFILTER_BLK_SZ = 2**21
+
     def __init__(self, pts, solns, interp, progress):
         self.ndims = pts.shape[1]
         self.nvars = solns.shape[1]
@@ -408,6 +411,9 @@ class BaseCloudResampler(AlltoallMixin):
 
             # Index the tile bounding boxes of our peer ranks
             self.ebbox_tree = self._compute_bbox_tree(self.pts, keys)
+
+            # Summarise which cells of the domain our peers occupy
+            self._prefilter_counts = self._compute_prefilter_counts(self.pts)
 
         # Track what points we have sent to other ranks
         comm, rank, root = get_comm_rank_root()
@@ -487,6 +493,72 @@ class BaseCloudResampler(AlltoallMixin):
 
         return RTree.from_boxes(bmins[sel], bmaxs[sel], branks[sel])
 
+    def _compute_prefilter_counts(self, pts):
+        comm, rank, root = get_comm_rank_root()
+
+        # Coarse grid used to pre-filter neighbour queries
+        gbits = 8 if self.ndims == 3 else 12
+        self._prefilter_fact = gfact = 2**gbits
+
+        # Flag the cells which contain one of our points
+        occ = np.zeros(gfact**self.ndims, dtype=np.int32)
+        gpts = self._prefilter_coords(pts)
+        occ[np.ravel_multi_index(tuple(gpts.T), (gfact,)*self.ndims)] = 1
+
+        # Count how many ranks hold points in each cell
+        own = occ.astype(bool)
+        comm.Allreduce(mpi.IN_PLACE, occ, op=mpi.SUM)
+
+        # Cells holding the points of a peer rank
+        peer = (occ > own).reshape((gfact,)*self.ndims)
+
+        # Accumulate so any box can be counted in constant time
+        counts = np.zeros((gfact + 1,)*self.ndims, dtype=np.int32)
+        counts[(slice(1, None),)*self.ndims] = peer
+        for i in range(self.ndims):
+            counts.cumsum(axis=i, out=counts)
+
+        return counts
+
+    def _prefilter_coords(self, pts):
+        gfact, (_, pmin, ext) = self._prefilter_fact, self._mort_norm
+
+        # Normalise the points onto the coarse grid
+        gpts = gfact*((pts - pmin) / ext)
+
+        return np.clip(gpts, 0, gfact - 1).astype(np.int32)
+
+    def _prefilter(self, pts, ndists):
+        keep, cmins, cmaxs = [], [], []
+
+        # Collect the candidates a block of points at a time
+        for bpts, bdst in zip_chunks(self.PREFILTER_BLK_SZ, pts, ndists):
+            # Bounding boxes of the neighbours of this block
+            bmins, bmaxs = bpts - bdst[:, None], bpts + bdst[:, None]
+
+            # Locate the box corners on the grid, upper face exclusive
+            glo = self._prefilter_coords(bmins).T
+            ghi = self._prefilter_coords(bmaxs).T + 1
+
+            # Count the peer cells inside each box by inclusion-exclusion
+            cnt = np.zeros(len(bpts), dtype=np.int32)
+            for i in range(2**self.ndims):
+                bits = [(i >> j) & 1 for j in range(self.ndims)]
+                idx = [lo if b else hi for b, lo, hi in zip(bits, glo, ghi)]
+
+                cnt += (-1)**sum(bits)*self._prefilter_counts[tuple(idx)]
+
+            # Only boxes reaching the points of a peer need a tree query
+            bkeep = cnt > 0
+
+            keep.append(bkeep)
+            cmins.append(bmins[bkeep])
+            cmaxs.append(bmaxs[bkeep])
+
+        cand = np.flatnonzero(np.concatenate(keep))
+
+        return cand, np.concatenate(cmins), np.concatenate(cmaxs)
+
     def sample_with_mesh_config(self, mesh, cfg):
         pts, sidxs = [], []
 
@@ -565,12 +637,14 @@ class BaseCloudResampler(AlltoallMixin):
         # Narrow the indices as this list lives until the interpolation
         didxs = didxs.astype(np.int32)
 
-        # Determine which peers hold points near each sample point
-        pmins, pmaxs = pts - ndists[:, None], pts + ndists[:, None]
-        iranks, icounts = self.ebbox_tree.intersect(pmins, pmaxs)
+        # Exclude the points with no peer sources anywhere near their box
+        cand, cmins, cmaxs = self._prefilter(pts, ndists)
+
+        # Determine which peers hold points near each candidate
+        iranks, icounts = self.ebbox_tree.intersect(cmins, cmaxs)
 
         # Pair each intersecting rank with the point which found it
-        pidx = np.repeat(np.arange(len(pts)), icounts.astype(int))
+        pidx = np.repeat(cand, icounts.astype(int))
 
         # A rank may own several intersecting tiles, so deduplicate
         pairs = np.unique(np.stack([iranks, pidx], axis=1), axis=0)
