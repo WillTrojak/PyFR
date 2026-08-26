@@ -136,6 +136,70 @@ def shared_ndarrays(comm, shape, dtype):
     return win, views
 
 
+class SharedWorkQueue:
+    def __init__(self, comm, n, bsize):
+        self.comm = comm
+        self.bsize = bsize
+
+        # Gather the number of items each rank on our node has
+        self.counts = comm.allgather(n)
+        self.nblocks = [-(-c // bsize) for c in self.counts]
+
+        # Give each rank an atomic block cursor in a shared window
+        self.win = win = mpi.Win.Allocate_shared(8, 8, comm=comm)
+        bufs = [win.Shared_query(i)[0] for i in range(comm.size)]
+        self.cursors = [np.frombuffer(b, dtype=np.int64) for b in bufs]
+        self.cursors[comm.rank][0] = 0
+
+        # Buffers for the atomic fetch-and-add operations
+        self._one = np.ones(1, dtype=np.int64)
+        self._res = np.empty(1, dtype=np.int64)
+
+        # Publish our zeroed cursor before any peer can claim from it
+        comm.barrier()
+
+        # Open a passive access epoch spanning the entire window
+        win.Lock_all()
+
+    def _claim_from(self, r):
+        # Atomically advance the block cursor of rank r
+        self.win.Fetch_and_op(self._one, self._res, r, 0, mpi.SUM)
+        self.win.Flush(r)
+
+        return int(self._res[0])
+
+    def claim(self):
+        rank = self.comm.rank
+
+        # Our own blocks are always claimed first, without any bookkeeping
+        if (b := self._claim_from(rank)) < self.nblocks[rank]:
+            lo = b*self.bsize
+
+            return rank, slice(lo, min(lo + self.bsize, self.counts[rank]))
+
+        # With our own queue drained, estimate what our peers have left
+        rem = [n - int(c[0]) for c, n in zip(self.cursors, self.nblocks)]
+
+        # Steal from the busiest peer first; cursors only ever increase
+        for r in np.argsort(rem)[::-1]:
+            if (b := self._claim_from(r)) < self.nblocks[r]:
+                lo = b*self.bsize
+
+                return int(r), slice(lo, min(lo + self.bsize, self.counts[r]))
+        else:
+            return None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        self.win.Unlock_all()
+
+        # Ensure all thieves are finished before freeing the window
+        self.comm.barrier()
+        self.win.Free()
+
+
 @contextlib.contextmanager
 def mpi_progress(comm, pbar, n):
     pcomm = autofree(comm.Dup())
