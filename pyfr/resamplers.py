@@ -250,12 +250,19 @@ class WENOInterpolator(BaseInterpolator):
     def _monomial_matrix(pts, power_data):
         _, exponents, _ = power_data
 
-        # Each column is one monomial evaluated at every sample point
-        vdm = np.ones((*pts.shape[:-1], len(exponents)))
-        for i, exp in enumerate(exponents.T):
-            vdm *= pts[..., i:i + 1]**exp
+        x = np.moveaxis(pts, -1, 0)
+        d = int(exponents.max())
 
-        return vdm
+        # Powers of each coordinate
+        tabs = np.ones((len(x), d + 1, *pts.shape[:-1]))
+        for k in range(1, d + 1):
+            tabs[:, k] = tabs[:, k - 1]*x
+
+        # Each column is one monomial evaluated at every sample point
+        idx = np.arange(len(x))
+        cols = [tabs[idx, e].prod(axis=0) for e in exponents]
+
+        return np.stack(cols, axis=-1)
 
     @staticmethod
     def _wendland_c2(r):
