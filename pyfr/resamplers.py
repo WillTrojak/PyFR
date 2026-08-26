@@ -5,7 +5,7 @@ from boostree import RTree
 import numpy as np
 
 from pyfr.mpiutil import AlltoallMixin, Sorter, get_comm_rank_root, mpi
-from pyfr.nputil import morton_encode
+from pyfr.nputil import morton_encode, zip_chunks
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
@@ -90,15 +90,20 @@ class IDWInterpolator(BaseInterpolator):
         self.rho = rho or ndims + 1
         self.eps = 10*np.finfo(float).eps
 
-    def __call__(self, p, spts, svals):
-        dists = np.linalg.norm(p - spts, axis=1)
-        if dists[ix := dists.argmin()] < self.eps:
-            return svals[ix]
-        else:
-            swts = dists**-self.rho
-            swts /= swts.sum()
+    def __call__(self, pts, spts, svals):
+        dists = np.linalg.norm(spts - pts[:, None], axis=2)
 
-            return swts @ svals
+        swts = np.maximum(dists, self.eps)**-self.rho
+        swts /= swts.sum(axis=1, keepdims=True)
+        out = (swts[:, None] @ svals)[:, 0]
+
+        # Exact hits take the value of the coincident source point
+        amin = dists.argmin(axis=1)
+        dmin = np.take_along_axis(dists, amin[:, None], 1)[:, 0]
+        if (ex := dmin < self.eps).any():
+            out[ex] = svals[ex, amin[ex]]
+
+        return out
 
 
 class WENOInterpolator(BaseInterpolator):
@@ -156,55 +161,82 @@ class WENOInterpolator(BaseInterpolator):
         self.sub_n = sub_n or max(2*self._sub_nterms, self._sub_nterms + 3)
         self._directions = self._direction_vectors(ndims, nsub)
 
+        # Stencil sizes determine which candidate fits are possible
+        self._has_central = self.n >= len(cpowers)
+        self._has_dirs = self.n >= self._sub_nterms
+
         # Select the appropriate nonlinear weighting
         if mode == 'teno':
             self._weights = self._teno_weights
         else:
             self._weights = self._wenoz_weights
 
-    def __call__(self, p, spts, svals):
-        dists = np.linalg.norm(p - spts, axis=1)
-        if dists[ix := dists.argmin()] < self.eps:
-            return svals[ix]
+    def __call__(self, pts, spts, svals):
+        rel = spts - pts[:, None]
+        dists = np.linalg.norm(rel, axis=2)
 
-        order = np.argsort(dists)
-        spts, svals, dists = spts[order], svals[order], dists[order]
-        scale = max(dists.max(), 1.0e-14)
+        # Sort each stencil by its distance from the query point
+        order = np.argsort(dists, axis=1)
+        dists = np.take_along_axis(dists, order, 1)
+        rel = np.take_along_axis(rel, order[:, :, None], 1)
+        svals = np.take_along_axis(svals, order[:, :, None], 1)
+
+        # Work in a local scaled coordinate system to improve conditioning
+        scale = np.maximum(dists[:, -1:], 1.0e-14)
+        x = rel / scale[:, :, None]
+
+        cands = []
 
         # First attempt to build a central fit
-        central = self._fit_central_stencil(p, spts, svals, scale)
-        cands = [central] if central is not None else []
+        if self._has_central:
+            cands.append(self._fit_stencils(x, svals,
+                                            self._central_power_data))
 
         # Then attempt to build directional substencils
-        for direction in self._directions:
-            idx = self._select_directional_stencil(spts, p, direction)
-            if idx is None:
-                continue
+        if self._has_dirs:
+            ncore = min(max(self._sub_nterms - 1, 2), self.n)
+            sub_n = min(self.sub_n, self.n)
 
-            fit = self._fit_sub_stencil(p, spts[idx], svals[idx], scale)
-            if fit is not None:
-                cands.append(fit)
+            unit = rel / np.maximum(dists, 1e-300)[:, :, None]
+            for direction in self._directions:
+                align = unit @ direction
 
-        # If every polynomial stencil is rejected then revert to IDW
-        if not cands:
-            return self._idw(p, spts, svals)
-        # If there is only one candidate fit then take it
-        elif len(cands) == 1:
-            val = cands[0][0]
-        # Otherwise combine the candidate fits with WENO-Z or TENO weights
+                # Penalise misaligned points by up to (1 + 2*dir_bias)
+                score = dists*(1 + self.dir_bias*(1 - align))
+
+                # Stencils are sorted so the core is the leading block
+                score[:, :ncore] = -np.inf
+                idx = np.argpartition(score, sub_n - 1, axis=1)[:, :sub_n]
+
+                xs = np.take_along_axis(x, idx[:, :, None], 1)
+                vs = np.take_along_axis(svals, idx[:, :, None], 1)
+                cands.append(self._fit_stencils(xs, vs,
+                                                self._sub_power_data))
+
+        # Combine the candidate fits with WENO-Z or TENO weights
+        if cands:
+            vals = np.stack([c[0] for c in cands], axis=1)
+            betas = np.stack([c[1] for c in cands], axis=1)
+            oks = np.stack([c[2] for c in cands], axis=1)
+
+            weights = self._nonlinear_weights(betas, oks)
+            val = (weights[:, None] @ vals)[:, 0]
+            nc = oks.any(axis=1)
         else:
-            betas = np.array([c[1] for c in cands])
-            vals = np.vstack([c[0] for c in cands])
+            val = np.zeros_like(svals[:, 0])
+            nc = np.zeros(len(pts), dtype=bool)
 
-            weights = self._nonlinear_weights(betas, central is not None)
-            val = weights @ vals
+        # Rejected and inadmissible fits revert to the convex IDW fallback
+        nc &= self.is_admissible(val.T)
 
-        # Ensure the resulting state is admissible
-        if self.is_admissible(val[:, None]).all():
-            return val
-        # Otherwise, fall back to IDW interpolation
-        else:
-            return self._idw(p, spts, svals)
+        idw = self._idw(np.zeros_like(pts), rel, svals)
+        out = np.where(nc[:, None], val, idw)
+
+        # Exact hits take the value of the coincident source point
+        if (ex := dists[:, 0] < self.eps).any():
+            out[ex] = svals[ex, 0]
+
+        return out
 
     @staticmethod
     def _monomial_powers(ndims, degree):
@@ -219,9 +251,9 @@ class WENOInterpolator(BaseInterpolator):
         _, exponents, _ = power_data
 
         # Each column is one monomial evaluated at every sample point
-        vdm = np.ones((len(pts), len(exponents)))
+        vdm = np.ones((*pts.shape[:-1], len(exponents)))
         for i, exp in enumerate(exponents.T):
-            vdm *= pts[:, i:i + 1]**exp
+            vdm *= pts[..., i:i + 1]**exp
 
         return vdm
 
@@ -243,143 +275,91 @@ class WENOInterpolator(BaseInterpolator):
 
             return dirs[:nsub]
 
-    def _select_directional_stencil(self, spts, p, direction):
-        vecs = spts - p
-        dists = np.linalg.norm(vecs, axis=1)
-        if not np.any(nz := dists > 0):
-            return None
-
-        unit = np.zeros_like(vecs)
-        unit[nz] = vecs[nz] / dists[nz, None]
-        align = unit @ direction
-
-        # Penalise misaligned points by up to (1 + 2*dir_bias)
-        score = dists*(1 + self.dir_bias*(1 - align))
-
-        # Seed the stencil with the nearest points for robustness
-        ncore = min(max(self._sub_nterms - 1, 2), len(dists))
-        if ncore < len(dists):
-            nearest = np.argpartition(dists, ncore - 1)[:ncore]
-            nearest = nearest[np.argsort(dists[nearest])]
-        else:
-            nearest = np.argsort(dists)
-
-        picks = nearest.tolist()
-        seen = set(picks)
-
-        # Then extend it with points aligned with the current direction
-        ncand = min(len(score), self.sub_n + len(seen))
-        if ncand < len(score):
-            cand = np.argpartition(score, ncand - 1)[:ncand]
-            cand = cand[np.argsort(score[cand])]
-        else:
-            cand = np.argsort(score)
-
-        for ix in cand:
-            if ix not in seen:
-                picks.append(int(ix))
-                seen.add(int(ix))
-
-            if len(picks) >= self.sub_n:
-                break
-
-        if len(picks) < self._sub_nterms:
-            return None
-        else:
-            return np.array(picks, dtype=int)
-
-    def _fit_stencil_data(self, p, spts, svals, power_data, scale):
+    def _fit_stencils(self, x, svals, power_data):
         _, _, orders = power_data
-        if len(spts) < len(orders):
-            return None
 
-        # Work in a local scaled coordinate system to improve conditioning
-        x = (spts - p) / scale
-        radii = np.linalg.norm(x, axis=1)
-        rmax = max(radii.max(), 1e-14)
+        radii = np.linalg.norm(x, axis=2)
+        rmax = np.maximum(radii.max(axis=1, keepdims=True), 1e-14)
 
         weights = self._wendland_c2(radii / rmax)
         weights = np.maximum(weights, 1e-12)
 
+        # Normalised up front; a uniform row scaling leaves the fit alone
+        weights /= weights.sum(axis=1, keepdims=True)
+
         # The compact weights taper distant points without a hard cutoff
         vdm = self._monomial_matrix(x, power_data)
         sqrtw = np.sqrt(weights)
-        amat = sqrtw[:, None]*vdm
-        rhs = sqrtw[:, None]*svals
+        amat = sqrtw[:, :, None]*vdm
+        rhs = sqrtw[:, :, None]*svals
 
         # A single SVD gives both the condition estimate and the solve
         u, sval, vh = np.linalg.svd(amat, full_matrices=False)
+        ok = sval[:, 0] <= self.cond*sval[:, -1]
 
-        if sval[0] > self.cond*sval[-1]:
-            return None
-
-        coeffs = vh.T @ ((u.T @ rhs) / sval[:, None])
+        svs = np.where(sval > 0, sval, 1)
+        urhs = (u.mT @ rhs) / svs[:, :, None]
+        coeffs = vh.mT @ urhs
         fit = vdm @ coeffs
 
         # Weighted variance and residual, aggregated across all nvars
-        wsum = weights.sum()
-        mean = (weights[:, None]*svals).sum(axis=0) / wsum
-        var = (weights*np.sum((svals - mean)**2, axis=1)).sum() / wsum
-        resid = (weights*np.sum((fit - svals)**2, axis=1)).sum() / wsum
+        mean = (weights[:, None] @ svals)[:, 0]
+        var = (weights*((svals - mean[:, None])**2).sum(axis=2)).sum(axis=1)
+        resid = (weights*((fit - svals)**2).sum(axis=2)).sum(axis=1)
 
         # Higher-order coefficient energy, weighted by total order
-        coeff_var = np.sum((orders[1:, None]*coeffs[1:])**2)
+        cvar = ((orders[1:, None]*coeffs[:, 1:])**2).sum(axis=(1, 2))
 
         # Blend residual and higher-order energy into one smoothness beta
-        blend = resid + 1e-2*coeff_var
-        norm = var + 1e-14*np.sum(mean**2)
-        beta = blend / norm if norm > 0 else 0.0
+        blend = resid + 1e-2*cvar
+        norm = var + 1e-14*(mean**2).sum(axis=1)
 
-        return coeffs[0], float(beta)
+        nz = norm > 0
+        beta = np.where(nz, blend / np.where(nz, norm, 1), 0)
 
-    def _fit_central_stencil(self, p, spts, svals, scale):
-        return self._fit_stencil_data(p, spts, svals, self._central_power_data,
-                                      scale)
+        return coeffs[:, 0], np.where(ok, beta, np.inf), ok
 
-    def _fit_sub_stencil(self, p, spts, svals, scale):
-        return self._fit_stencil_data(p, spts, svals, self._sub_power_data,
-                                      scale)
+    def _wenoz_weights(self, betas, gamma, tau, eps=1.0e-14):
+        alpha = gamma*(1 + (tau[:, None] / (betas + eps))**self.q)
+        return alpha / np.maximum(alpha.sum(axis=1, keepdims=True), eps)
 
-    def _linear_weights(self, ncands):
-        if ncands == 1:
-            return np.array([1.0])
-
-        # Bias the linear weights toward the central stencil
-        gamma = np.full(ncands, (1.0 - self.gamma0) / (ncands - 1))
-        gamma[0] = self.gamma0
-
-        return gamma
-
-    def _wenoz_weights(self, betas, gamma, eps=1.0e-14):
-        # Tau measures how different the candidate smoothness values are
-        tau = np.max(np.abs(betas - betas.mean()))
-        alpha = gamma*(1 + (tau / (betas + eps))**self.q)
-        return alpha / alpha.sum()
-
-    def _teno_weights(self, betas, gamma, eps=1.0e-14):
-        tau = np.max(np.abs(betas - betas.mean()))
-        alpha = gamma*(1 + (tau / (betas + eps))**self.q)
-        chi = alpha / alpha.sum()
+    def _teno_weights(self, betas, gamma, tau, eps=1.0e-14):
+        alpha = gamma*(1 + (tau[:, None] / (betas + eps))**self.q)
+        chi = alpha / np.maximum(alpha.sum(axis=1, keepdims=True), eps)
 
         # TENO hard-rejects candidates whose normalized weight is too small
         mask = chi > self.ct
-        if not np.any(mask):
-            mask[np.argmin(betas)] = True
+        if (none := ~mask.any(axis=1)).any():
+            mask[none, betas[none].argmin(axis=1)] = True
 
         weights = gamma*mask
-        return weights / weights.sum()
+        return weights / np.maximum(weights.sum(axis=1, keepdims=True), eps)
 
-    def _nonlinear_weights(self, betas, has_central):
-        # Without a central fit we fall back to uniform linear weights
-        if has_central:
-            gamma = self._linear_weights(len(betas))
+    def _nonlinear_weights(self, betas, oks):
+        ncands = np.maximum(oks.sum(axis=1), 1)
+        rcpn = 1 / ncands
+
+        # Bias the linear weights toward an accepted central stencil
+        if self._has_central:
+            okc = oks[:, 0]
         else:
-            gamma = np.full(len(betas), 1 / len(betas))
+            okc = np.zeros(len(oks), dtype=bool)
 
-        return self._weights(betas, gamma)
+        goth = np.where(okc, (1 - self.gamma0)/np.maximum(ncands - 1, 1), rcpn)
+        gamma = np.where(oks, goth[:, None], 0)
+        gamma[:, 0] = np.where(okc, self.gamma0, gamma[:, 0])
+
+        # Tau measures how different the candidate smoothness values are
+        bmean = np.where(oks, betas, 0).sum(axis=1)*rcpn
+        tau = np.where(oks, np.abs(betas - bmean[:, None]), 0).max(axis=1)
+
+        return self._weights(betas, gamma, tau)
 
 
 class BaseCloudResampler(AlltoallMixin):
+    # Interpolation block size, in points
+    BLK_SZ = 2**12
+
     def __init__(self, pts, solns, interp, progress):
         self.ndims = pts.shape[1]
         self.nvars = solns.shape[1]
@@ -575,6 +555,16 @@ class BaseCloudResampler(AlltoallMixin):
 
         return rranks
 
+    def _interp_blocks(self, pts, idxs):
+        out = np.empty((len(pts), self.nvars))
+
+        # Chunked as the gathered stencils are much larger than the points
+        for ochunk, pchunk, ichunk in zip_chunks(self.BLK_SZ, out, pts, idxs):
+            ochunk[:] = self.interp(pchunk, self.pts[ichunk],
+                                    self.solns[ichunk])
+
+        return out
+
     def _sample_tgt_points(self, pts, dtype):
         comm, rank, root = get_comm_rank_root()
 
@@ -603,18 +593,17 @@ class BaseCloudResampler(AlltoallMixin):
                     fpreqs[j].append([*p, ndists[i]])
 
                 off += count
-            # Otherwise perform the interpolation
-            else:
-                idxs = nidxs[i]
-                solns[i] = self.interp(p, self.pts[idxs], self.solns[idxs])
+
+        # Points which no peer rank can contribute to are done locally
+        if len(local := np.flatnonzero(icounts == 0)):
+            solns[local] = self._interp_blocks(pts[local], nidxs[local])
 
         self._exchange_fringe_pts(fpreqs, nn)
 
         # Process the deferred points
-        dpts = pts[deferred]
-        didxs = self.pts_tree.knn(dpts, nn)[0]
-        for i, p, idxs in zip(deferred, dpts, didxs):
-            solns[i] = self.interp(p, self.pts[idxs], self.solns[idxs])
+        if len(dpts := pts[deferred]):
+            didxs = self.pts_tree.knn(dpts, nn)[0]
+            solns[deferred] = self._interp_blocks(dpts, didxs)
 
         comm.barrier()
 
