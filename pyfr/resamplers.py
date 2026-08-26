@@ -25,23 +25,6 @@ def _ploc_op(etype, nspts, cfg):
     return basis.sbasis.nodal_basis_at(basis.upts)
 
 
-def str_group(gpts, nsplit):
-    def recursive_tile(pts, depth=0):
-        if depth == pts.shape[1]:
-            return [pts]
-
-        sidx = np.argsort(pts[:, depth])
-        groups = []
-
-        # Recurse in the next dimension
-        for chunk in np.array_split(pts[sidx], nsplit):
-            groups.extend(recursive_tile(chunk, depth + 1))
-
-        return groups
-
-    return recursive_tile(gpts)
-
-
 class BaseInterpolator:
     name = None
 
@@ -414,16 +397,15 @@ class BaseCloudResampler(AlltoallMixin):
         self.progress = progress
 
         with progress.start('Distribute source points/solutions'):
-            self.pts, self.solns = self._distribute_src_points(pts, solns)
+            self.pts, self.solns, keys = self._distribute_src_points(pts,
+                                                                     solns)
 
         with progress.start('Index source points'):
             # Index the points
             self.pts_tree = self._compute_pts_tree(self.pts)
 
-            # Index the bounding boxes (inclusives and exclusive of ourself)
-            self.ibbox_tree, self.ebbox_tree = self._compute_bbox_trees(
-                self.pts
-            )
+            # Index the tile bounding boxes of our peer ranks
+            self.ebbox_tree = self._compute_bbox_tree(self.pts, keys)
 
         # Track what points we have sent to other ranks
         comm, rank, root = get_comm_rank_root()
@@ -439,33 +421,57 @@ class BaseCloudResampler(AlltoallMixin):
         comm.Allreduce(mpi.IN_PLACE, pmin, op=mpi.MIN)
         comm.Allreduce(mpi.IN_PLACE, pmax, op=mpi.MAX)
 
+        # Record the key normalisation for assigning target points
+        fact = 2**21 if self.ndims == 3 else 2**32
+        self._mort_norm = fact, pmin, (pmax - pmin).max()
+
         # Normalise our points and compute their Morton codes
-        fact = 2**21 if len(pmin) == 3 else 2**32
-        ipts = (fact*((pts - pmin) / (pmax - pmin).max())).astype(np.uint64)
-        keys = morton_encode(ipts, [fact]*len(pmin))
+        keys = self._morton_keys(pts)
 
         # Use these codes to sort our points
         sorter = Sorter(comm, keys)
 
+        # Record the segment bounds which map a key to its owning rank
+        bounds = np.empty(comm.size, dtype=np.uint64)
+        comm.Allgather(sorter.keys[-1:], bounds)
+        self._mort_bounds = bounds[:-1]
+
         # With this redistribute our points and solutions
-        return sorter(pts), sorter(solns)
+        return sorter(pts), sorter(solns), sorter.keys
+
+    def _morton_keys(self, pts):
+        fact, pmin, ext = self._mort_norm
+
+        # Map the points onto the integer grid the codes are built from
+        ipts = np.clip(fact*((pts - pmin) / ext), 0, fact).astype(np.uint64)
+
+        return morton_encode(ipts, [fact]*self.ndims)
 
     def _compute_pts_tree(self, pts):
         return RTree.from_points(pts, storage='point')
 
-    def _compute_bbox_trees(self, pts):
+    def _compute_bbox_tree(self, pts, keys):
         comm, rank, root = get_comm_rank_root()
 
-        # Number of splits along each dimension
-        ns = 14
+        # Maximum number of tile bounding boxes per rank
+        nb = 4096
+
+        # Find the finest aligned Morton block size with at most nb tiles
+        for shift in range(0, 64 + self.ndims, self.ndims):
+            bkeys = keys >> np.uint64(shift)
+            starts = np.flatnonzero(np.diff(bkeys)) + 1
+            if len(starts) < nb:
+                break
+
+        starts = np.concatenate(([0], starts))
 
         # Allocate global bounding box array
-        bboxes = np.full((comm.size, ns**self.ndims, 2, self.ndims), np.nan)
+        bboxes = np.full((comm.size, nb, 2, self.ndims), np.nan)
 
-        # Fill out our portion of the array
-        for i, spts in enumerate(str_group(pts, ns)):
-            if len(spts):
-                bboxes[rank, i] = spts.min(axis=0), spts.max(axis=0)
+        # Compute tight bounding boxes for each of our blocks
+        if len(pts):
+            bboxes[rank, :len(starts), 0] = np.minimum.reduceat(pts, starts)
+            bboxes[rank, :len(starts), 1] = np.maximum.reduceat(pts, starts)
 
         # Exchange
         comm.Allgather(mpi.IN_PLACE, bboxes)
@@ -474,16 +480,10 @@ class BaseCloudResampler(AlltoallMixin):
         branks = np.repeat(np.arange(comm.size), bboxes.shape[1])
         bmins, bmaxs = np.moveaxis(bboxes, 2, 0).reshape(2, -1, self.ndims)
 
-        # Discard the entries associated with empty groups
-        valid = ~np.isnan(bmins[:, 0])
+        # Discard unfilled slots and our own tiles, which are never queried
+        sel = ~np.isnan(bmins[:, 0]) & (branks != rank)
 
-        # Construct bounding box trees inclusive and exclusive of our rank
-        trees = []
-        for i in (-1, rank):
-            sel = valid & (branks != i)
-            trees.append(RTree.from_boxes(bmins[sel], bmaxs[sel], branks[sel]))
-
-        return trees
+        return RTree.from_boxes(bmins[sel], bmaxs[sel], branks[sel])
 
     def sample_with_mesh_config(self, mesh, cfg):
         pts, sidxs = [], []
@@ -525,21 +525,12 @@ class BaseCloudResampler(AlltoallMixin):
     def _distribute_tgt_pts(self, pts):
         comm, rank, root = get_comm_rank_root()
 
-        if comm.size > 1:
-            # Attempt to assign points to ranks
-            tranks, resid = self._compute_initial_tgt_dist(pts)
-
-            # Exchange residual information between ranks
-            rranks = self._compute_resid_ranks(resid)
-
-            # Assign residual points to the rank with the nearest point
-            for i, (r, _) in rranks.items():
-                tranks[i] = r
-        else:
-            tranks = np.zeros(len(pts), dtype=int)
+        # Assign points to the ranks owning their Morton code segments
+        keys = self._morton_keys(pts)
+        tranks = np.searchsorted(self._mort_bounds, keys)
 
         # Sort the points according to their rank
-        tidx = np.argsort(tranks)
+        tidx = np.argsort(keys)
 
         # Distribute the points
         tdisps = np.searchsorted(tranks[tidx], np.arange(comm.size))
@@ -547,60 +538,6 @@ class BaseCloudResampler(AlltoallMixin):
         rbuf = self._alltoallcv(comm, pts[tidx], tcount, tdisps)
 
         return *rbuf, np.argsort(tidx)
-
-    def _compute_initial_tgt_dist(self, pts):
-        comm, rank, root = get_comm_rank_root()
-
-        tranks = np.full(len(pts), -1, dtype=int)
-
-        # See which ranks, if any, have a claim to each point
-        iranks, icounts = self.ibbox_tree.intersect(pts, pts)
-        icounts = icounts.astype(int)
-        ioffs = np.cumsum(icounts) - icounts
-
-        # Points with no intersecting box go to the rank which is nearest
-        if len(nidx := np.flatnonzero(icounts == 0)):
-            tranks[nidx] = self.ibbox_tree.knn(pts[nidx], 1)[0][:, 0]
-
-        # Residual list for target points claimed by multiple ranks
-        resid = [[] for i in range(comm.size)]
-
-        for i in np.flatnonzero(icounts):
-            off, c = ioffs[i], icounts[i]
-            uranks = set(iranks[off:off + c].tolist())
-
-            # All boxes belong to the same rank so assign
-            if len(uranks) == 1:
-                tranks[i] = iranks[off]
-            # Multiple distinct ranks; defer
-            else:
-                for r in uranks:
-                    resid[r].append((i, pts[i].tolist()))
-
-        return tranks, resid
-
-    def _compute_resid_ranks(self, resid):
-        comm, rank, root = get_comm_rank_root()
-        rranks, rdists = {}, []
-
-        # Exchange residual points between ranks
-        for rresid in comm.alltoall([[p for i, p in r] for r in resid]):
-            if rresid:
-                # Identify our closest points
-                rpts = np.array(rresid)
-                dists = self.pts_tree.knn(rpts, 1)[1]
-
-                rdists.append(dists[:, 0].tolist())
-            else:
-                rdists.append([])
-
-        # Exchange distance information and reduce
-        for r, (re, rd) in enumerate(zip(resid, comm.alltoall(rdists))):
-            for (i, _), d in zip(re, rd):
-                if (rd := rranks.get(i, None)) is None or d < rd[1]:
-                    rranks[i] = (r, d)
-
-        return rranks
 
     def _interp_blocks(self, pts, idxs):
         out = np.empty((len(pts), self.nvars))
