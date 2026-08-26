@@ -1,8 +1,10 @@
 import atexit
+import contextlib
 import ctypes
 import math
 import os
 import sys
+import time
 import weakref
 
 import numpy as np
@@ -73,6 +75,10 @@ def get_comm_rank_root():
     return comm, comm.rank, 0
 
 
+def get_node_comm(comm):
+    return autofree(comm.Split_type(mpi.COMM_TYPE_SHARED))
+
+
 def get_local_rank():
     envs = [
         'MPI_LOCALRANKID',
@@ -87,7 +93,7 @@ def get_local_rank():
     else:
         from mpi4py import MPI
 
-        return autofree(MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED)).rank
+        return get_node_comm(MPI.COMM_WORLD).rank
 
 
 def scal_coll(colfn, v, *args, **kwargs):
@@ -110,6 +116,75 @@ def get_start_end_csize(comm, n):
 
     # Determine which part of the dataset we should handle
     return min(rank*csize, n), min((rank + 1)*csize, n), csize
+
+
+def shared_ndarrays(comm, shape, dtype):
+    dtype = np.dtype(dtype)
+
+    # Gather the segment shapes
+    shapes = comm.allgather(shape)
+    sizes = [dtype.itemsize*math.prod(s) for s in shapes]
+
+    # Allocate our segment inside of a single shared window
+    win = mpi.Win.Allocate_shared(sizes[comm.rank], dtype.itemsize, comm=comm)
+    win = autofree(win)
+
+    # Wrap each ranks segment with an ndarray view
+    views = [np.frombuffer(win.Shared_query(i)[0], dtype=dtype).reshape(s)
+             for i, s in enumerate(shapes)]
+
+    return win, views
+
+
+@contextlib.contextmanager
+def mpi_progress(comm, pbar, n):
+    pcomm = autofree(comm.Dup())
+
+    # Obtain the total number of items and start the progress bar
+    pbar.start(scal_coll(pcomm.Allreduce, n))
+
+    buf = np.zeros(1, dtype=int)
+
+    if pcomm.rank == 0:
+        ndone, npeer = 0, pcomm.size - 1
+
+        def poll():
+            nonlocal ndone, npeer
+
+            # Process any pending messages from peers
+            while pcomm.Iprobe():
+                pcomm.Recv(buf)
+                if buf[0] < 0:
+                    npeer -= 1
+                else:
+                    ndone += int(buf[0])
+
+        def tick(k):
+            nonlocal ndone
+
+            ndone += k
+            poll()
+            pbar(ndone)
+
+        yield tick
+
+        # Wait until all peers have finished
+        while npeer:
+            poll()
+            pbar(ndone)
+
+            if npeer:
+                time.sleep(0.05)
+    else:
+        def tick(k):
+            buf[0] = k
+            pcomm.Send(buf, dest=0)
+
+        yield tick
+
+        # Signal completion to the root rank
+        buf[0] = -1
+        pcomm.Send(buf, dest=0)
 
 
 class AlltoallMixin:
